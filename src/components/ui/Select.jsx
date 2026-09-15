@@ -1,0 +1,1 @@
+export default function Select({label,required,children,...props}){return <label className="field"><span className="field-label">{label}{required&&<b> *</b>}</span><select className="input select" {...props}>{children}</select></label>}

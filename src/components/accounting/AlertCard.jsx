@@ -1,0 +1,2 @@
+import Card from '../ui/Card';import {AlertCircle,AlertTriangle,Info,ChevronRight} from 'lucide-react';
+export default function AlertCard({items}){return <Card className="alerts-card"><div className="card-heading"><div><h2>Alertes & tâches prioritaires</h2><p>Actions comptables et fiscales urgentes</p></div></div><div className="alerts-list">{items.map((item,i)=>{const Icon=i===2||i===4?AlertTriangle:i===3?Info:AlertCircle;return <button className="alert-item" key={item}><Icon size={16}/><span>{item}</span><ChevronRight size={14}/></button>})}</div></Card>}

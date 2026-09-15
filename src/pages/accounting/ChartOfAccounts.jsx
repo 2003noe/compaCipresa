@@ -1,0 +1,2 @@
+import ListPage from './ListPage';import {accounts} from '../../data/mockData';
+export default function ChartOfAccounts(){return <ListPage title="Plan comptable" subtitle="Gérez les comptes et la structure de votre plan comptable" primary="Nouveau compte" primaryPath="/nouveau-compte" columns={[{key:'code',label:'Compte'},{key:'label',label:'Libellé'},{key:'class',label:'Classe'},{key:'nature',label:'Nature'},{key:'balance',label:'Solde',align:'right'},{key:'status',label:'Statut'}]} rows={accounts}/>}
