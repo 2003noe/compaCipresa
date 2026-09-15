@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, Link as LinkIcon, Percent, Building2, Lock, Settings, LogOut, UserRound } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const items = [
   ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
@@ -13,20 +14,10 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
-  const [user, setUser] = useState({ name: 'Jean-Paul KOFFI', role: 'Comptable Principal' });
+  const { profile, roles, signOut } = useAuth();
 
-  useEffect(() => {
-    const saved = localStorage.getItem('cipresaRegisteredUser');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setUser({
-          name: parsed.fullName || 'Jean-Paul KOFFI',
-          role: parsed.role || 'Comptable Principal'
-        });
-      } catch { /* Ignore malformed local mock data. */ }
-    }
-  }, []);
+  const userName = profile ? ([profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Utilisateur') : 'Utilisateur';
+  const userRole = roles?.[0]?.nom || 'Rôle non défini';
 
   useEffect(() => {
     const closeOnOutsideClick = (event) => {
@@ -36,8 +27,9 @@ export default function Sidebar() {
     return () => document.removeEventListener('mousedown', closeOnOutsideClick);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsOpen(false);
+    await signOut();
     navigate('/connexion', { replace: true, state: { loggedOut: true } });
   };
 
@@ -70,8 +62,8 @@ export default function Sidebar() {
           </div>
         )}
         <button type="button" className="user-footer user-footer-button" onClick={() => setIsOpen((open) => !open)} aria-expanded={isOpen}>
-          <div className="avatar">{user.name.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div>
-          <div className="user-meta"><strong>{user.name}</strong><small>{user.role}</small></div>
+          <div className="avatar">{userName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+          <div className="user-meta"><strong>{userName}</strong><small>{userRole}</small></div>
         </button>
       </div>
     </aside>

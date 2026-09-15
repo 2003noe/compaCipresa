@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
+import ProtectedRoute from './ProtectedRoute';
 import Dashboard from '../pages/dashboard/Dashboard';
 import ChartOfAccounts from '../pages/accounting/ChartOfAccounts';
 import GenericAccountingPage from '../pages/accounting/GenericAccountingPage';
@@ -13,7 +14,7 @@ import ForgotPassword from '../pages/auth/ForgotPassword';
 import Profile from '../pages/settings/Profile';
 import Settings from '../pages/settings/Settings';
 
-const inside = (Component, props) => <AppLayout><Component {...props} /></AppLayout>;
+const inside = (Component, props) => <ProtectedRoute><AppLayout><Component {...props} /></AppLayout></ProtectedRoute>;
 
 export default function AppRoutes() {
   return (
