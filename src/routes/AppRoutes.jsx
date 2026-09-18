@@ -3,6 +3,13 @@ import AppLayout from '../components/layout/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import Dashboard from '../pages/dashboard/Dashboard';
 import ChartOfAccounts from '../pages/accounting/ChartOfAccounts';
+import JournalPage from '../pages/accounting/JournalPage';
+import GrandLivre from '../pages/accounting/GrandLivre';
+import Balance from '../pages/accounting/Balance';
+import Bilan from '../pages/accounting/Bilan';
+import CompteResultat from '../pages/accounting/CompteResultat';
+import Tresorerie from '../pages/accounting/Tresorerie';
+import Rapprochement from '../pages/accounting/Rapprochement';
 import GenericAccountingPage from '../pages/accounting/GenericAccountingPage';
 import NewAccount from '../pages/accounting/NewAccount';
 import NewEntry from '../pages/accounting/NewEntry';
@@ -25,13 +32,13 @@ export default function AppRoutes() {
       <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
       <Route path="/dashboard" element={inside(Dashboard)} />
       <Route path="/plan-comptable" element={inside(ChartOfAccounts)} />
-      <Route path="/journal" element={inside(GenericAccountingPage, { type: 'journal' })} />
-      <Route path="/grand-livre" element={inside(GenericAccountingPage, { type: 'grand' })} />
-      <Route path="/balance" element={inside(GenericAccountingPage, { type: 'balance' })} />
-      <Route path="/bilan" element={inside(GenericAccountingPage, { type: 'bilan' })} />
-      <Route path="/compte-resultat" element={inside(GenericAccountingPage, { type: 'result' })} />
-      <Route path="/tresorerie" element={inside(GenericAccountingPage, { type: 'treasury' })} />
-      <Route path="/rapprochement" element={inside(GenericAccountingPage, { type: 'bank' })} />
+      <Route path="/journal" element={inside(JournalPage)} />
+      <Route path="/grand-livre" element={inside(GrandLivre)} />
+      <Route path="/balance" element={inside(Balance)} />
+      <Route path="/bilan" element={inside(Bilan)} />
+      <Route path="/compte-resultat" element={inside(CompteResultat)} />
+      <Route path="/tresorerie" element={inside(Tresorerie)} />
+      <Route path="/rapprochement" element={inside(Rapprochement)} />
       <Route path="/tva-taxes" element={inside(GenericAccountingPage, { type: 'tax' })} />
       <Route path="/immobilisations" element={inside(GenericAccountingPage, { type: 'assets' })} />
       <Route path="/clotures" element={inside(GenericAccountingPage, { type: 'closing' })} />
