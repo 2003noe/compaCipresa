@@ -14,12 +14,14 @@ import GenericAccountingPage from '../pages/accounting/GenericAccountingPage';
 import NewAccount from '../pages/accounting/NewAccount';
 import NewEntry from '../pages/accounting/NewEntry';
 import NewAsset from '../pages/assets/NewAsset';
+import Immobilisations from '../pages/assets/Immobilisations';
 import GenericNewForm from '../pages/accounting/GenericNewForm';
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
 import ForgotPassword from '../pages/auth/ForgotPassword';
 import Profile from '../pages/settings/Profile';
 import Settings from '../pages/settings/Settings';
+import Configuration from '../pages/settings/Configuration';
 
 const inside = (Component, props) => <ProtectedRoute><AppLayout><Component {...props} /></AppLayout></ProtectedRoute>;
 
@@ -40,9 +42,10 @@ export default function AppRoutes() {
       <Route path="/tresorerie" element={inside(Tresorerie)} />
       <Route path="/rapprochement" element={inside(Rapprochement)} />
       <Route path="/tva-taxes" element={inside(GenericAccountingPage, { type: 'tax' })} />
-      <Route path="/immobilisations" element={inside(GenericAccountingPage, { type: 'assets' })} />
+      <Route path="/immobilisations" element={inside(Immobilisations)} />
       <Route path="/clotures" element={inside(GenericAccountingPage, { type: 'closing' })} />
       <Route path="/parametres" element={inside(Settings)} />
+      <Route path="/configuration" element={inside(Configuration)} />
       <Route path="/profil" element={inside(Profile)} />
       <Route path="/nouvelle-ecriture" element={inside(NewEntry)} />
       <Route path="/nouveau-compte" element={inside(NewAccount)} />

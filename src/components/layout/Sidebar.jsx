@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, Link as LinkIcon, Percent, Building2, Lock, Settings, LogOut, UserRound } from 'lucide-react';
+import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, Link as LinkIcon, Percent, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const items = [
@@ -14,7 +14,7 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
-  const { profile, roles, signOut } = useAuth();
+  const { profile, roles, signOut, hasRole } = useAuth();
 
   const userName = profile ? ([profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Utilisateur') : 'Utilisateur';
   const userRole = roles?.[0]?.nom || 'Rôle non défini';
@@ -47,6 +47,11 @@ export default function Sidebar() {
               <Icon size={16} /><span className="nav-label">{label}</span>{label === 'Tableau de bord' && <i />}
             </NavLink>
           ))}
+          {hasRole('ADMIN') && (
+            <NavLink to="/configuration" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <ShieldCheck size={16} /><span className="nav-label">Configuration</span>
+            </NavLink>
+          )}
         </nav>
       </div>
 
