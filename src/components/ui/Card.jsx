@@ -1,1 +1,1 @@
-export default function Card({children,className=''}){return <section className={`card ${className}`}>{children}</section>}
+export default function Card({children,className='',...rest}){return <section className={`card ${className}`} {...rest}>{children}</section>}
