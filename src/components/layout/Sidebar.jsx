@@ -67,7 +67,7 @@ export default function Sidebar() {
           </div>
         )}
         <button type="button" className="user-footer user-footer-button" onClick={() => setIsOpen((open) => !open)} aria-expanded={isOpen}>
-          <div className="avatar">{userName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+          {profile?.photo_url ? <img src={profile.photo_url} alt={userName} className="avatar" style={{ objectFit: 'cover' }} /> : <div className="avatar">{userName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>}
           <div className="user-meta"><strong>{userName}</strong><small>{userRole}</small></div>
         </button>
       </div>
