@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, EyeIcon, EyeClosedIcon } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -36,6 +36,7 @@ export default function Login() {
     if (signInError) { setError(signInError.message); return; }
     nav('/dashboard', { replace: true });
   };
+  const [isView, setIsview] = useState(false);
 
   return (
     <AuthLayout title="Connexion" subtitle="Accédez à votre espace comptable.">
@@ -43,7 +44,26 @@ export default function Login() {
       {error && <div className="message error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
         <Input icon={Mail} label="Email professionnel" type="email" placeholder="comptable@cipresa.ci" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Input icon={Lock} label="Mot de passe" type="password" placeholder="••••••••••••" required value={password} onChange={(e) => setPassword(e.target.value)} suffix={<span>Afficher</span>} />
+        <Input
+              icon={Lock}
+              label="Mot de passe"
+              type={isView ? "text" : "password"}
+              placeholder="••••••••••••"
+              suffix={
+                <span
+                  onClick={() => {
+                    setIsview(!isView);
+                  }}
+                >
+                  {" "}
+                  {isView ? <EyeIcon /> : <EyeClosedIcon />}
+                </span>
+              }
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+            />
         <div className="auth-row">
           <label className="check-label"><input type="checkbox" /> <span>Se souvenir de moi</span></label>
           <Link to="/mot-de-passe-oublie">Mot de passe oublié ?</Link>

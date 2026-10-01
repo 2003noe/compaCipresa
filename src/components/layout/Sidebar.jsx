@@ -34,10 +34,10 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ height:'100vh', position:'fixed'}}>
       <div>
         <div className="brand">
-          <div className="brand-logo"><Leaf size={16} /></div>
+          <img src="/images/logo.png" alt="Logo" className="brand-image"  style={{ width: '2rem', height: '2rem', objectFit: 'cover' }}/>
           <div className="brand-text"><strong>CIPRESA</strong><small>Consulting SARL</small></div>
         </div>
         <div className="sidebar-divider" />
