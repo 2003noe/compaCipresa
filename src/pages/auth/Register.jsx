@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Phone, UserRound } from 'lucide-react';
+import { Mail, Lock, Phone, UserRound , EyeIcon, EyeClosed, LucideEyeClosed, EyeClosedIcon} from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -36,11 +36,12 @@ export default function Register() {
     nav('/connexion', { replace: true, state: { registered: true, registeredEmail: form.email } });
   };
 
+
   return (
-    <AuthLayout title="Créer un compte" subtitle="Rejoignez CIPRESA Comptabilité" showPreviewSidebar>
+    <AuthLayout title="Créer un compte" subtitle="Rejoignez CIPRESA Comptabilité">
       {error && <div className="message error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
-        <div className="auth-form-grid">
+        <div className="auth-form-grid bg-red">
           <Input icon={UserRound} label="Nom complet" placeholder="Koffi Kouamé" required value={form.fullName} onChange={update('fullName')} />
           <Input icon={Mail} label="Email professionnel" type="email" placeholder="comptable@cipresa.ci" required value={form.email} onChange={update('email')} />
           <Input icon={Phone} label="Téléphone" placeholder="+225 07 00 00 00 00" value={form.phone} onChange={update('phone')} />
@@ -58,5 +59,7 @@ export default function Register() {
 }
 
 function PasswordField({ label, value, onChange }) {
-  return <Input icon={Lock} label={label} type="password" placeholder="••••••••••••" suffix={<span>Afficher</span>} required value={value} onChange={onChange} minLength={6} />;
+  
+  const [isView, setIsview] = useState(false);
+  return <Input icon={Lock} label={label} type="password" placeholder="••••••••••••" suffix={<span onClick={()=>{setIsview(!isView)}}> {isView? <EyeIcon/> : <EyeClosedIcon/>}</span>} required value={value} onChange={onChange} minLength={6} />;
 }
