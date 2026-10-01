@@ -52,6 +52,7 @@
     height: 40px;
     display: flex;
     align-items: center;
+    
     gap: 12px;
     padding: 10px 16px;
     border-radius: 8px;

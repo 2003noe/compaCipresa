@@ -10,11 +10,10 @@ const navigation = [
 function Brand({ light = false }) {
   return (
     <div className={`auth-branding ${light ? 'auth-branding-light' : ''}`}>
-      <div className="brand-mark"><Leaf size={17} strokeWidth={2.4} /></div>
-      <div>
-        <strong>CIPRESA</strong>
-        <small>Consulting SARL</small>
-      </div>
+      <div className="brand">
+          <img src="/images/logo.png" alt="Logo" className="brand-image"  style={{ width: '2rem', height: '2rem', objectFit: 'cover' }}/>
+          <div className="brand-text"><strong>CIPRESA</strong><small>Consulting SARL</small></div>
+        </div>
     </div>
   );
 }

@@ -190,7 +190,7 @@ export default function Dashboard() {
   }), [recentes]);
 
   return (
-    <div className="page-content">
+    <div className="page-content ">
       <div className="page-header">
         <div>
           <h1 className="page-title">Tableau de bord</h1>
