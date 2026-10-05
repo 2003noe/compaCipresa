@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
-import { pdf, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { exportToExcel, downloadPDF, GenericTablePDF } from '../../lib/generateFile';
 import ListPage from './ListPage';
 
 /* ─── Colonnes ────────────────────────────────────────────────────── */
@@ -20,54 +19,6 @@ const formatBalance = (row) => {
   return `${value.toLocaleString('fr-FR')} ${row.devise || ''}`.trim();
 };
 
-/* ─── Styles PDF ──────────────────────────────────────────────────── */
-const pdfStyles = StyleSheet.create({
-  page:    { padding: 30, fontSize: 9, fontFamily: 'Helvetica' },
-  title:   { fontSize: 16, marginBottom: 4, fontFamily: 'Helvetica-Bold' },
-  sub:     { fontSize: 10, marginBottom: 16, color: '#555' },
-  table:   { width: '100%' },
-  thead:   { flexDirection: 'row', backgroundColor: '#1e40af', borderRadius: 3 },
-  th:      { flex: 1, padding: '6 4', fontFamily: 'Helvetica-Bold', color: '#fff' },
-  thRight: { flex: 1, padding: '6 4', fontFamily: 'Helvetica-Bold', color: '#fff', textAlign: 'right' },
-  row:     { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#e2e8f0' },
-  rowAlt:  { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#e2e8f0', backgroundColor: '#f8fafc' },
-  td:      { flex: 1, padding: '5 4' },
-  tdRight: { flex: 1, padding: '5 4', textAlign: 'right' },
-  footer:  { marginTop: 16, fontSize: 8, color: '#888', textAlign: 'center' },
-});
-
-/* ─── Document PDF ────────────────────────────────────────────────── */
-function PlanComptablePDF({ rows, columns }) {
-  return (
-    <Document>
-      <Page size="A4" orientation="landscape" style={pdfStyles.page}>
-        <Text style={pdfStyles.title}>Plan Comptable</Text>
-        <Text style={pdfStyles.sub}>Exporté le {new Date().toLocaleDateString('fr-FR')}</Text>
-        <View style={pdfStyles.table}>
-          <View style={pdfStyles.thead}>
-            {columns.map(c => (
-              <Text key={c.key} style={c.align === 'right' ? pdfStyles.thRight : pdfStyles.th}>
-                {c.label}
-              </Text>
-            ))}
-          </View>
-          {rows.map((row, i) => (
-            <View key={row.id || i} style={i % 2 === 0 ? pdfStyles.row : pdfStyles.rowAlt}>
-              {columns.map(c => (
-                <Text key={c.key} style={c.align === 'right' ? pdfStyles.tdRight : pdfStyles.td}>
-                  {row[c.key] ?? ''}
-                </Text>
-              ))}
-            </View>
-          ))}
-        </View>
-        <Text style={pdfStyles.footer}>
-          {rows.length} compte(s) — compaCipresa
-        </Text>
-      </Page>
-    </Document>
-  );
-}
 
 /* ─── Composant principal ─────────────────────────────────────────── */
 export default function ChartOfAccounts() {
@@ -135,35 +86,30 @@ export default function ChartOfAccounts() {
   /* Réinitialiser tous les filtres */
   const resetFilters = () => setFilters({ class: '', nature: '', status: '' });
 
-  /* Export Excel */
-  const exportExcel = () => {
-    const data = filteredRows.map(r => ({
-      Compte:  r.code,
-      Libellé: r.label,
-      Classe:  r.class,
-      Nature:  r.nature,
-      Solde:   r.balance,
-      Statut:  r.status,
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Plan comptable');
-    XLSX.writeFile(wb, 'plan_comptable.xlsx');
-  };
+  /* Export Excel — délégué à lib/generateFile/exportExcel */
+  const exportExcel = () =>
+    exportToExcel({
+      rows:     filteredRows,
+      columns:  COLUMNS,
+      filename: 'plan_comptable',
+      sheet:    'Plan comptable',
+    });
 
-  /* Export PDF */
+  /* Export PDF — délégué à lib/generateFile/exportPDF */
   const exportPDF = async () => {
     setExporting(true);
     try {
-      const blob = await pdf(
-        <PlanComptablePDF rows={filteredRows} columns={COLUMNS} />
-      ).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = 'plan_comptable.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadPDF({
+        filename: 'plan_comptable',
+        document: (
+          <GenericTablePDF
+            title="Plan Comptable"
+            columns={COLUMNS}
+            rows={filteredRows}
+            footerText={`${filteredRows.length} compte(s) — compaCipresa`}
+          />
+        ),
+      });
     } catch (err) {
       console.error('Erreur export PDF :', err);
     } finally {
