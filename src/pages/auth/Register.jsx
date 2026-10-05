@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import AuthLayout from "./AuthLayout";
 import Input from "../../components/ui/Input";
+import MyPhoneInput from "../../components/ui/phoneInput";
 import Button from "../../components/ui/Button";
 import { useAuth } from "../../context/AuthContext";
 
@@ -75,7 +76,7 @@ export default function Register() {
         </div>
       )}
       <form onSubmit={handleSubmit}>
-        <div className="auth-form-grid bg-red">
+        <div className="auth-form-grid">
           <Input
             icon={UserRound}
             label="Nom complet"
@@ -93,13 +94,18 @@ export default function Register() {
             value={form.email}
             onChange={update("email")}
           />
-          <Input
+          <MyPhoneInput
+            label="Téléphone"
+            value={form.phone}
+            onChange={update("phone")}
+          />
+          {/* <Input
             icon={Phone}
             label="Téléphone"
             placeholder="+225 07 00 00 00 00"
             value={form.phone}
             onChange={update("phone")}
-          />
+          /> */}
           <PasswordField
             label="Mot de passe"
             value={form.password}
