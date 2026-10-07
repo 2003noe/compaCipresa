@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, CalendarDays, Plus, Sun, Moon, FileText, BookOpen } from 'lucide-react';
-import Button from '../ui/Button';
+import { Search, CalendarDays, Sun, Moon, FileText, BookOpen } from 'lucide-react';
 import NotificationsPanel from './NotificationsPanel';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
@@ -16,12 +15,6 @@ export default function TopBar() {
   const [searching, setSearching] = useState(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
-
-  const goNew = () => {
-    if (location.pathname === '/journal') navigate('/nouvelle-ecriture');
-    else if (location.pathname === '/plan-comptable') navigate('/nouveau-compte');
-    else navigate('/nouvelle-ecriture');
-  };
 
   useEffect(() => {
     if (!supabaseConfigured) return undefined;
@@ -93,7 +86,6 @@ export default function TopBar() {
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </button>
         <NotificationsPanel />
-        <Button size="sm" icon={Plus} onClick={goNew}>Nouvelle écriture</Button>
       </div>
     </header>
   );
