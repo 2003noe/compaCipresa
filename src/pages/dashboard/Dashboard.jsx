@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Wallet, FileText, Award } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import Select from '../../components/ui/Select';
 import KpiCard from '../../components/accounting/KpiCard';
 import AccountingTable from '../../components/accounting/AccountingTable';
 import AlertCard from '../../components/accounting/AlertCard';
@@ -16,6 +17,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [exercices, setExercices] = useState([]);
+  const [selectedExerciceId, setSelectedExerciceId] = useState('');
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
   const [recentes, setRecentes] = useState([]);
@@ -33,11 +35,11 @@ export default function Dashboard() {
     Promise.all([
       supabase.from('exercices_comptables').select('id,code,annee,date_debut,date_fin,statut').order('annee', { ascending: false }),
       supabase.from('comptes_comptables').select('id,numero,libelle,nature,solde_ouverture_debit,solde_ouverture_credit'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(date_ecriture,statut)'),
-      supabase.from('ecritures_comptables').select('id,numero,date_ecriture,libelle,reference_piece,statut,lignes_ecritures(debit,credit)').order('date_ecriture', { ascending: false }).limit(8),
-      supabase.from('ecritures_comptables').select('id,date_ecriture,statut'),
-      supabase.from('declarations_tva').select('id,periode_libelle,statut,date_echeance'),
-      supabase.from('clotures_comptables').select('id,periode,statut'),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(exercice_id,date_ecriture,statut)'),
+      supabase.from('ecritures_comptables').select('id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures(debit,credit)').order('date_ecriture', { ascending: false }).limit(8),
+      supabase.from('ecritures_comptables').select('id,exercice_id,date_ecriture,statut'),
+      supabase.from('declarations_tva').select('id,exercice_id,periode_libelle,statut,date_echeance'),
+      supabase.from('clotures_comptables').select('id,exercice_id,periode,statut'),
       supabase.from('controles_cloture').select('cloture_id,statut'),
       supabase.from('lignes_releve_bancaire').select('id,compte_id,rapproche').eq('rapproche', false),
       supabase.from('profiles').select('id,nom,prenom,actif'),
@@ -46,7 +48,11 @@ export default function Dashboard() {
       const errs = results.filter((r) => r.error);
       if (errs.length) { setNotice(`Certaines données n'ont pas pu être chargées : ${errs[0].error.message}`); }
       const [ex, ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] = results.map((r) => r.data || []);
-      setExercices(ex); setComptes(ac);
+      const validExercises = (ex || []).filter((e) => e.date_debut && e.date_fin);
+      setExercices(validExercises);
+      const defaultExercise = validExercises.find((e) => e.statut === 'OUVERT') || validExercises[0];
+      if (defaultExercise) setSelectedExerciceId(defaultExercise.id);
+      setComptes(ac);
       setLignesTout(ln.filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
       setRecentes(rec);
       setEcrituresLight(ecl);
@@ -56,36 +62,42 @@ export default function Dashboard() {
     });
   }, []);
 
-  const currentExercice = exercices.find((e) => e.statut === 'OUVERT') || exercices[0];
-  const previousExercice = exercices.find((e) => e.annee === (currentExercice?.annee ? currentExercice.annee - 1 : null));
+  const selectedExercice = exercices.find((e) => e.id === selectedExerciceId) || exercices[0];
+  const previousExercice = exercices.find((e) => e.annee === (selectedExercice?.annee ? selectedExercice.annee - 1 : null));
+
+  const selectedLignes = useMemo(() => lignesTout.filter((l) => !selectedExercice || l.ecritures_comptables?.exercice_id === selectedExercice.id), [lignesTout, selectedExercice]);
+  const selectedRecentes = useMemo(() => recentes.filter((e) => !selectedExercice || e.exercice_id === selectedExercice.id), [recentes, selectedExercice]);
+  const selectedEcrituresLight = useMemo(() => ecrituresLight.filter((e) => !selectedExercice || e.exercice_id === selectedExercice.id), [ecrituresLight, selectedExercice]);
+  const selectedDeclarations = useMemo(() => declarations.filter((d) => !selectedExercice || d.exercice_id === selectedExercice.id), [declarations, selectedExercice]);
+  const selectedClotures = useMemo(() => clotures.filter((c) => !selectedExercice || c.exercice_id === selectedExercice.id), [clotures, selectedExercice]);
 
   // --- Trésorerie (cumulée, toutes périodes — cohérent avec la page Trésorerie) ---
   const comptesTresorerie = useMemo(() => comptes.filter((c) => c.nature === 'TRESORERIE'), [comptes]);
   const soldeTresorerie = useMemo(() => comptesTresorerie.reduce((acc, a) => {
     const base = Number(a.solde_ouverture_debit || 0) - Number(a.solde_ouverture_credit || 0);
-    const mvt = lignesTout.filter((l) => l.compte_id === a.id).reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0);
+    const mvt = selectedLignes.filter((l) => l.compte_id === a.id).reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0);
     return acc + base + mvt;
-  }, 0), [comptesTresorerie, lignesTout]);
+  }, 0), [comptesTresorerie, selectedLignes]);
 
   const now = new Date();
   const moisCourantKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const deltaTresorerieMois = useMemo(() => lignesTout
+  const deltaTresorerieMois = useMemo(() => selectedLignes
     .filter((l) => comptesTresorerie.some((a) => a.id === l.compte_id) && l.ecritures_comptables?.date_ecriture?.slice(0, 7) === moisCourantKey)
-    .reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0), [lignesTout, comptesTresorerie, moisCourantKey]);
+    .reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0), [selectedLignes, comptesTresorerie, moisCourantKey]);
 
   // --- CA & résultat net (exercice courant, logique identique à la page Compte de résultat) ---
   const periodNet = (compteId, start, end) => {
     if (!start || !end) return 0;
-    return lignesTout.filter((l) => l.compte_id === compteId && l.ecritures_comptables.date_ecriture >= start && l.ecritures_comptables.date_ecriture <= end)
+    return selectedLignes.filter((l) => l.compte_id === compteId && l.ecritures_comptables.date_ecriture >= start && l.ecritures_comptables.date_ecriture <= end)
       .reduce((acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0), 0);
   };
 
   const crRows = useMemo(() => comptes.filter((a) => a.nature === 'CHARGE' || a.nature === 'PRODUIT').map((a) => {
-    const rawN = periodNet(a.id, currentExercice?.date_debut, currentExercice?.date_fin);
+    const rawN = periodNet(a.id, selectedExercice?.date_debut, selectedExercice?.date_fin);
     const rawN1 = previousExercice ? periodNet(a.id, previousExercice.date_debut, previousExercice.date_fin) : null;
     const sign = a.nature === 'CHARGE' ? 1 : -1;
     return { ...a, valueN: rawN * sign, valueN1: rawN1 === null ? null : rawN1 * sign };
-  }), [comptes, lignesTout, currentExercice, previousExercice]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [comptes, selectedLignes, selectedExercice, previousExercice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const produitsExploit = crRows.filter((r) => r.nature === 'PRODUIT' && !r.numero.startsWith('77'));
   const chargesExploit = crRows.filter((r) => r.nature === 'CHARGE' && !r.numero.startsWith('67'));
@@ -104,8 +116,8 @@ export default function Dashboard() {
   const resultatPct = pctChange(resultatNetN, resultatNetN1);
 
   // --- Écritures ---
-  const ecrituresCeMois = ecrituresLight.filter((e) => e.date_ecriture?.slice(0, 7) === moisCourantKey).length;
-  const ecrituresBrouillon = ecrituresLight.filter((e) => e.statut === 'BROUILLON').length;
+  const ecrituresCeMois = selectedEcrituresLight.filter((e) => e.date_ecriture?.slice(0, 7) === moisCourantKey).length;
+  const ecrituresBrouillon = selectedEcrituresLight.filter((e) => e.statut === 'BROUILLON').length;
 
   // --- Répartition des charges (donut, exercice courant) ---
   const donutData = useMemo(() => {
@@ -136,7 +148,7 @@ export default function Dashboard() {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       buckets.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: MONTH_LABELS[d.getMonth()], entrees: 0, sorties: 0 });
     }
-    lignesTout.filter((l) => comptesTresorerie.some((a) => a.id === l.compte_id)).forEach((l) => {
+    selectedLignes.filter((l) => comptesTresorerie.some((a) => a.id === l.compte_id)).forEach((l) => {
       const key = l.ecritures_comptables?.date_ecriture?.slice(0, 7);
       const bucket = buckets.find((b) => b.key === key);
       if (!bucket) return;
@@ -144,7 +156,7 @@ export default function Dashboard() {
       bucket.sorties += Number(l.credit || 0);
     });
     return buckets;
-  }, [lignesTout, comptesTresorerie]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLignes, comptesTresorerie]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Alertes réelles ---
   const comptesMap = useMemo(() => Object.fromEntries(comptes.map((c) => [c.id, c])), [comptes]);
@@ -157,10 +169,10 @@ export default function Dashboard() {
 
   const alerts = useMemo(() => {
     const items = [];
-    declarations.filter((d) => d.date_echeance && !['DECLAREE', 'PAYEE'].includes(d.statut)).sort((a, b) => a.date_echeance.localeCompare(b.date_echeance)).slice(0, 2).forEach((d) => {
+    selectedDeclarations.filter((d) => d.date_echeance && !['DECLAREE', 'PAYEE'].includes(d.statut)).sort((a, b) => a.date_echeance.localeCompare(b.date_echeance)).slice(0, 2).forEach((d) => {
       items.push({ key: `tva-${d.id}`, tone: 'danger', text: `Déclaration TVA ${d.periode_libelle} à traiter avant le ${dateFr(d.date_echeance)}`, onClick: () => nav(`/tva-taxes/${d.id}`) });
     });
-    clotures.filter((c) => c.statut !== 'CLOTUREE').slice(0, 2).forEach((c) => {
+    selectedClotures.filter((c) => c.statut !== 'CLOTUREE').slice(0, 2).forEach((c) => {
       const p = clotureProgress[c.id] || { total: 0, faits: 0 };
       items.push({ key: `clot-${c.id}`, tone: 'warning', text: `Clôture ${c.periode} en cours (${p.faits}/${p.total} contrôles)`, onClick: () => nav(`/clotures/${c.id}`) });
     });
@@ -175,10 +187,10 @@ export default function Dashboard() {
     const sansRole = profiles.filter((p) => p.actif && !rolesUserIds.has(p.id)).length;
     if (sansRole > 0) items.push({ key: 'roles', tone: 'info', text: `${sansRole} utilisateur(s) actif(s) sans rôle assigné`, onClick: () => nav('/configuration') });
     return items.slice(0, 6);
-  }, [declarations, clotures, clotureProgress, releveNonRapproche, comptesMap, ecrituresBrouillon, profiles, rolesUserIds, nav]);
+  }, [selectedDeclarations, selectedClotures, clotureProgress, releveNonRapproche, comptesMap, ecrituresBrouillon, profiles, rolesUserIds, nav]);
 
   // --- Table écritures récentes ---
-  const recentRows = useMemo(() => recentes.map((e) => {
+  const recentRows = useMemo(() => selectedRecentes.map((e) => {
     const debit = (e.lignes_ecritures || []).reduce((a, l) => a + Number(l.debit || 0), 0);
     const credit = (e.lignes_ecritures || []).reduce((a, l) => a + Number(l.credit || 0), 0);
     return {
@@ -187,17 +199,24 @@ export default function Dashboard() {
       debit: money(debit), credit: money(credit),
       status: e.statut === 'VALIDEE' ? 'Validée' : 'Brouillon', statusTone: e.statut === 'VALIDEE' ? 'success' : 'warning',
     };
-  }), [recentes]);
+  }), [selectedRecentes]);
 
   return (
     <div className="page-content ">
       <div className="page-header">
         <div>
           <h1 className="page-title">Tableau de bord</h1>
-          <p className="page-subtitle">Vue d'ensemble de votre activité comptable{currentExercice ? ` · Exercice ${currentExercice.code || currentExercice.annee}` : ''}{loading ? ' · Chargement…' : ''}</p>
+          <p className="page-subtitle">Vue d'ensemble de votre activité comptable{selectedExercice ? ` · Exercice ${selectedExercice.code || selectedExercice.annee}` : ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div className="dashboard-date">Dernière mise à jour : {todayFr()}</div>
       </div>
+
+      <Card className="ledger-toolbar">
+        <Select label="Exercice comptable" value={selectedExerciceId} onChange={(e) => setSelectedExerciceId(e.target.value)}>
+          {exercices.length === 0 && <option value="">Aucun exercice</option>}
+          {exercices.map((e) => <option key={e.id} value={e.id}>{e.code || `Exercice ${e.annee}`} ({e.annee})</option>)}
+        </Select>
+      </Card>
 
       {notice && <div className="message error" role="alert">{notice}</div>}
 
@@ -216,7 +235,7 @@ export default function Dashboard() {
         <ChartCard data={monthlyFlows} />
         <Card className="summary-card">
           <div className="card-heading">
-            <div><h2>Répartition des charges</h2><p>Exercice {currentExercice?.code || currentExercice?.annee || 'en cours'}</p></div>
+            <div><h2>Répartition des charges</h2><p>Exercice {selectedExercice?.code || selectedExercice?.annee || 'en cours'}</p></div>
           </div>
           <div className="donut-wrap">
             <div className="donut" style={donutData.total > 0 ? { background: `conic-gradient(${gradientStops.join(',')})` } : undefined}>

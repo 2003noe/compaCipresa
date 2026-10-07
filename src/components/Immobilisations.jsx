@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Search } from 'lucide-react';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
-import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
-import { computeDepreciation } from '../../lib/depreciation';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import { supabase, supabaseConfigured } from '../lib/supabaseClient';
+import { computeDepreciation } from '../lib/depreciation';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const STATUT_LABEL = { EN_SERVICE: 'En service', CEDE: 'Cédé', REFORME: 'Réformé' };

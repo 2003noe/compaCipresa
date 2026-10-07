@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Card from '../../components/ui/Card';
-import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
-import Button from '../../components/ui/Button';
+import Card from './ui/Card';
+import Input from './ui/Input';
+import Select from './ui/Select';
+import Button from './ui/Button';
 import { Save } from 'lucide-react';
-import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 
 const CATEGORIES = ['Terrains', 'Constructions', 'Matériel et outillage', 'Véhicules', 'Matériel informatique', 'Mobilier'];
 const METHODES = [{ value: 'LINEAIRE', label: 'Linéaire' }, { value: 'DEGRESSIF', label: 'Dégressif' }, { value: 'AUCUNE', label: 'Aucune (non amortissable)' }];
