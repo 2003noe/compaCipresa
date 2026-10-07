@@ -128,21 +128,50 @@ export function AuthProvider({ children }) {
     return { error };
   }
 
+  // --- Inscription avec vérification de l'e-mail par code (OTP) ---
+  // Prérequis Supabase : "Confirm email" activé + template "Confirm signup" avec {{ .Token }}.
   async function signUp({ email, password, nom, prenom, telephone }) {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { nom, prenom, telephone },
       },
     });
+    // Supabase ne renvoie pas d'erreur si l'e-mail existe déjà et est confirmé :
+    // il renvoie un utilisateur sans identité. On le détecte pour informer l'utilisateur.
+    if (!error && data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return { data, error: { message: "Un compte existe déjà avec cet e-mail. Connectez-vous ou réinitialisez votre mot de passe." } };
+    }
+    return { data, error };
+  }
+
+  async function verifySignupOtp(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "signup" });
+    return { data, error };
+  }
+
+  async function resendSignupOtp(email) {
+    const { error } = await supabase.auth.resend({ type: "signup", email });
     return { error };
   }
 
+  // --- Mot de passe oublié avec code (OTP) ---
+  // Prérequis Supabase : template "Reset password" avec {{ .Token }}.
   async function resetPassword(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    return { error };
+  }
+
+  // Valide le code ; en cas de succès, Supabase ouvre une session temporaire
+  // qui autorise ensuite updatePassword().
+  async function verifyRecoveryOtp(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "recovery" });
+    return { data, error };
+  }
+
+  async function updatePassword(password) {
+    const { error } = await supabase.auth.updateUser({ password });
     return { error };
   }
 
@@ -178,7 +207,11 @@ export function AuthProvider({ children }) {
         updateProfile,
         signIn,
         signUp,
+        verifySignupOtp,
+        resendSignupOtp,
         resetPassword,
+        verifyRecoveryOtp,
+        updatePassword,
         signOut,
       }}
     >

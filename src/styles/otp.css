@@ -1,0 +1,27 @@
+/* Saisie du code OTP — réutilise les variables de tokens.css */
+.otp-field { margin-bottom: 16px }
+.otp-label { display: block; margin-bottom: 8px }
+.otp-row { display: flex; gap: 8px; justify-content: space-between }
+.otp-box {
+    width: 100%;
+    max-width: 52px;
+    height: 54px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    outline: 0;
+    padding: 0;
+}
+.otp-box:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, .15);
+}
+.otp-box:disabled { opacity: .6 }
+.otp-help { font-size: 12px; color: var(--color-muted); margin: 0 0 16px }
+.otp-help strong { color: var(--color-text); word-break: break-all }
+.otp-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 12px }
+@media (max-width: 400px) { .otp-box { height: 46px; font-size: 18px } .otp-row { gap: 5px } }
