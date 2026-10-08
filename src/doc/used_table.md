@@ -7,6 +7,7 @@ Voici la liste des tables (et buckets) Supabase utilisées dans les fichiers de 
 - `comptes_comptables`
 - `controles_cloture`
 - `declarations_tva`
+- `default_compt`
 - `ecritures_comptables`
 - `exercices_comptables`
 - `immobilisations`

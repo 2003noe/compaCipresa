@@ -25,6 +25,40 @@ const CURRENCIES = [
   { code: 'USD', label: 'Dollar US ($)' },
 ];
 
+const detectClasse = (num, parentClasseInt) => {
+  if (parentClasseInt && parentClasseInt >= 1 && parentClasseInt <= 7) {
+    return ACCOUNT_CLASSES[parentClasseInt - 1];
+  }
+  const clean = (num || '').trim();
+  if (clean.length > 0) {
+    const firstDigit = clean[0];
+    const found = ACCOUNT_CLASSES.find((c) => c.startsWith(`Classe ${firstDigit}`));
+    if (found) return found;
+  }
+  return null;
+};
+
+const detectNature = (num, categorie) => {
+  if (categorie) {
+    const catUpper = categorie.toUpperCase().trim();
+    if (NATURE_OPTIONS.includes(catUpper)) return catUpper;
+  }
+  const clean = (num || '').trim();
+  if (!clean) return null;
+  const first = clean[0];
+  if (first === '1') return 'PASSIF';
+  if (first === '2') return 'ACTIF';
+  if (first === '3') return 'ACTIF';
+  if (first === '4') {
+    if (clean.startsWith('40') || clean.startsWith('42') || clean.startsWith('43') || clean.startsWith('44')) return 'PASSIF';
+    return 'ACTIF';
+  }
+  if (first === '5') return 'TRESORERIE';
+  if (first === '6') return 'CHARGE';
+  if (first === '7') return 'PRODUIT';
+  return null;
+};
+
 const emptyForm = () => ({
   code: '',
   label: '',
@@ -47,12 +81,88 @@ export default function AccountForm() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Chargement des comptes parents depuis default_compt
   useEffect(() => {
     if (!supabaseConfigured) return;
-    supabase.from('comptes_comptables').select('id,numero,libelle').order('numero').then(({ data }) => {
-      setParentOptions(data || []);
-    });
+    supabase
+      .from('default_compt')
+      .select('id,num_compte,libelle,classe,categorie')
+      .order('num_compte')
+      .then(({ data, error: fetchErr }) => {
+        if (fetchErr) {
+          console.error('Erreur chargement default_compt:', fetchErr);
+          return;
+        }
+        setParentOptions(data || []);
+      });
   }, []);
+
+  const selectedParent = parentOptions.find((p) => p.id === form.parentId) || null;
+
+  // Gestion du changement de compte parent
+  const handleParentChange = (event) => {
+    const newParentId = event.target.value;
+    const parent = parentOptions.find((p) => p.id === newParentId) || null;
+
+    setForm((current) => {
+      let nextCode = current.code;
+      let nextClasse = current.classe;
+      let nextNature = current.nature;
+
+      if (parent) {
+        const prefix = parent.num_compte;
+        const currentOldPrefix = selectedParent ? selectedParent.num_compte : '';
+
+        // Si l'ancien code commençait par l'ancien préfixe, on remplace le préfixe
+        if (currentOldPrefix && nextCode.startsWith(currentOldPrefix)) {
+          nextCode = prefix + nextCode.slice(currentOldPrefix.length);
+        } else if (!nextCode.startsWith(prefix)) {
+          nextCode = prefix;
+        }
+
+        const autoClasse = detectClasse(prefix, parent.classe);
+        if (autoClasse) nextClasse = autoClasse;
+
+        const autoNature = detectNature(prefix, parent.categorie);
+        if (autoNature) nextNature = autoNature;
+      }
+
+      return {
+        ...current,
+        parentId: newParentId,
+        code: nextCode,
+        classe: nextClasse,
+        nature: nextNature,
+      };
+    });
+  };
+
+  // Gestion de la saisie du numéro de compte (en forçant le préfixe parent et l'auto-détection de la classe)
+  const handleCodeChange = (event) => {
+    let val = event.target.value;
+
+    if (selectedParent) {
+      const prefix = selectedParent.num_compte;
+      // Empêcher d'effacer en-dessous du préfixe parent
+      if (!val.startsWith(prefix)) {
+        if (prefix.startsWith(val)) {
+          val = prefix;
+        } else {
+          val = prefix + val.replace(prefix, '');
+        }
+      }
+    }
+
+    const autoClasse = detectClasse(val, selectedParent?.classe);
+    const autoNature = detectNature(val, selectedParent?.categorie);
+
+    setForm((current) => ({
+      ...current,
+      code: val,
+      ...(autoClasse ? { classe: autoClasse } : {}),
+      ...(autoNature ? { nature: autoNature } : {}),
+    }));
+  };
 
   const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
 
@@ -62,6 +172,11 @@ export default function AccountForm() {
 
     if (!form.code.trim() || !form.label.trim()) {
       setError('Le numéro et le libellé du compte sont obligatoires.');
+      return;
+    }
+
+    if (selectedParent && !form.code.trim().startsWith(selectedParent.num_compte)) {
+      setError(`Le numéro de compte doit obligatoirement commencer par le numéro du compte parent (${selectedParent.num_compte}).`);
       return;
     }
 
@@ -114,7 +229,20 @@ export default function AccountForm() {
         <div className="form-section precise-section">
           <h2>Identification du compte</h2>
           <div className="grid grid-2">
-            <Input label="Numéro de compte" placeholder="Ex: 411001" required value={form.code} onChange={update('code')} />
+            <div>
+              <Input
+                label="Numéro de compte"
+                placeholder={selectedParent ? `Ex: ${selectedParent.num_compte}01` : 'Ex: 411001'}
+                required
+                value={form.code}
+                onChange={handleCodeChange}
+              />
+              {selectedParent && (
+                <small style={{ color: 'var(--color-primary, #0d9488)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                  Doit commencer par le préfixe parent <strong>{selectedParent.num_compte}</strong>
+                </small>
+              )}
+            </div>
             <Input label="Libellé du compte" placeholder="Ex: Client - Coopérative Gagnoa" required value={form.label} onChange={update('label')} />
             <Select label="Classe de compte" value={form.classe} onChange={update('classe')}>
               {ACCOUNT_CLASSES.map((c) => <option key={c}>{c}</option>)}
@@ -136,10 +264,12 @@ export default function AccountForm() {
         <div className="form-section precise-section">
           <h2>Configuration &amp; Propriétés</h2>
           <div className="grid grid-2">
-            <Select label="Compte parent" value={form.parentId} onChange={update('parentId')}>
+            <Select label="Compte parent" value={form.parentId} onChange={handleParentChange}>
               <option value="">Aucun</option>
               {parentOptions.map((account) => (
-                <option key={account.id} value={account.id}>{account.numero} - {account.libelle}</option>
+                <option key={account.id} value={account.id}>
+                  {account.num_compte}
+                </option>
               ))}
             </Select>
             <Select label="Devise" value={form.devise} onChange={update('devise')}>
