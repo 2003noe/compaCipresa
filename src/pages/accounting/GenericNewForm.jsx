@@ -6,8 +6,7 @@ import { useState } from 'react';
 
 const presets = {
   treasury: { title:'Nouvelle opération de trésorerie', subtitle:'Enregistrez un mouvement de caisse ou de banque', fields:[['Type d’opération','select'],['Date','date'],['Libellé','text'],['Montant','text']] },
-  bank: { title:'Nouveau rapprochement bancaire', subtitle:'Associez les écritures comptables au relevé bancaire', fields:[['Compte bancaire','select'],['Date du relevé','date'],['Référence relevé','text'],['Solde relevé','text']] },
-  tax: { title:'Nouvelle déclaration fiscale', subtitle:'Préparez une nouvelle déclaration de TVA et taxes', fields:[['Période','select'],['Date limite','date'],['TVA collectée','text'],['TVA déductible','text']] },
+  inventory: { title:"Nouvel arrêté d'inventaire", subtitle:"Configurez les critères de l'inventaire patrimonial", fields:[['Exercice','select'],['Date d’inventaire','date'],['Responsable','text'],['Méthode valorisation','select']] },
   closing: { title:'Nouvelle clôture comptable', subtitle:'Préparez la clôture de l’exercice ou d’une période', fields:[['Période','select'],['Date de clôture','date'],['Responsable','text'],['Commentaire','text']] },
   grand: { title:'Nouvelle vue du grand livre', subtitle:'Configurez les paramètres d’affichage du grand livre', fields:[['Compte','select'],['Du','date'],['Au','date'],['Format','select']] },
   balance: { title:'Générer une balance', subtitle:'Configurez les critères de génération de la balance générale', fields:[['Exercice','select'],['Du compte','text'],['Au compte','text'],['Format','select']] },

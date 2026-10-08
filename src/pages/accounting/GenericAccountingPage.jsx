@@ -37,17 +37,11 @@ export default function GenericAccountingPage({ type }) {
       "Nouvelle opération",
       "/nouvelle-tresorerie",
     ],
-    bank: [
-      "Rapprochement bancaire",
-      "Comparez les écritures comptables aux relevés bancaires",
-      "Nouveau rapprochement",
-      "/nouveau-rapprochement",
-    ],
-    tax: [
-      "TVA & Taxes",
-      "Déclarations, TVA collectée et déductible",
-      "Nouvelle déclaration",
-      "/nouvelle-tva",
+    inventory: [
+      "Livre d'inventaire",
+      "Inventaire descriptif et estimatif des éléments d'actif et de passif",
+      "Consulter l'inventaire",
+      "/livre-inventaire",
     ],
     assets: [
       "Immobilisations",

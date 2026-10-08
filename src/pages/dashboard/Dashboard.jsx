@@ -169,9 +169,6 @@ export default function Dashboard() {
 
   const alerts = useMemo(() => {
     const items = [];
-    selectedDeclarations.filter((d) => d.date_echeance && !['DECLAREE', 'PAYEE'].includes(d.statut)).sort((a, b) => a.date_echeance.localeCompare(b.date_echeance)).slice(0, 2).forEach((d) => {
-      items.push({ key: `tva-${d.id}`, tone: 'danger', text: `Déclaration TVA ${d.periode_libelle} à traiter avant le ${dateFr(d.date_echeance)}`, onClick: () => nav(`/tva-taxes/${d.id}`) });
-    });
     selectedClotures.filter((c) => c.statut !== 'CLOTUREE').slice(0, 2).forEach((c) => {
       const p = clotureProgress[c.id] || { total: 0, faits: 0 };
       items.push({ key: `clot-${c.id}`, tone: 'warning', text: `Clôture ${c.periode} en cours (${p.faits}/${p.total} contrôles)`, onClick: () => nav(`/clotures/${c.id}`) });
@@ -180,14 +177,15 @@ export default function Dashboard() {
       const parCompte = {};
       releveNonRapproche.forEach((r) => { parCompte[r.compte_id] = (parCompte[r.compte_id] || 0) + 1; });
       Object.entries(parCompte).slice(0, 2).forEach(([compteId, n]) => {
-        items.push({ key: `rappro-${compteId}`, tone: 'warning', text: `${n} ligne(s) de relevé non rapprochée(s) — ${comptesMap[compteId]?.libelle || 'compte de trésorerie'}`, onClick: () => nav('/rapprochement') });
+        items.push({ key: `rappro-${compteId}`, tone: 'warning', text: `${n} ligne(s) de relevé en attente — ${comptesMap[compteId]?.libelle || 'compte de trésorerie'}`, onClick: () => nav('/tresorerie') });
       });
     }
+    items.push({ key: 'inventaire-check', tone: 'info', text: "Livre d'inventaire patrimonial prêt pour consultation et arrêté", onClick: () => nav('/livre-inventaire') });
     if (ecrituresBrouillon > 0) items.push({ key: 'brouillons', tone: 'info', text: `${ecrituresBrouillon} écriture(s) en brouillon à valider`, onClick: () => nav('/journal') });
     const sansRole = profiles.filter((p) => p.actif && !rolesUserIds.has(p.id)).length;
     if (sansRole > 0) items.push({ key: 'roles', tone: 'info', text: `${sansRole} utilisateur(s) actif(s) sans rôle assigné`, onClick: () => nav('/configuration') });
     return items.slice(0, 6);
-  }, [selectedDeclarations, selectedClotures, clotureProgress, releveNonRapproche, comptesMap, ecrituresBrouillon, profiles, rolesUserIds, nav]);
+  }, [selectedClotures, clotureProgress, releveNonRapproche, comptesMap, ecrituresBrouillon, profiles, rolesUserIds, nav]);
 
   // --- Table écritures récentes ---
   const recentRows = useMemo(() => selectedRecentes.map((e) => {

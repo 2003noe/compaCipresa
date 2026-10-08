@@ -9,11 +9,8 @@ import Balance from "../pages/accounting/Balance";
 import Bilan from "../pages/accounting/Bilan";
 import CompteResultat from "../pages/accounting/CompteResultat";
 import Tresorerie from "../pages/accounting/Tresorerie";
-import Rapprochement from "../pages/accounting/Rapprochement";
+import LivreInventaire from "../pages/accounting/LivreInventaire";
 import GenericAccountingPage from "../pages/accounting/GenericAccountingPage";
-import TvaTaxes from "../pages/accounting/TvaTaxes";
-import NewTvaDeclaration from "../pages/accounting/NewTvaDeclaration";
-import TvaDeclarationDetail from "../pages/accounting/TvaDeclarationDetail";
 import Clotures from "../pages/accounting/Clotures";
 import NewCloture from "../pages/accounting/NewCloture";
 import ClotureDetail from "../pages/accounting/ClotureDetail";
@@ -52,9 +49,7 @@ export default function AppRoutes() {
       <Route path="/bilan" element={inside(Bilan)} />
       <Route path="/compte-resultat" element={inside(CompteResultat)} />
       <Route path="/tresorerie" element={inside(Tresorerie)} />
-      <Route path="/rapprochement" element={inside(Rapprochement)} />
-      <Route path="/tva-taxes" element={inside(TvaTaxes)} />
-      <Route path="/tva-taxes/:id" element={inside(TvaDeclarationDetail)} />
+      <Route path="/livre-inventaire" element={inside(LivreInventaire)} />
       <Route path="/immobilisations" element={inside(Immobilisations)} />
       <Route path="/clotures" element={inside(Clotures)} />
       <Route path="/clotures/:id" element={inside(ClotureDetail)} />
@@ -67,11 +62,6 @@ export default function AppRoutes() {
         path="/nouvelle-tresorerie"
         element={inside(GenericNewForm, { type: "treasury" })}
       />
-      <Route
-        path="/nouveau-rapprochement"
-        element={inside(GenericNewForm, { type: "bank" })}
-      />
-      <Route path="/nouvelle-tva" element={inside(NewTvaDeclaration)} />
       <Route path="/nouvelle-cloture" element={inside(NewCloture)} />
       <Route
         path="/nouveau-grand-livre"

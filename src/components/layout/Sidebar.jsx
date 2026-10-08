@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, Link as LinkIcon, Percent, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck } from 'lucide-react';
+import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const items = [
   ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
   ['/grand-livre', 'Grand livre', Book], ['/balance', 'Balance', Scale], ['/bilan', 'Bilan', FileText],
-  ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet], ['/rapprochement', 'Rapprochement', LinkIcon],
-  ['/tva-taxes', 'TVA & Taxes', Percent], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
+  ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet],
+  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
 ];
 
 export default function Sidebar() {

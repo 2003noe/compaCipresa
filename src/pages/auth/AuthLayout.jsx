@@ -1,10 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, CircleUserRound, Home, List, BookOpen, BookMarked, Scale, FileText, PieChart, WalletCards, Link2, Percent, Building2, LockKeyhole, Settings, Leaf, Mail, Lock, Monitor } from 'lucide-react';
+import { ChevronDown, CircleUserRound, Home, List, BookOpen, BookMarked, Scale, FileText, PieChart, WalletCards, ClipboardList, Building2, LockKeyhole, Settings, Leaf, Mail, Lock, Monitor } from 'lucide-react';
 
 const navigation = [
   ['Tableau de bord', Home], ['Plan comptable', List], ['Journal', BookOpen], ['Grand livre', Monitor],
   ['Balance', Scale], ['Bilan', FileText], ['Compte de résultat', PieChart], ['Trésorerie', WalletCards],
-  ['Rapprochement', Link2], ['TVA & Taxes', Percent], ['Immobilisations', Building2], ['Clôtures', LockKeyhole], ['Paramètres', Settings],
+  ["Livre d'inventaire", ClipboardList], ['Immobilisations', Building2], ['Clôtures', LockKeyhole], ['Paramètres', Settings],
 ];
 
 function Brand({ light = false }) {
