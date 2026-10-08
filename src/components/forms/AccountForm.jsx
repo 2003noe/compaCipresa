@@ -41,6 +41,11 @@ const detectClasse = (num, parentClasseInt) => {
 const detectNature = (num, categorie) => {
   if (categorie) {
     const catUpper = categorie.toUpperCase().trim();
+    if (catUpper.includes('PASSIF')) return 'PASSIF';
+    if (catUpper.includes('ACTIF')) return 'ACTIF';
+    if (catUpper.includes('CHARGE')) return 'CHARGE';
+    if (catUpper.includes('PRODUIT')) return 'PRODUIT';
+    if (catUpper.includes('TRESOR') || catUpper.includes('TRÉSOR')) return 'TRESORERIE';
     if (NATURE_OPTIONS.includes(catUpper)) return catUpper;
   }
   const clean = (num || '').trim();
@@ -93,7 +98,13 @@ export default function AccountForm() {
           console.error('Erreur chargement default_compt:', fetchErr);
           return;
         }
-        setParentOptions(data || []);
+        const sorted = (data || []).sort((a, b) => {
+          const nA = Number(a.num_compte);
+          const nB = Number(b.num_compte);
+          if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+          return a.num_compte.localeCompare(b.num_compte);
+        });
+        setParentOptions(sorted);
       });
   }, []);
 
@@ -228,21 +239,22 @@ export default function AccountForm() {
       <Card className="account-card">
         <div className="form-section precise-section">
           <h2>Identification du compte</h2>
+          <Select label="Compte parent" value={form.parentId} onChange={handleParentChange}>
+            <option value="">Aucun</option>
+            {parentOptions.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.num_compte} - {account.libelle}
+              </option>
+            ))}
+          </Select>
           <div className="grid grid-2">
-            <div>
-              <Input
-                label="Numéro de compte"
-                placeholder={selectedParent ? `Ex: ${selectedParent.num_compte}01` : 'Ex: 411001'}
-                required
-                value={form.code}
-                onChange={handleCodeChange}
-              />
-              {selectedParent && (
-                <small style={{ color: 'var(--color-primary, #0d9488)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
-                  Doit commencer par le préfixe parent <strong>{selectedParent.num_compte}</strong>
-                </small>
-              )}
-            </div>
+            <Input
+              label="Numéro de compte"
+              placeholder={selectedParent ? `Ex: ${selectedParent.num_compte}01` : 'Ex: 411001'}
+              required
+              value={form.code}
+              onChange={handleCodeChange}
+            />
             <Input label="Libellé du compte" placeholder="Ex: Client - Coopérative Gagnoa" required value={form.label} onChange={update('label')} />
             <Select label="Classe de compte" value={form.classe} onChange={update('classe')}>
               {ACCOUNT_CLASSES.map((c) => <option key={c}>{c}</option>)}
@@ -264,14 +276,6 @@ export default function AccountForm() {
         <div className="form-section precise-section">
           <h2>Configuration &amp; Propriétés</h2>
           <div className="grid grid-2">
-            <Select label="Compte parent" value={form.parentId} onChange={handleParentChange}>
-              <option value="">Aucun</option>
-              {parentOptions.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.num_compte}
-                </option>
-              ))}
-            </Select>
             <Select label="Devise" value={form.devise} onChange={update('devise')}>
               {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
             </Select>
