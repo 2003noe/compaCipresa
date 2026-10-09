@@ -1,33 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Printer, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
 
-const money = (v) => {
-  const n = Number(v || 0);
+// Montant : 0 => « - », négatif => (montant) selon l'usage comptable
+const fmt = (v) => {
+  const n = Math.round(Number(v || 0));
   if (n === 0) return '-';
-  return n.toLocaleString('fr-FR');
+  const txt = Math.abs(n).toLocaleString('fr-FR');
+  return n < 0 ? `(${txt})` : txt;
 };
+const fmtN1 = (v) => (v === null || v === undefined ? '-' : fmt(v));
+const frDate = (d) => (d ? new Date(d).toLocaleDateString('fr-FR') : '');
 
-const dash = (v) => {
-  const n = Number(v || 0);
-  if (n === 0) return '-';
-  return n.toLocaleString('fr-FR');
-};
-
-const isNumeroIn = (numero, prefixes) => prefixes.some((p) => (numero || '').startsWith(p));
+// Informations légales affichées si elles existent dans parametres_entreprise
+const COMPANY_FIELDS = [
+  ['RCCM', ['rccm', 'numero_rccm', 'rc']],
+  ['NIU', ['niu', 'nif', 'numero_contribuable']],
+  ['Adresse', ['adresse', 'siege']],
+];
 
 export default function Bilan() {
   const [exercises, setExercises] = useState([]);
   const [exerciceId, setExerciceId] = useState('');
-  const [accounts, setAccounts] = useState([]);
-  const [lines, setLines] = useState([]);
+  const [soldesN, setSoldesN] = useState(null);
+  const [soldesN1, setSoldesN1] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
   const [notice, setNotice] = useState('');
-  const [companyName, setCompanyName] = useState('CIPRESA SARL');
+  const [company, setCompany] = useState({ name: 'CIPRESA SARL', details: [] });
 
+  // 1. Entreprise + exercices
   useEffect(() => {
     if (!supabaseConfigured) {
       setNotice("Supabase n'est pas configuré.");
@@ -38,17 +44,21 @@ export default function Bilan() {
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
       supabase.from('exercices_comptables').select('id,code,annee,date_debut,date_fin,statut').order('annee', { ascending: false }),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(date_ecriture,statut)'),
-    ]).then(([paramRes, exRes, acRes, lineRes]) => {
-      if (paramRes.data?.nom_entreprise) {
-        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
-      } else if (paramRes.data?.nom) {
-        setCompanyName(paramRes.data.nom.toUpperCase());
+    ]).then(([paramRes, exRes]) => {
+      const p = paramRes.data;
+      if (p) {
+        const name = p.nom_entreprise || p.nom;
+        const details = COMPANY_FIELDS
+          .map(([label, keys]) => {
+            const key = keys.find((k) => p[k]);
+            return key ? `${label} : ${p[key]}` : null;
+          })
+          .filter(Boolean);
+        setCompany({ name: name ? name.toUpperCase() : 'CIPRESA SARL', details });
       }
 
-      if (exRes.error || acRes.error || lineRes.error) {
-        setNotice(`Impossible de charger le bilan : ${(exRes.error || acRes.error || lineRes.error).message}`);
+      if (exRes.error) {
+        setNotice(`Impossible de charger les exercices : ${exRes.error.message}`);
         setLoading(false);
         return;
       }
@@ -57,135 +67,159 @@ export default function Bilan() {
       setExercises(exList);
       const openExercise = exList.find((e) => e.statut === 'OUVERT') || exList[0];
       if (openExercise) setExerciceId(openExercise.id);
-      setAccounts(acRes.data || []);
-      setLines((lineRes.data || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
       setLoading(false);
     });
   }, []);
 
-  const selected = exercises.find((e) => e.id === exerciceId);
-  const previous = exercises.find((e) => e.annee === (selected?.annee ? selected.annee - 1 : null));
+  const selected = useMemo(() => exercises.find((e) => e.id === exerciceId), [exercises, exerciceId]);
 
-  const balanceAsOf = (account, cutoffDate) => {
-    if (!cutoffDate) return 0;
-    const base = Number(account.solde_ouverture_debit || 0) - Number(account.solde_ouverture_credit || 0);
-    const movement = lines
-      .filter((l) => l.compte_id === account.id && l.ecritures_comptables.date_ecriture <= cutoffDate)
-      .reduce((acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0), 0);
-    return base + movement;
-  };
+  // Exercice précédent = celui qui se termine le plus récemment avant le début de l'exercice choisi
+  const previous = useMemo(() => {
+    if (!selected) return null;
+    return exercises
+      .filter((e) => e.date_fin < selected.date_debut)
+      .sort((a, b) => (a.date_fin < b.date_fin ? 1 : -1))[0] || null;
+  }, [exercises, selected]);
 
-  const resultNet = useMemo(() => {
-    if (!selected) return 0;
-    let produits = 0;
-    let charges = 0;
-    accounts.forEach((a) => {
-      const net = lines
-        .filter(
-          (l) =>
-            l.compte_id === a.id &&
-            l.ecritures_comptables.date_ecriture >= selected.date_debut &&
-            l.ecritures_comptables.date_ecriture <= selected.date_fin
-        )
-        .reduce((acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0), 0);
-      if (a.nature === 'CHARGE') charges += net;
-      if (a.nature === 'PRODUIT') produits += -net;
+  // 2. Soldes calculés côté base (fonction SQL soldes_comptes)
+  useEffect(() => {
+    if (!supabaseConfigured || !selected) return undefined;
+    let active = true;
+    setLoadingData(true);
+    setNotice('');
+
+    const call = (ex) => supabase.rpc('soldes_comptes', { p_date_fin: ex.date_fin, p_date_debut: ex.date_debut });
+
+    Promise.all([call(selected), previous ? call(previous) : Promise.resolve({ data: null, error: null })])
+      .then(([n, n1]) => {
+        if (!active) return;
+        const err = n.error || n1.error;
+        if (err) {
+          const missing = /soldes_comptes|PGRST202|42883/.test(`${err.code} ${err.message}`);
+          setNotice(
+            missing
+              ? "La fonction SQL « soldes_comptes » est introuvable : exécutez le script bilan_soldes_comptes.sql dans Supabase."
+              : `Impossible de charger le bilan : ${err.message}`,
+          );
+          setSoldesN(null);
+          setSoldesN1(null);
+        } else {
+          setSoldesN(n.data || []);
+          setSoldesN1(n1.data);
+        }
+        setLoadingData(false);
+      });
+
+    return () => { active = false; };
+  }, [selected, previous]);
+
+  const bilanN = useMemo(() => (soldesN ? buildBilan(soldesN) : null), [soldesN]);
+  const bilanN1 = useMemo(() => (soldesN1 ? buildBilan(soldesN1) : null), [soldesN1]);
+  const showN1 = Boolean(previous && bilanN1);
+
+  // 3. Lignes d'affichage ACTIF / PASSIF
+  const { actifRows, passifRows } = useMemo(() => {
+    if (!bilanN) return { actifRows: [], passifRows: [] };
+    const t = bilanN.totals;
+    const t1 = bilanN1?.totals;
+    const v1 = (key) => (t1 ? t1[key] : null);
+
+    const items = (key) =>
+      mergeGroup(bilanN, bilanN1, key).map((r) => ({ isItem: true, num: r.numero, label: r.libelle, val: r.val, val1: r.val1 }));
+
+    const actif = [];
+    ACTIF_SECTIONS.forEach(([key, label]) => {
+      const list = items(key);
+      if (list.length) {
+        actif.push({ isSection: true, label });
+        actif.push(...list);
+      }
     });
-    return produits - charges;
-  }, [accounts, lines, selected]);
+    actif.push({ isSubtotal: true, label: 'Total Actif immobilisé', val: t.immo, val1: v1('immo') });
 
-  const rows = useMemo(
-    () =>
-      accounts.map((a) => ({
-        ...a,
-        netN: balanceAsOf(a, selected?.date_fin),
-        netN1: previous ? balanceAsOf(a, previous.date_fin) : null,
-      })),
-    [accounts, lines, selected, previous] // eslint-disable-line react-hooks/exhaustive-deps
-  );
+    actif.push({ isSection: true, label: 'Actif circulant' });
+    actif.push(...items('AC'));
+    actif.push({ isSubtotal: true, label: 'Total Actif circulant', val: t.AC, val1: v1('AC') });
 
-  const actifImmoIncorp = rows.filter((r) => r.nature === 'ACTIF' && r.classe?.startsWith('Classe 2') && isNumeroIn(r.numero, ['20', '21']));
-  const actifImmoCorp = rows.filter((r) => r.nature === 'ACTIF' && r.classe?.startsWith('Classe 2') && isNumeroIn(r.numero, ['22', '23', '24', '25']));
-  const actifImmoFin = rows.filter((r) => r.nature === 'ACTIF' && r.classe?.startsWith('Classe 2') && !isNumeroIn(r.numero, ['20', '21', '22', '23', '24', '25']));
-  const actifCirculant = rows.filter((r) => r.nature === 'ACTIF' && (r.classe?.startsWith('Classe 3') || r.classe?.startsWith('Classe 4')));
-  const tresorerieActif = rows.filter((r) => r.nature === 'TRESORERIE' && (r.netN || 0) >= 0);
+    actif.push({ isSection: true, label: 'Trésorerie actif' });
+    actif.push(...items('TA'));
+    actif.push({ isSubtotal: true, label: 'Total Trésorerie actif', val: t.TA, val1: v1('TA') });
 
-  const capitauxPropres = rows.filter((r) => r.nature === 'PASSIF' && r.classe?.startsWith('Classe 1') && !isNumeroIn(r.numero, ['16', '17', '18']));
-  const dettes = rows.filter((r) => r.nature === 'PASSIF' && (isNumeroIn(r.numero, ['16', '17', '18']) || r.classe?.startsWith('Classe 4')));
-  const tresoreriePassif = rows.filter((r) => r.nature === 'TRESORERIE' && (r.netN || 0) < 0);
-
-  const sum = (list, key = 'netN') => list.reduce((acc, r) => acc + Math.abs(Number(r[key]) || 0), 0);
-
-  const totalActifImmo = sum(actifImmoIncorp) + sum(actifImmoCorp) + sum(actifImmoFin);
-  const totalActif = totalActifImmo + sum(actifCirculant) + sum(tresorerieActif);
-
-  const totalCapitaux = sum(capitauxPropres) + Math.abs(resultNet);
-  const totalPassif = totalCapitaux + sum(dettes) + sum(tresoreriePassif);
-  const ecart = Math.abs(totalActif - totalPassif);
-
-  // Build unified row elements for single side-by-side table
-  const actifDisplayRows = useMemo(() => {
-    const list = [];
-
-    // Immobilisations Incorporelles
-    if (actifImmoIncorp.length > 0) {
-      list.push({ isSection: true, label: 'Immobilisations incorporelles' });
-      actifImmoIncorp.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: r.netN }));
+    const passif = [];
+    passif.push({ isSection: true, label: 'Capitaux propres' });
+    passif.push(...items('CP'));
+    if (bilanN.resultatAnterieur !== 0 || (bilanN1 && bilanN1.resultatAnterieur !== 0)) {
+      passif.push({
+        isItem: true,
+        num: '—',
+        label: 'Résultats des exercices antérieurs non affectés',
+        val: bilanN.resultatAnterieur,
+        val1: bilanN1 ? bilanN1.resultatAnterieur : null,
+      });
     }
+    passif.push({
+      isItem: true,
+      num: '—',
+      label: "Résultat net de l'exercice",
+      val: bilanN.resultatPeriode,
+      val1: bilanN1 ? bilanN1.resultatPeriode : null,
+    });
+    passif.push({ isSubtotal: true, label: 'Total Capitaux propres', val: t.CP, val1: v1('CP') });
 
-    // Immobilisations Corporelles
-    if (actifImmoCorp.length > 0) {
-      list.push({ isSection: true, label: 'Immobilisations corporelles' });
-      actifImmoCorp.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: r.netN }));
+    passif.push({ isSection: true, label: 'Dettes financières et ressources assimilées' });
+    passif.push(...items('DF'));
+    passif.push({ isSubtotal: true, label: 'Total Dettes financières', val: t.DF, val1: v1('DF') });
+
+    passif.push({ isSection: true, label: 'Passif circulant' });
+    passif.push(...items('PC'));
+    passif.push({ isSubtotal: true, label: 'Total Passif circulant', val: t.PC, val1: v1('PC') });
+
+    passif.push({ isSection: true, label: 'Trésorerie passif' });
+    passif.push(...items('TP'));
+    passif.push({ isSubtotal: true, label: 'Total Trésorerie passif', val: t.TP, val1: v1('TP') });
+
+    return { actifRows: actif, passifRows: passif };
+  }, [bilanN, bilanN1]);
+
+  const maxRowsCount = Math.max(actifRows.length, passifRows.length);
+  const cols = showN1 ? 4 : 3;
+  const ecart = bilanN ? Math.abs(bilanN.ecart) : 0;
+  const equilibre = ecart < 1;
+  const nonClasses = bilanN ? [...bilanN.groups.NC.values()] : [];
+  const provisoire = selected?.statut === 'OUVERT';
+
+  const renderCell = (cell, withBorder) => {
+    const bl = withBorder ? ' border-left' : '';
+    if (!cell) {
+      return (
+        <>
+          <td className={withBorder ? 'border-left' : undefined}></td>
+          <td></td>
+          <td></td>
+          {showN1 && <td></td>}
+        </>
+      );
     }
-
-    // Immobilisations Financières
-    if (actifImmoFin.length > 0) {
-      list.push({ isSection: true, label: 'Immobilisations financières' });
-      actifImmoFin.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: r.netN }));
+    if (cell.isSection) {
+      return <td colSpan={cols} className={`balance-class-row${bl}`}>{cell.label}</td>;
     }
-
-    list.push({ isSubtotal: true, label: 'Total Actif immobilisé', val: totalActifImmo });
-
-    // Actif circulant
-    list.push({ isSection: true, label: 'Actif circulant' });
-    actifCirculant.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: r.netN }));
-    list.push({ isSubtotal: true, label: 'Total Actif circulant', val: sum(actifCirculant) });
-
-    // Trésorerie actif
-    list.push({ isSection: true, label: 'Trésorerie actif' });
-    tresorerieActif.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: r.netN }));
-    list.push({ isSubtotal: true, label: 'Total Trésorerie actif', val: sum(tresorerieActif) });
-
-    return list;
-  }, [actifImmoIncorp, actifImmoCorp, actifImmoFin, actifCirculant, tresorerieActif, totalActifImmo]);
-
-  const passifDisplayRows = useMemo(() => {
-    const list = [];
-
-    // Capitaux propres
-    list.push({ isSection: true, label: 'Capitaux propres' });
-    capitauxPropres.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: Math.abs(r.netN) }));
-    list.push({ isItem: true, num: '—', label: "Résultat net de l'exercice", val: resultNet });
-    list.push({ isSubtotal: true, label: 'Total Capitaux propres', val: totalCapitaux });
-
-    // Dettes
-    list.push({ isSection: true, label: 'Dettes & Passif circulant' });
-    dettes.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: Math.abs(r.netN) }));
-    list.push({ isSubtotal: true, label: 'Total Dettes', val: sum(dettes) });
-
-    // Trésorerie passif
-    list.push({ isSection: true, label: 'Trésorerie passif' });
-    tresoreriePassif.forEach((r) => list.push({ isItem: true, num: r.numero, label: r.libelle, val: Math.abs(r.netN) }));
-    list.push({ isSubtotal: true, label: 'Total Trésorerie passif', val: sum(tresoreriePassif) });
-
-    return list;
-  }, [capitauxPropres, resultNet, totalCapitaux, dettes, tresoreriePassif]);
-
-  const maxRowsCount = Math.max(actifDisplayRows.length, passifDisplayRows.length);
-
-  const handlePrint = () => {
-    window.print();
+    if (cell.isSubtotal) {
+      return (
+        <>
+          <td colSpan={2} className={`balance-subtotal-row${bl}`}>{cell.label}</td>
+          <td className="text-right balance-subtotal-row">{fmt(cell.val)}</td>
+          {showN1 && <td className="text-right balance-subtotal-row">{fmtN1(cell.val1)}</td>}
+        </>
+      );
+    }
+    return (
+      <>
+        <td className={`account-cell${bl}`}>{cell.num}</td>
+        <td>{cell.label}</td>
+        <td className="text-right">{fmt(cell.val)}</td>
+        {showN1 && <td className="text-right">{fmtN1(cell.val1)}</td>}
+      </>
+    );
   };
 
   return (
@@ -193,10 +227,12 @@ export default function Bilan() {
       <div className="page-header no-print">
         <div>
           <h1 className="page-title">Bilan comptable</h1>
-          <p className="page-subtitle">Tableau de situation patrimoniale à la clôture (SYSCOHADA){loading ? ' · Chargement…' : ''}</p>
+          <p className="page-subtitle">
+            Tableau de situation patrimoniale à la clôture (SYSCOHADA){loading || loadingData ? ' · Chargement…' : ''}
+          </p>
         </div>
         <div>
-          <Button icon={Printer} onClick={handlePrint} disabled={loading || !selected}>
+          <Button icon={Printer} onClick={() => window.print()} disabled={loading || loadingData || !bilanN}>
             Imprimer le Bilan
           </Button>
         </div>
@@ -207,7 +243,7 @@ export default function Bilan() {
           {exercises.length === 0 && <option value="">Aucun exercice</option>}
           {exercises.map((e) => (
             <option key={e.id} value={e.id}>
-              {e.code} ({e.annee})
+              {e.code} ({e.annee}){e.statut === 'OUVERT' ? ' · ouvert' : ''}
             </option>
           ))}
         </Select>
@@ -215,33 +251,54 @@ export default function Bilan() {
 
       {notice && <div className="message error no-print">{notice}</div>}
 
-      {!loading && selected && (
+      {!loading && !loadingData && selected && bilanN && (
         <>
-          {/* EQUILIBRE BADGE */}
-          <div className="no-print" style={{ marginBottom: '16px' }}>
-            {ecart === 0 ? (
+          {/* Équilibre */}
+          <div className="no-print" style={{ marginBottom: '12px' }}>
+            {equilibre ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ecfdf5', color: '#065f46', padding: '10px 16px', borderRadius: '8px', border: '1px solid #a7f3d0', fontWeight: 600 }}>
                 <CheckCircle2 size={18} />
-                <span>Bilan parfaitement équilibré : Total Actif = Total Passif ({money(totalActif)} FCFA)</span>
+                <span>Bilan équilibré : Total Actif = Total Passif ({fmt(bilanN.totals.actif)} FCFA)</span>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fef2f2', color: '#991b1b', padding: '10px 16px', borderRadius: '8px', border: '1px solid #fecaca', fontWeight: 600 }}>
                 <AlertTriangle size={18} />
-                <span>Écart Actif / Passif : {money(ecart)} FCFA — Le bilan n'est pas équilibré (Vérifiez la classification des comptes).</span>
+                <span>Écart Actif / Passif : {fmt(ecart)} FCFA. Le bilan n'est pas équilibré : vérifiez les soldes d'ouverture et les comptes non classés ci-dessous.</span>
               </div>
             )}
           </div>
 
-          {/* SINGLE UNIFIED BILAN TABLE CARD */}
+          {/* Comptes non classés */}
+          {nonClasses.length > 0 && (
+            <div className="message error no-print" style={{ marginBottom: '12px' }}>
+              {nonClasses.length} compte(s) non classé(s) dans le bilan (exclus des totaux) :{' '}
+              {nonClasses.map((c) => `${c.numero} ${c.libelle} (${fmt(c.value)})`).join(' ; ')}
+            </div>
+          )}
+
+          {/* Situation provisoire */}
+          {provisoire && (
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fffbeb', color: '#92400e', padding: '10px 16px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '16px' }}>
+              <Info size={18} />
+              <span>Situation provisoire : l'exercice {selected.code} est encore ouvert. Le bilan reflète les écritures validées au {frDate(selected.date_fin)}.</span>
+            </div>
+          )}
+
           <Card>
             <div className="bilan-print-header" style={{ display: 'none', marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '8px' }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: '20px' }}>{companyName}</h2>
-                  <p style={{ margin: '2px 0 0 0', fontSize: '16px', fontWeight: 'bold' }}>BILAN COMPTABLE AU 31/12/{selected.annee}</p>
+                  <h2 style={{ margin: 0, fontSize: '20px' }}>{company.name}</h2>
+                  {company.details.map((d) => (
+                    <p key={d} style={{ margin: '2px 0 0 0', fontSize: '11px' }}>{d}</p>
+                  ))}
+                  <p style={{ margin: '6px 0 0 0', fontSize: '16px', fontWeight: 'bold' }}>
+                    BILAN COMPTABLE{provisoire ? ' PROVISOIRE' : ''} AU {frDate(selected.date_fin)}
+                  </p>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '12px' }}>
                   <p style={{ margin: 0 }}>Exercice : {selected.code}</p>
+                  <p style={{ margin: 0 }}>Du {frDate(selected.date_debut)} au {frDate(selected.date_fin)}</p>
                   <p style={{ margin: 0 }}>Devise : FCFA</p>
                 </div>
               </div>
@@ -251,99 +308,52 @@ export default function Bilan() {
               <table className="balance-table bilan-unified-table">
                 <thead>
                   <tr>
-                    <th colSpan={3} className="text-center" style={{ background: 'var(--color-surface-muted)', color: 'var(--color-primary-dark)', fontSize: '13px', fontWeight: 800, padding: '10px' }}>
+                    <th colSpan={cols} className="text-center" style={{ background: 'var(--color-surface-muted)', color: 'var(--color-primary-dark)', fontSize: '13px', fontWeight: 800, padding: '10px' }}>
                       ACTIF
                     </th>
-                    <th colSpan={3} className="text-center border-left" style={{ background: 'var(--color-surface-muted)', color: '#4338ca', fontSize: '13px', fontWeight: 800, padding: '10px' }}>
+                    <th colSpan={cols} className="text-center border-left" style={{ background: 'var(--color-surface-muted)', color: '#4338ca', fontSize: '13px', fontWeight: 800, padding: '10px' }}>
                       PASSIF
                     </th>
                   </tr>
                   <tr>
-                    <th style={{ width: '80px' }}>Compte</th>
+                    <th style={{ width: '70px' }}>Compte</th>
                     <th>Libellé de l'Actif</th>
-                    <th className="text-right" style={{ width: '130px' }}>Net (N)</th>
-                    <th style={{ width: '80px' }} className="border-left">Compte</th>
+                    <th className="text-right" style={{ width: '110px' }}>Net (N)</th>
+                    {showN1 && <th className="text-right" style={{ width: '110px' }}>Net (N-1)</th>}
+                    <th style={{ width: '70px' }} className="border-left">Compte</th>
                     <th>Libellé du Passif</th>
-                    <th className="text-right" style={{ width: '130px' }}>Montant (N)</th>
+                    <th className="text-right" style={{ width: '110px' }}>Montant (N)</th>
+                    {showN1 && <th className="text-right" style={{ width: '110px' }}>Montant (N-1)</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: maxRowsCount }).map((_, idx) => {
-                    const actifCell = actifDisplayRows[idx];
-                    const passifCell = passifDisplayRows[idx];
+                  {Array.from({ length: maxRowsCount }).map((_, idx) => (
+                    <tr key={idx}>
+                      {renderCell(actifRows[idx], false)}
+                      {renderCell(passifRows[idx], true)}
+                    </tr>
+                  ))}
 
-                    return (
-                      <tr key={idx}>
-                        {/* ACTIF CELL */}
-                        {actifCell?.isSection ? (
-                          <td colSpan={3} className="balance-class-row">
-                            {actifCell.label}
-                          </td>
-                        ) : actifCell?.isSubtotal ? (
-                          <>
-                            <td colSpan={2} className="balance-subtotal-row">
-                              {actifCell.label}
-                            </td>
-                            <td className="text-right balance-subtotal-row">{dash(actifCell.val)}</td>
-                          </>
-                        ) : actifCell?.isItem ? (
-                          <>
-                            <td className="account-cell">{actifCell.num}</td>
-                            <td>{actifCell.label}</td>
-                            <td className="text-right">{dash(actifCell.val)}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                          </>
-                        )}
-
-                        {/* PASSIF CELL */}
-                        {passifCell?.isSection ? (
-                          <td colSpan={3} className="balance-class-row border-left">
-                            {passifCell.label}
-                          </td>
-                        ) : passifCell?.isSubtotal ? (
-                          <>
-                            <td colSpan={2} className="balance-subtotal-row border-left">
-                              {passifCell.label}
-                            </td>
-                            <td className="text-right balance-subtotal-row">{dash(passifCell.val)}</td>
-                          </>
-                        ) : passifCell?.isItem ? (
-                          <>
-                            <td className="account-cell border-left">{passifCell.num}</td>
-                            <td>{passifCell.label}</td>
-                            <td className="text-right">{dash(passifCell.val)}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="border-left"></td>
-                            <td></td>
-                            <td></td>
-                          </>
-                        )}
-                      </tr>
-                    );
-                  })}
-
-                  {/* UNIFIED FINAL TOTAL ROW */}
                   <tr className="balance-total-row">
                     <td colSpan={2}>TOTAL ACTIF</td>
-                    <td className="text-right">{money(totalActif)}</td>
+                    <td className="text-right">{fmt(bilanN.totals.actif)}</td>
+                    {showN1 && <td className="text-right">{fmtN1(bilanN1?.totals.actif)}</td>}
                     <td colSpan={2} className="border-left">TOTAL PASSIF</td>
-                    <td className="text-right">{money(totalPassif)}</td>
+                    <td className="text-right">{fmt(bilanN.totals.passif)}</td>
+                    {showN1 && <td className="text-right">{fmtN1(bilanN1?.totals.passif)}</td>}
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            <p className="page-subtitle" style={{ marginTop: 12, fontSize: 12 }}>
+              Les montants entre parenthèses sont négatifs (amortissements, dépréciations, pertes). Les comptes de tiers
+              et de trésorerie sont classés à l'actif ou au passif selon le sens de leur solde.
+            </p>
           </Card>
         </>
       )}
 
-      {/* EMBEDDED STYLES FOR UNIFIED TABLE */}
       <style>{`
         .border-left {
           border-left: 2px solid var(--color-border) !important;
@@ -351,7 +361,7 @@ export default function Bilan() {
 
         @media print {
           @page {
-            size: A4 portrait;
+            size: A4 landscape;
             margin: 10mm;
           }
           .no-print { display: none !important; }
@@ -360,7 +370,7 @@ export default function Bilan() {
           .card { border: none !important; box-shadow: none !important; padding: 0 !important; }
           .bilan-print-header { display: block !important; }
           .balance-table { width: 100% !important; border: 1px solid #000 !important; }
-          .balance-table th, .balance-table td { border-color: #000 !important; padding: 5px 6px !important; font-size: 11px !important; }
+          .balance-table th, .balance-table td { border-color: #000 !important; padding: 4px 5px !important; font-size: 10px !important; }
           .border-left { border-left: 2px solid #000 !important; }
           .balance-total-row td { background-color: #f0fdf4 !important; color: #000 !important; border-top: 2px solid #000 !important; }
         }
