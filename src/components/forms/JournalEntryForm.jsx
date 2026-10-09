@@ -53,7 +53,7 @@ export default function JournalEntryForm() {
   useEffect(() => {
     if (!supabaseConfigured) return;
     Promise.all([
-      supabase.from('exercices_comptables').select('id,code,annee,statut').eq('statut', 'OUVERT').order('annee', { ascending: false }).limit(1),
+      supabase.from('exercices_comptables').select('id,code,annee,statut,date_debut,date_fin').eq('statut', 'OUVERT').order('annee', { ascending: false }).limit(1),
       supabase.from('journaux').select('id,code,libelle').order('code'),
       supabase.from('comptes_comptables').select('numero,libelle').order('numero'),
     ]).then(([ex, jr, ac]) => {
@@ -75,7 +75,7 @@ export default function JournalEntryForm() {
     let active = true;
     supabase
       .from('ecritures_comptables')
-      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
+      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,exercices_comptables(date_debut,date_fin),lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
       .eq('id', editId)
       .single()
       .then(({ data, error: err }) => {
@@ -103,7 +103,7 @@ export default function JournalEntryForm() {
         setPiece(data.numero);
         setReference(data.reference_piece && data.reference_piece !== data.numero ? data.reference_piece : '');
         setJournalId(data.journal_id);
-        setExercise({ id: data.exercice_id });
+        setExercise({ id: data.exercice_id, date_debut: data.exercices_comptables?.date_debut, date_fin: data.exercices_comptables?.date_fin });
         setLoadingEntry(false);
       });
     return () => { active = false; };
@@ -157,6 +157,14 @@ export default function JournalEntryForm() {
       setError('Chaque ligne doit avoir un numéro de compte et un libellé.');
       return;
     }
+    if (lines.some((l) => (Number(l.debit) > 0) === (Number(l.credit) > 0))) {
+      setError('Chaque ligne doit comporter soit un débit, soit un crédit (ni les deux, ni aucun).');
+      return;
+    }
+    if (exercise?.date_debut && exercise?.date_fin && (date < exercise.date_debut || date > exercise.date_fin)) {
+      setError(`La date doit être comprise dans l'exercice (du ${new Date(exercise.date_debut).toLocaleDateString('fr-FR')} au ${new Date(exercise.date_fin).toLocaleDateString('fr-FR')}).`);
+      return;
+    }
 
     setSaving(true);
 
@@ -186,7 +194,7 @@ export default function JournalEntryForm() {
       date_ecriture: date,
       libelle: lines[0]?.label || 'Opération comptable',
       reference_piece: reference || piece,
-      statut,
+      statut: 'BROUILLON', // la validation passe par valider_ecriture() (voir plus bas)
       journal_id: journalId,
     };
 
@@ -249,9 +257,23 @@ export default function JournalEntryForm() {
       if (failed.length) attachmentNotice = `Écriture enregistrée, mais échec de dépôt pour : ${failed.join(', ')}`;
     }
 
+    // Validation : contrôles, numérotation et verrouillage faits côté base
+    let numeroDefinitif = null;
+    if (statut === 'VALIDEE') {
+      const { data: numero, error: validationError } = await supabase.rpc('valider_ecriture', { p_ecriture_id: entryId });
+      if (validationError) {
+        setSaving(false);
+        setAttachments([]);
+        setError(`Écriture enregistrée en brouillon, mais non validée : ${validationError.message}`);
+        if (!isEdit) nav(`/nouvelle-ecriture?edit=${entryId}`, { replace: true });
+        return;
+      }
+      numeroDefinitif = numero;
+    }
+
     setSaving(false);
     setAttachments([]);
-    setNotice(attachmentNotice || (statut === 'VALIDEE' ? 'Écriture validée.' : 'Écriture enregistrée en brouillon.'));
+    setNotice(attachmentNotice || (statut === 'VALIDEE' ? `Écriture validée (n° ${numeroDefinitif}).` : 'Écriture enregistrée en brouillon.'));
     window.setTimeout(() => nav('/journal'), 500);
   };
 
@@ -273,7 +295,7 @@ export default function JournalEntryForm() {
         <div className="entry-main-col">
           <Card className="entry-meta-card">
             <div className="entry-fields-grid">
-              <Input label="Date d'écriture" type="date" icon={CalendarDays} value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input label="Date d'écriture" type="date" icon={CalendarDays} value={date} min={exercise?.date_debut} max={exercise?.date_fin} onChange={(e) => setDate(e.target.value)} />
               <Select label="Journal comptable" value={journalId} onChange={(e) => setJournalId(e.target.value)}>
                 {journals.length === 0 && <option value="">Aucun journal disponible</option>}
                 {journals.map((j) => <option key={j.id} value={j.id}>{j.code} — {j.libelle}</option>)}
