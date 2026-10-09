@@ -62,7 +62,7 @@ export default function JournalEntryForm() {
       if (!isEdit && jr.data?.[0]) setJournalId(jr.data[0].id);
       setAccountOptions(ac.data || []);
     });
-  }, [isEdit]);
+  }, [isEdit]);git 
 
   // Mode édition : charger le brouillon à modifier
   useEffect(() => {

@@ -414,7 +414,7 @@ export default function JournalPage() {
       <Card style={{ marginBottom: '32px' }}>
         <div className="card-heading" style={{ marginBottom: '16px' }}>
           <div>
-            <h2 className="section-title">✅ Écritures validées</h2>
+            <h2 className="section-title">Écritures validées</h2>
             <p className="page-subtitle">{filteredValidees.length} écriture(s) comptabilisée(s)</p>
           </div>
         </div>
@@ -456,7 +456,7 @@ export default function JournalPage() {
         <Card>
           <div className="card-heading" style={{ marginBottom: '16px' }}>
             <div>
-              <h2 className="section-title">📝 Écritures en brouillon</h2>
+              <h2 className="section-title">Écritures en brouillon</h2>
               <p className="page-subtitle">{filteredBrouillons.length} écriture(s) en attente de validation</p>
             </div>
           </div>
