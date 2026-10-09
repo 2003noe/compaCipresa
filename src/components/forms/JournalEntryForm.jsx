@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -28,6 +28,13 @@ const initialLines = () => ([
 
 export default function JournalEntryForm() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+  const isEdit = Boolean(editId);
+  const [loadingEntry, setLoadingEntry] = useState(isEdit);
+  const [locked, setLocked] = useState(false);
+  const [existingPieces, setExistingPieces] = useState([]);
+  const [originalLineIds, setOriginalLineIds] = useState([]);
   const [lines, setLines] = useState(initialLines);
   const [date, setDate] = useState(today());
   const [piece, setPiece] = useState(defaultPiece());
@@ -50,12 +57,57 @@ export default function JournalEntryForm() {
       supabase.from('journaux').select('id,code,libelle').order('code'),
       supabase.from('comptes_comptables').select('numero,libelle').order('numero'),
     ]).then(([ex, jr, ac]) => {
-      setExercise(ex.data?.[0] || null);
+      if (!isEdit) setExercise(ex.data?.[0] || null);
       setJournals(jr.data || []);
-      if (jr.data?.[0]) setJournalId(jr.data[0].id);
+      if (!isEdit && jr.data?.[0]) setJournalId(jr.data[0].id);
       setAccountOptions(ac.data || []);
     });
-  }, []);
+  }, [isEdit]);
+
+  // Mode édition : charger le brouillon à modifier
+  useEffect(() => {
+    if (!isEdit) return undefined;
+    if (!supabaseConfigured) {
+      setError("Supabase n'est pas configuré.");
+      setLoadingEntry(false);
+      return undefined;
+    }
+    let active = true;
+    supabase
+      .from('ecritures_comptables')
+      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
+      .eq('id', editId)
+      .single()
+      .then(({ data, error: err }) => {
+        if (!active) return;
+        if (err || !data) {
+          setError(`Impossible de charger l'écriture : ${err?.message || 'introuvable'}`);
+          setLocked(true);
+          setLoadingEntry(false);
+          return;
+        }
+        if (data.statut !== 'BROUILLON') {
+          setError('Seules les écritures en brouillon peuvent être modifiées.');
+          setLocked(true);
+        }
+        const loaded = (data.lignes_ecritures || []).map((l) => ({
+          account: l.comptes_comptables?.numero || '',
+          label: l.libelle || '',
+          debit: Number(l.debit || 0),
+          credit: Number(l.credit || 0),
+        }));
+        setLines(loaded.length >= 2 ? loaded : [...loaded, ...initialLines().slice(loaded.length)]);
+        setOriginalLineIds((data.lignes_ecritures || []).map((l) => l.id));
+        setExistingPieces(data.pieces_comptables || []);
+        setDate(data.date_ecriture || today());
+        setPiece(data.numero);
+        setReference(data.reference_piece && data.reference_piece !== data.numero ? data.reference_piece : '');
+        setJournalId(data.journal_id);
+        setExercise({ id: data.exercice_id });
+        setLoadingEntry(false);
+      });
+    return () => { active = false; };
+  }, [isEdit, editId]);
 
   const totals = useMemo(() => lines.reduce((acc, line) => ({
     debit: acc.debit + Number(line.debit || 0),
@@ -91,6 +143,7 @@ export default function JournalEntryForm() {
   const save = async (statut) => {
     setError(''); setNotice('');
 
+    if (locked) return;
     if (lines.length < 2 || !balanced) {
       setError("L'écriture doit contenir au moins deux lignes et être équilibrée.");
       return;
@@ -107,43 +160,90 @@ export default function JournalEntryForm() {
 
     setSaving(true);
 
-    const { data: entry, error: insertError } = await supabase.from('ecritures_comptables').insert({
+    // 1. Résoudre les comptes avant toute écriture en base
+    const numeros = [...new Set(lines.map((l) => l.account.trim()))];
+    const accountRows = await supabase.from('comptes_comptables').select('id,numero').in('numero', numeros);
+    if (accountRows.error) { setSaving(false); setError(accountRows.error.message); return; }
+
+    const accountMap = Object.fromEntries((accountRows.data || []).map((a) => [a.numero, a.id]));
+    const missing = numeros.filter((numero) => !accountMap[numero]);
+    if (missing.length) {
+      setSaving(false);
+      setError(`Compte(s) introuvable(s) dans le plan comptable : ${missing.join(', ')}`);
+      return;
+    }
+
+    const buildLignes = (ecritureId) => lines.map((l) => ({
+      ecriture_id: ecritureId,
+      compte_id: accountMap[l.account.trim()],
+      libelle: l.label.trim(),
+      debit: Number(l.debit || 0),
+      credit: Number(l.credit || 0),
+    }));
+
+    const headerValues = {
       numero: piece,
       date_ecriture: date,
       libelle: lines[0]?.label || 'Opération comptable',
       reference_piece: reference || piece,
       statut,
-      exercice_id: exercise.id,
       journal_id: journalId,
-    }).select('id').single();
+    };
 
-    if (insertError) { setSaving(false); setError(insertError.message); return; }
+    let entryId = editId;
 
-    const accountRows = await supabase.from('comptes_comptables').select('id,numero').in('numero', lines.map((l) => l.account.trim()));
-    if (accountRows.error) { setSaving(false); await supabase.from('ecritures_comptables').delete().eq('id', entry.id); setError(accountRows.error.message); return; }
+    if (isEdit) {
+      // 2a. Modification : on insère les nouvelles lignes, puis on retire les anciennes,
+      //     puis on met l'en-tête à jour (l'écriture reste cohérente à chaque étape).
+      const inserted = await supabase.from('lignes_ecritures').insert(buildLignes(editId)).select('id');
+      if (inserted.error) { setSaving(false); setError(inserted.error.message); return; }
+      const newIds = (inserted.data || []).map((r) => r.id);
 
-    const accountMap = Object.fromEntries((accountRows.data || []).map((a) => [a.numero, a.id]));
-    const missing = lines.map((l) => l.account.trim()).filter((numero) => !accountMap[numero]);
-    if (missing.length) {
-      setSaving(false);
-      await supabase.from('ecritures_comptables').delete().eq('id', entry.id);
-      setError(`Compte(s) introuvable(s) dans le plan comptable : ${[...new Set(missing)].join(', ')}`);
-      return;
+      if (originalLineIds.length) {
+        const removed = await supabase.from('lignes_ecritures').delete().in('id', originalLineIds);
+        if (removed.error) {
+          await supabase.from('lignes_ecritures').delete().in('id', newIds);
+          setSaving(false);
+          setError(removed.error.message);
+          return;
+        }
+      }
+      setOriginalLineIds(newIds);
+
+      const updated = await supabase
+        .from('ecritures_comptables')
+        .update({ ...headerValues, updated_at: new Date().toISOString() })
+        .eq('id', editId)
+        .eq('statut', 'BROUILLON');
+      if (updated.error) { setSaving(false); setError(updated.error.message); return; }
+    } else {
+      // 2b. Création
+      const { data: entry, error: insertError } = await supabase
+        .from('ecritures_comptables')
+        .insert({ ...headerValues, exercice_id: exercise.id })
+        .select('id')
+        .single();
+      if (insertError) { setSaving(false); setError(insertError.message); return; }
+      entryId = entry.id;
+
+      const linesResult = await supabase.from('lignes_ecritures').insert(buildLignes(entryId));
+      if (linesResult.error) {
+        setSaving(false);
+        await supabase.from('ecritures_comptables').delete().eq('id', entryId);
+        setError(linesResult.error.message);
+        return;
+      }
     }
-
-    const lignes = lines.map((l) => ({ ecriture_id: entry.id, compte_id: accountMap[l.account.trim()], libelle: l.label.trim(), debit: Number(l.debit || 0), credit: Number(l.credit || 0) }));
-    const linesResult = await supabase.from('lignes_ecritures').insert(lignes);
-    if (linesResult.error) { setSaving(false); await supabase.from('ecritures_comptables').delete().eq('id', entry.id); setError(linesResult.error.message); return; }
 
     let attachmentNotice = '';
     if (attachments.length) {
       const failed = [];
       for (const attachment of attachments) {
         const safeName = attachment.file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-        const path = `${entry.id}/${Date.now()}-${safeName}`;
+        const path = `${entryId}/${Date.now()}-${safeName}`;
         const upload = await supabase.storage.from(ATTACHMENT_BUCKET).upload(path, attachment.file, { cacheControl: '3600', upsert: false });
         if (upload.error) { failed.push(`${attachment.file.name} (${upload.error.message})`); continue; }
-        const pieceInsert = await supabase.from('pieces_comptables').insert({ ecriture_id: entry.id, type: attachment.file.type || 'application/octet-stream', reference: attachment.file.name, fichier_url: path });
+        const pieceInsert = await supabase.from('pieces_comptables').insert({ ecriture_id: entryId, type: attachment.file.type || 'application/octet-stream', reference: attachment.file.name, fichier_url: path });
         if (pieceInsert.error) failed.push(`${attachment.file.name} (${pieceInsert.error.message})`);
       }
       if (failed.length) attachmentNotice = `Écriture enregistrée, mais échec de dépôt pour : ${failed.join(', ')}`;
@@ -155,10 +255,17 @@ export default function JournalEntryForm() {
     window.setTimeout(() => nav('/journal'), 500);
   };
 
+  if (loadingEntry) {
+    return <div className="page-content entry-page"><p className="page-subtitle">Chargement de l'écriture…</p></div>;
+  }
+
   return (
     <div className="page-content entry-page">
       <div className="entry-title-row">
-        <div><h1 className="page-title">Nouvelle écriture comptable</h1><p className="page-subtitle">Enregistrez une transaction dans vos journaux auxiliaires</p></div>
+        <div>
+          <h1 className="page-title">{isEdit ? 'Modifier le brouillon' : 'Nouvelle écriture comptable'}</h1>
+          <p className="page-subtitle">{isEdit ? 'Complétez votre écriture puis enregistrez-la ou validez-la' : 'Enregistrez une transaction dans vos journaux auxiliaires'}</p>
+        </div>
         <div className={`balanced-pill ${balanced ? 'ok' : 'warning'}`}><CheckCircle2 size={14} />{balanced ? 'Écriture équilibrée ✓' : 'Écriture déséquilibrée'}</div>
       </div>
 
@@ -198,8 +305,8 @@ export default function JournalEntryForm() {
           </Card>
 
           <div className="entry-actions">
-            <Button variant="secondary" disabled={saving} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>
-            <Button disabled={saving} onClick={() => save('VALIDEE')}>{saving ? 'Enregistrement…' : "Valider l'écriture"}</Button>
+            <Button variant="secondary" disabled={saving || locked} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>
+            <Button disabled={saving || locked} onClick={() => save('VALIDEE')}>{saving ? 'Enregistrement…' : "Valider l'écriture"}</Button>
             <button type="button" className="text-button" onClick={() => nav('/journal')}>Annuler</button>
           </div>
           {error && <div className="message error" role="alert">{error}</div>}
@@ -221,6 +328,12 @@ export default function JournalEntryForm() {
           >
             <CloudUpload size={23} /><strong>Glissez-déposez un fichier</strong><span>PDF, PNG ou JPEG jusqu'à 10 MB</span>
           </div>
+          {existingPieces.map((p) => (
+            <div className="attachment-item" key={p.id}>
+              <Paperclip size={18} />
+              <div><strong>{p.reference || 'Pièce jointe'}</strong><span>Déjà jointe</span></div>
+            </div>
+          ))}
           {attachments.map((a) => (
             <div className="attachment-item" key={a.id}>
               <Paperclip size={18} />
