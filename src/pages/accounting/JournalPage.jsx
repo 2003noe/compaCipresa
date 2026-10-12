@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
 const PAGE_SIZE = 25;       // lignes affichées par page (écritures validées)
@@ -88,12 +89,11 @@ export default function JournalPage() {
   const requestedPaths = useRef(new Set());
 
   // Référentiels
-  const [exercices, setExercices] = useState([]);
+  const { selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const [journaux, setJournaux] = useState([]);
   const [filtersReady, setFiltersReady] = useState(false);
 
   // Filtres
-  const [exerciceId, setExerciceId] = useState('');
   const [journalId, setJournalId] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -117,17 +117,11 @@ export default function JournalPage() {
     }
     let active = true;
     Promise.all([
-      supabase.from('exercices_comptables').select('id,code,annee,statut').order('annee', { ascending: false }),
       supabase.from('journaux').select('id,code,libelle').order('code'),
-    ]).then(([ex, jr]) => {
+    ]).then(([jr]) => {
       if (!active) return;
-      if (ex.error) setError(`Impossible de charger les exercices : ${ex.error.message}`);
       if (jr.error) setError(`Impossible de charger les journaux : ${jr.error.message}`);
-      const exList = ex.data || [];
-      setExercices(exList);
       setJournaux(jr.data || []);
-      const defaultEx = exList.find((e) => e.statut === 'OUVERT') || exList[0];
-      if (defaultEx) setExerciceId(defaultEx.id);
       setFiltersReady(true);
     });
     return () => { active = false; };
@@ -135,7 +129,7 @@ export default function JournalPage() {
 
   // 2. Écritures (rechargées à chaque changement de filtre serveur)
   useEffect(() => {
-    if (!filtersReady || !supabaseConfigured) return undefined;
+    if (!filtersReady || exercicesLoading || !supabaseConfigured) return undefined;
     let active = true;
     setLoading(true);
     setError('');
@@ -204,7 +198,7 @@ export default function JournalPage() {
     })();
 
     return () => { active = false; };
-  }, [filtersReady, exerciceId, journalId, dateFrom, dateTo, order]);
+  }, [filtersReady, exercicesLoading, exerciceId, journalId, dateFrom, dateTo, order]);
 
   // 3. Filtrage texte (côté client) + totaux sur TOUTES les écritures filtrées
   const matches = (row) =>
@@ -345,7 +339,6 @@ export default function JournalPage() {
     </tfoot>
   );
 
-  const exerciceLabel = (e) => `${e.code || e.annee}${e.statut === 'OUVERT' ? ' (ouvert)' : ''}`;
 
   return (
     <div className="page-content">
@@ -368,12 +361,6 @@ export default function JournalPage() {
       {/* Filtres */}
       <Card style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-          <div style={{ minWidth: 170 }}>
-            <Select label="Exercice" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
-              <option value="">Tous les exercices</option>
-              {exercices.map((e) => <option key={e.id} value={e.id}>{exerciceLabel(e)}</option>)}
-            </Select>
-          </div>
           <div style={{ minWidth: 200 }}>
             <Select label="Journal" value={journalId} onChange={(e) => setJournalId(e.target.value)}>
               <option value="">Tous les journaux</option>

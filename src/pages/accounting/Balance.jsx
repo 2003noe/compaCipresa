@@ -3,7 +3,11 @@ import { Printer, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
+<<<<<<< HEAD
 import Button from '../../components/ui/Button';
+=======
+import { useExercice } from '../../context/ExerciceContext';
+>>>>>>> f9e6a33e29ec23f307e31a2c0eb1289ef8638c83
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -14,8 +18,7 @@ const classNumber = (classe) => {
 };
 
 export default function Balance() {
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { selectedExerciceId: exerciceId } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [movementsByAccount, setMovementsByAccount] = useState({});
   const [classFilter, setClassFilter] = useState('Toutes classes');
@@ -27,6 +30,7 @@ export default function Balance() {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
 
     Promise.all([
+<<<<<<< HEAD
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
       supabase.from('exercices_comptables').select('id,code,annee,statut').order('annee', { ascending: false }),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
@@ -47,6 +51,17 @@ export default function Balance() {
       const openExercise = exRes.data?.find((e) => e.statut === 'OUVERT') || exRes.data?.[0];
       if (openExercise) setExerciceId(openExercise.id);
       setAccounts(acRes.data || []);
+=======
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(exercice_id,statut)'),
+    ]).then(([ac, mv]) => {
+      if (ac.error || mv.error) {
+        setNotice(`Impossible de charger la balance : ${(ac.error || mv.error).message}`);
+        setLoading(false);
+        return;
+      }
+      setAccounts(ac.data || []);
+>>>>>>> f9e6a33e29ec23f307e31a2c0eb1289ef8638c83
 
       const grouped = {};
       (mvRes.data || []).forEach((line) => {
@@ -181,11 +196,15 @@ export default function Balance() {
         </div>
       </div>
 
+<<<<<<< HEAD
       <Card className="ledger-toolbar no-print">
         <Select label="Exercice" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
           {exercises.length === 0 && <option value="">Aucun exercice</option>}
           {exercises.map((e) => <option key={e.id} value={e.id}>{e.code} ({e.annee})</option>)}
         </Select>
+=======
+      <Card className="ledger-toolbar">
+>>>>>>> f9e6a33e29ec23f307e31a2c0eb1289ef8638c83
         <Select label="Filtrer" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
           {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
         </Select>
