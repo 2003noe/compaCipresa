@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import Card from '../../components/ui/Card';
-import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 import { STATUT_LABEL, STATUT_TONE, dateFr } from '../../lib/clotures';
 
 export default function Clotures() {
   const nav = useNavigate();
-  const [exercices, setExercices] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const [clotures, setClotures] = useState([]);
   const [progress, setProgress] = useState({});
   const [profiles, setProfiles] = useState({});
@@ -20,11 +19,6 @@ export default function Clotures() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
-    supabase.from('exercices_comptables').select('id,code,annee,date_debut,date_fin').order('annee', { ascending: false }).then(({ data, error }) => {
-      if (error) { setNotice(`Impossible de charger les exercices : ${error.message}`); setLoading(false); return; }
-      setExercices(data || []);
-      if (data?.length) setExerciceId(data[0].id); else setLoading(false);
-    });
     supabase.from('profiles').select('id,nom,prenom').then(({ data }) => {
       const map = {}; (data || []).forEach((p) => { map[p.id] = `${p.prenom || ''} ${p.nom || ''}`.trim(); });
       setProfiles(map);
@@ -52,7 +46,10 @@ export default function Clotures() {
     });
   };
 
-  useEffect(() => { if (exerciceId) load(exerciceId); }, [exerciceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (exerciceId) load(exerciceId);
+    else if (!exercicesLoading) { setClotures([]); setProgress({}); setLoading(false); }
+  }, [exerciceId, exercicesLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="page-content">
@@ -62,10 +59,6 @@ export default function Clotures() {
           <p className="page-subtitle">Suivez les périodes comptables et leur checklist de clôture mensuelle{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Select value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
-            {exercices.length === 0 && <option value="">Aucun exercice</option>}
-            {exercices.map((e) => <option key={e.id} value={e.id}>Exercice {e.code || e.annee}</option>)}
-          </Select>
           <Button icon={Plus} onClick={() => nav('/nouvelle-cloture')}>Nouvelle clôture</Button>
         </div>
       </div>

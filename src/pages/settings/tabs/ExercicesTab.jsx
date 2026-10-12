@@ -4,10 +4,12 @@ import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
+import { useExercice } from '../../../context/ExerciceContext';
 
 const empty = { code: '', annee: '', date_debut: '', date_fin: '' };
 
 export default function ExercicesTab() {
+  const { reloadExercices } = useExercice();
   const [exercices, setExercices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(empty);
@@ -34,7 +36,7 @@ export default function ExercicesTab() {
     const { error: err } = await supabase.from('exercices_comptables').insert({ code: form.code, annee: Number(form.annee), date_debut: form.date_debut, date_fin: form.date_fin, statut: 'OUVERT' });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    setForm(empty); setShowForm(false); load();
+    setForm(empty); setShowForm(false); load(); reloadExercices();
   };
 
   const toggleStatut = async (ex) => {
@@ -43,6 +45,7 @@ export default function ExercicesTab() {
     setWorking('');
     if (err) { setError(err.message); return; }
     load();
+    reloadExercices();
   };
 
   if (loading) return <p className="page-subtitle">Chargement…</p>;

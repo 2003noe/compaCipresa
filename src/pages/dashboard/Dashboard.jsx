@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Wallet, FileText, Award } from "lucide-react";
+import { TrendingUp, Wallet, FileText, Award, Scale } from "lucide-react";
 import Card from "../../components/ui/Card";
-import Select from "../../components/ui/Select";
 import KpiCard from "../../components/accounting/KpiCard";
 import AccountingTable from "../../components/accounting/AccountingTable";
 import AlertCard from "../../components/accounting/AlertCard";
 import ChartCard from "../../components/accounting/ChartCard";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
+import { useExercice } from "../../context/ExerciceContext";
+import { buildBilan } from "../../lib/bilan";
 import {
   money,
   dateFr,
@@ -27,8 +28,8 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
-  const [exercices, setExercices] = useState([]);
-  const [selectedExerciceId, setSelectedExerciceId] = useState("");
+  const { exercices, selectedExercice } = useExercice();
+  const [soldesBilan, setSoldesBilan] = useState(null);
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
   const [recentes, setRecentes] = useState([]);
@@ -48,10 +49,6 @@ export default function Dashboard() {
     }
 
     Promise.all([
-      supabase
-        .from("exercices_comptables")
-        .select("id,code,annee,date_debut,date_fin,statut")
-        .order("annee", { ascending: false }),
       supabase
         .from("comptes_comptables")
         .select(
@@ -92,15 +89,8 @@ export default function Dashboard() {
           `Certaines données n'ont pas pu être chargées : ${errs[0].error.message}`,
         );
       }
-      const [ex, ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] =
+      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] =
         results.map((r) => r.data || []);
-      const validExercises = (ex || []).filter(
-        (e) => e.date_debut && e.date_fin,
-      );
-      setExercices(validExercises);
-      const defaultExercise =
-        validExercises.find((e) => e.statut === "OUVERT") || validExercises[0];
-      if (defaultExercise) setSelectedExerciceId(defaultExercise.id);
       setComptes(ac);
       setLignesTout(
         ln.filter((l) => l.ecritures_comptables?.statut === "VALIDEE"),
@@ -117,12 +107,38 @@ export default function Dashboard() {
     });
   }, []);
 
-  const selectedExercice =
-    exercices.find((e) => e.id === selectedExerciceId) || exercices[0];
   const previousExercice = exercices.find(
     (e) =>
       e.annee === (selectedExercice?.annee ? selectedExercice.annee - 1 : null),
   );
+
+  // --- Bilan (même source que la page Bilan : fonction SQL soldes_comptes) ---
+  useEffect(() => {
+    if (!supabaseConfigured || !selectedExercice?.date_debut || !selectedExercice?.date_fin) {
+      setSoldesBilan(null);
+      return undefined;
+    }
+    let active = true;
+    supabase
+      .rpc("soldes_comptes", {
+        p_date_fin: selectedExercice.date_fin,
+        p_date_debut: selectedExercice.date_debut,
+      })
+      .then(({ data, error }) => {
+        if (!active) return;
+        setSoldesBilan(error ? null : data || []);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedExercice]);
+
+  const bilan = useMemo(
+    () => (soldesBilan ? buildBilan(soldesBilan) : null),
+    [soldesBilan],
+  );
+  const bilanEcart = bilan ? Math.abs(bilan.ecart) : 0;
+  const bilanEquilibre = bilanEcart < 1;
 
   const selectedLignes = useMemo(
     () =>
@@ -463,28 +479,13 @@ export default function Dashboard() {
         <div className="dashboard-date">Dernière mise à jour : {todayFr()}</div>
       </div>
 
-      <Card className="ledger-toolbar">
-        <Select
-          label="Exercice comptable"
-          value={selectedExerciceId}
-          onChange={(e) => setSelectedExerciceId(e.target.value)}
-        >
-          {exercices.length === 0 && <option value="">Aucun exercice</option>}
-          {exercices.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.code || `Exercice ${e.annee}`} ({e.annee})
-            </option>
-          ))}
-        </Select>
-      </Card>
-
       {notice && (
         <div className="message error" role="alert">
           {notice}
         </div>
       )}
 
-      <div className="grid grid-4">
+      <div className="grid grid-5">
         <KpiCard
           label="Trésorerie"
           value={`${money(soldeTresorerie)} FCFA`}
@@ -518,6 +519,20 @@ export default function Dashboard() {
           trend={
             resultatPct === null ? "neutral" : resultatPct >= 0 ? "up" : "down"
           }
+        />
+        <KpiCard
+          label="Bilan"
+          value={bilan ? `${money(Math.round(bilan.totals.actif))} FCFA` : "-"}
+          icon={Scale}
+          onClick={() => nav("/bilan")}
+          deltaLabel={
+            !bilan
+              ? "Total actif"
+              : bilanEquilibre
+                ? "Total actif · équilibré"
+                : `Écart actif/passif : ${money(Math.round(bilanEcart))} FCFA`
+          }
+          trend={!bilan ? "neutral" : bilanEquilibre ? "up" : "down"}
         />
         <KpiCard
           label="Écritures"

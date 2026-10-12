@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import Card from '../../components/ui/Card';
-import Select from '../../components/ui/Select';
+import { useExercice } from '../../context/ExerciceContext';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
@@ -24,8 +24,7 @@ const COMPANY_FIELDS = [
 ];
 
 export default function Bilan() {
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
   const [soldesN, setSoldesN] = useState(null);
   const [soldesN1, setSoldesN1] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,8 +42,7 @@ export default function Bilan() {
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('exercices_comptables').select('id,code,annee,date_debut,date_fin,statut').order('annee', { ascending: false }),
-    ]).then(([paramRes, exRes]) => {
+    ]).then(([paramRes]) => {
       const p = paramRes.data;
       if (p) {
         const name = p.nom_entreprise || p.nom;
@@ -57,16 +55,6 @@ export default function Bilan() {
         setCompany({ name: name ? name.toUpperCase() : 'CIPRESA SARL', details });
       }
 
-      if (exRes.error) {
-        setNotice(`Impossible de charger les exercices : ${exRes.error.message}`);
-        setLoading(false);
-        return;
-      }
-
-      const exList = exRes.data || [];
-      setExercises(exList);
-      const openExercise = exList.find((e) => e.statut === 'OUVERT') || exList[0];
-      if (openExercise) setExerciceId(openExercise.id);
       setLoading(false);
     });
   }, []);
@@ -237,17 +225,6 @@ export default function Bilan() {
           </Button>
         </div>
       </div>
-
-      <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
-        <Select label="Exercice comptable" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
-          {exercises.length === 0 && <option value="">Aucun exercice</option>}
-          {exercises.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.code} ({e.annee}){e.statut === 'OUVERT' ? ' · ouvert' : ''}
-            </option>
-          ))}
-        </Select>
-      </Card>
 
       {notice && <div className="message error no-print">{notice}</div>}
 
