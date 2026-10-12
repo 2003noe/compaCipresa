@@ -113,15 +113,20 @@ export default function GrandLivre() {
   // Compute transactions and totals per account
   const ledgerData = useMemo(() => {
     const accMap = {};
+    const exerciceDebut = selectedExercice?.date_debut || null;
 
     accounts.forEach((acc) => {
       const initDebit = Number(acc.solde_ouverture_debit || 0);
       const initCredit = Number(acc.solde_ouverture_credit || 0);
 
+      // Comptes de gestion (6, 7, 8) : pas de solde d'ouverture, ils repartent de zéro à chaque exercice
+      const isGestion = ['6', '7', '8'].includes(String(acc.numero || '').trim()[0]);
+
       accMap[acc.id] = {
         account: acc,
-        initialDebit: initDebit,
-        initialCredit: initCredit,
+        isGestion,
+        initialDebit: isGestion ? 0 : initDebit,
+        initialCredit: isGestion ? 0 : initCredit,
         beforeDebit: 0,
         beforeCredit: 0,
         movements: [],
@@ -131,7 +136,6 @@ export default function GrandLivre() {
     rawLines.forEach((line) => {
       const ecrit = line.ecritures_comptables;
       if (!ecrit || ecrit.statut !== 'VALIDEE') return;
-      if (exerciceId && ecrit.exercice_id !== exerciceId) return;
 
       const accObj = accMap[line.compte_id];
       if (!accObj) return;
@@ -141,6 +145,9 @@ export default function GrandLivre() {
       const creditVal = Number(line.credit || 0);
 
       if (dateStr < periodStart) {
+        // Report à nouveau : les comptes de bilan (1 à 5) reportent les exercices précédents ;
+        // les comptes de gestion ne comptent que depuis le début de l'exercice choisi.
+        if (accObj.isGestion && exerciceDebut && dateStr < exerciceDebut) return;
         accObj.beforeDebit += debitVal;
         accObj.beforeCredit += creditVal;
       } else if (dateStr <= periodEnd) {
@@ -251,7 +258,7 @@ export default function GrandLivre() {
       globalCreditSum,
       globalNetBalance,
     };
-  }, [accounts, rawLines, exerciceId, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
+  }, [accounts, rawLines, selectedExercice, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
 
   const handlePrint = () => {
     window.print();
