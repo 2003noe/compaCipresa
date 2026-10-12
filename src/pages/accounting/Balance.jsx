@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
+import { Printer, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
+import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -18,27 +21,35 @@ export default function Balance() {
   const [classFilter, setClassFilter] = useState('Toutes classes');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const [companyName, setCompanyName] = useState('CIPRESA SARL');
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
 
     Promise.all([
+      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
       supabase.from('exercices_comptables').select('id,code,annee,statut').order('annee', { ascending: false }),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
       supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(exercice_id,statut)'),
-    ]).then(([ex, ac, mv]) => {
-      if (ex.error || ac.error || mv.error) {
-        setNotice(`Impossible de charger la balance : ${(ex.error || ac.error || mv.error).message}`);
+    ]).then(([paramRes, exRes, acRes, mvRes]) => {
+      if (paramRes.data?.nom_entreprise) {
+        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
+      } else if (paramRes.data?.nom) {
+        setCompanyName(paramRes.data.nom.toUpperCase());
+      }
+
+      if (exRes.error || acRes.error || mvRes.error) {
+        setNotice(`Impossible de charger la balance : ${(exRes.error || acRes.error || mvRes.error).message}`);
         setLoading(false);
         return;
       }
-      setExercises(ex.data || []);
-      const openExercise = ex.data?.find((e) => e.statut === 'OUVERT') || ex.data?.[0];
+      setExercises(exRes.data || []);
+      const openExercise = exRes.data?.find((e) => e.statut === 'OUVERT') || exRes.data?.[0];
       if (openExercise) setExerciceId(openExercise.id);
-      setAccounts(ac.data || []);
+      setAccounts(acRes.data || []);
 
       const grouped = {};
-      (mv.data || []).forEach((line) => {
+      (mvRes.data || []).forEach((line) => {
         if (line.ecritures_comptables?.statut !== 'VALIDEE') return;
         const key = `${line.compte_id}__${line.ecritures_comptables.exercice_id}`;
         if (!grouped[key]) grouped[key] = { debit: 0, credit: 0 };
@@ -49,6 +60,8 @@ export default function Balance() {
       setLoading(false);
     });
   }, []);
+
+  const selectedExercise = useMemo(() => exercises.find((e) => e.id === exerciceId) || null, [exercises, exerciceId]);
 
   const classOptions = useMemo(() => ['Toutes classes', ...new Set(accounts.map((a) => a.classe))].sort((a, b) => (a === 'Toutes classes' ? -1 : classNumber(a) - classNumber(b))), [accounts]);
 
@@ -79,16 +92,96 @@ export default function Balance() {
   const grandTotal = ['openingDebit', 'openingCredit', 'mvtDebit', 'mvtCredit', 'closingDebit', 'closingCredit']
     .reduce((acc, key) => ({ ...acc, [key]: sumCol(rows, key) }), {});
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportExcel = () => {
+    const exportData = [];
+
+    groups.forEach(([classe, list]) => {
+      list.forEach((r) => {
+        exportData.push({
+          'Classe': classe,
+          'N° Compte': r.numero,
+          'Libellé du compte': r.libelle,
+          'Solde Ouverture Débit': Number(r.openingDebit || 0),
+          'Solde Ouverture Crédit': Number(r.openingCredit || 0),
+          'Mouvements Débit': Number(r.mvtDebit || 0),
+          'Mouvements Crédit': Number(r.mvtCredit || 0),
+          'Solde Clôture Débit': Number(r.closingDebit || 0),
+          'Solde Clôture Crédit': Number(r.closingCredit || 0),
+        });
+      });
+
+      // Ligne de sous-total par classe
+      exportData.push({
+        'Classe': classe,
+        'N° Compte': `Sous-total ${classe.split(' - ')[0]}`,
+        'Libellé du compte': '',
+        'Solde Ouverture Débit': sumCol(list, 'openingDebit'),
+        'Solde Ouverture Crédit': sumCol(list, 'openingCredit'),
+        'Mouvements Débit': sumCol(list, 'mvtDebit'),
+        'Mouvements Crédit': sumCol(list, 'mvtCredit'),
+        'Solde Clôture Débit': sumCol(list, 'closingDebit'),
+        'Solde Clôture Crédit': sumCol(list, 'closingCredit'),
+      });
+    });
+
+    // Ligne de Total Général
+    exportData.push({
+      'Classe': '',
+      'N° Compte': 'Total général',
+      'Libellé du compte': '',
+      'Solde Ouverture Débit': grandTotal.openingDebit,
+      'Solde Ouverture Crédit': grandTotal.openingCredit,
+      'Mouvements Débit': grandTotal.mvtDebit,
+      'Mouvements Crédit': grandTotal.mvtCredit,
+      'Solde Clôture Débit': grandTotal.closingDebit,
+      'Solde Clôture Crédit': grandTotal.closingCredit,
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Ajustement de la largeur des colonnes Excel
+    worksheet['!cols'] = [
+      { wch: 25 }, // Classe
+      { wch: 15 }, // N° Compte
+      { wch: 35 }, // Libellé
+      { wch: 18 }, // Solde Ouv Débit
+      { wch: 18 }, // Solde Ouv Crédit
+      { wch: 18 }, // Mvt Débit
+      { wch: 18 }, // Mvt Crédit
+      { wch: 18 }, // Solde Clot Débit
+      { wch: 18 }, // Solde Clot Crédit
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Balance Générale');
+
+    const exCode = selectedExercise?.code || 'Exercice';
+    const fileName = `Balance_Generale_${exCode}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  };
+
   return (
-    <div className="page-content">
-      <div className="page-header">
+    <div className="page-content balance-page">
+      <div className="page-header no-print">
         <div>
           <h1 className="page-title">Balance générale des comptes</h1>
           <p className="page-subtitle">Vue synthétique des soldes des comptes{loading ? ' · Chargement…' : ''}</p>
         </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button variant="secondary" icon={Printer} onClick={handlePrint} disabled={loading || rows.length === 0}>
+            Imprimer (PDF)
+          </Button>
+          <Button variant="primary" icon={Download} onClick={handleExportExcel} disabled={loading || rows.length === 0}>
+            Exporter Excel
+          </Button>
+        </div>
       </div>
 
-      <Card className="ledger-toolbar">
+      <Card className="ledger-toolbar no-print">
         <Select label="Exercice" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
           {exercises.length === 0 && <option value="">Aucun exercice</option>}
           {exercises.map((e) => <option key={e.id} value={e.id}>{e.code} ({e.annee})</option>)}
@@ -98,10 +191,29 @@ export default function Balance() {
         </Select>
       </Card>
 
-      {notice && <div className="message error" role="alert">{notice}</div>}
+      {notice && <div className="message error no-print" role="alert">{notice}</div>}
 
       {!loading && (
-        <Card>
+        <Card className="balance-table-card">
+          {/* En-tête visible à l'impression uniquement */}
+          <div className="print-only-header" style={{ display: 'none', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '8px' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px' }}>{companyName}</h2>
+                <p style={{ margin: '2px 0 0 0', fontSize: '15px', fontWeight: 'bold' }}>
+                  BALANCE GÉNÉRALE DES COMPTES — {selectedExercise ? `${selectedExercise.code} (${selectedExercise.annee})` : ''}
+                </p>
+                {classFilter !== 'Toutes classes' && (
+                  <p style={{ margin: '2px 0 0 0', fontSize: '12px' }}>Filtre : {classFilter}</p>
+                )}
+              </div>
+              <div style={{ textAlign: 'right', fontSize: '11px' }}>
+                <p style={{ margin: 0 }}>Date d'édition : {new Date().toLocaleDateString('fr-FR')}</p>
+                <p style={{ margin: 0 }}>Devise : FCFA (XAF)</p>
+              </div>
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table className="balance-table">
               <thead>
@@ -160,6 +272,27 @@ export default function Balance() {
           </div>
         </Card>
       )}
+
+      {/* Styles d'impression dédiés A4 */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+          .no-print { display: none !important; }
+          body { background: #fff !important; margin: 0; padding: 0; }
+          .balance-page { margin: 0; padding: 0; }
+          .balance-table-card { border: none !important; box-shadow: none !important; padding: 0 !important; }
+          .print-only-header { display: block !important; }
+          .balance-table { width: 100% !important; border: 1px solid #000 !important; }
+          .balance-table th, .balance-table td { border-color: #000 !important; padding: 4px 6px !important; font-size: 10px !important; }
+          .balance-class-row td { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; font-weight: bold !important; }
+          .balance-subtotal-row td { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; font-weight: bold !important; }
+          .balance-total-row td { background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; font-weight: bold !important; color: #000 !important; border-top: 2px solid #000 !important; }
+          tr { page-break-inside: avoid !important; }
+        }
+      `}</style>
     </div>
   );
 }
