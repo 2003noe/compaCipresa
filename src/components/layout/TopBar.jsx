@@ -11,41 +11,33 @@ import NotificationsPanel from "./NotificationsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useTheme } from "../../context/ThemeContext";
-import Card from "../ui/Card";
-import Select from "../ui/Select";
+import { useExercice } from "../../context/ExerciceContext";
 
 export default function TopBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState({ exercices: [], comptes: [], ecritures: [] });
+  const [results, setResults] = useState({ comptes: [], ecritures: [] });
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
 
-  const [selectedExerciceId, setSelectedExerciceId] = useState("");
-
-  const [exercices, setExercices] = useState([]);
+  const { exercices, selectedExerciceId, setSelectedExerciceId } = useExercice();
 
   useEffect(() => {
     if (!supabaseConfigured) return undefined;
     window.clearTimeout(debounceRef.current);
     if (query.trim().length < 2) {
-      setResults({ exercices: [], comptes: [], ecritures: [] });
+      setResults({ comptes: [], ecritures: [] });
       setSearching(false);
       return undefined;
     }
     setSearching(true);
     debounceRef.current = window.setTimeout(async () => {
       const term = `%${query.trim()}%`;
-      const [exercicesRes, comptesRes, ecrituresRes] = 
-      await Promise.all([
-        supabase
-          .from("exercices_comptables")
-          .select("id,code,annee,date_debut,date_fin,statut")
-          .order("annee", { ascending: false }),
+      const [comptesRes, ecrituresRes] = await Promise.all([
         supabase
           .from("comptes_comptables")
           .select("id,numero,libelle")
@@ -58,15 +50,11 @@ export default function TopBar() {
             `numero.ilike.${term},libelle.ilike.${term},reference_piece.ilike.${term}`,
           ) ]);
       setResults({
-        exercices: exercicesRes.data || [],
         comptes: comptesRes.data || [],
         ecritures: ecrituresRes.data || [],
       });
       setSearching(false);
     }, 300);
-
-    console.log(`exercicesRes : ${results.exercices.data}`);
-
 
     return () => window.clearTimeout(debounceRef.current);
   }, [query]);
@@ -83,7 +71,6 @@ export default function TopBar() {
   const aucunResultat =
     query.trim().length >= 2 &&
     !searching &&
-    results.exercices.length === 0 &&   
     results.comptes.length === 0 &&
     results.ecritures.length === 0;
 
@@ -161,24 +148,22 @@ export default function TopBar() {
           )}
         </div>
 
-        <button className="period-selector" type="button">
+        <label className="topbar-exercice" title="Exercice comptable (appliqué à toutes les pages)">
           <CalendarDays size={14} />
-          <b>Choisir l'exercice</b>
-        </button>
-        <Card className="ledger-toolbar">
-          <Select
-            label=""
+          <select
             value={selectedExerciceId}
             onChange={(e) => setSelectedExerciceId(e.target.value)}
+            aria-label="Exercice comptable"
           >
             {exercices.length === 0 && <option value="">Aucun exercice</option>}
             {exercices.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.code || `Exercice ${e.annee}`} ({e.annee})
+                {e.statut === "OUVERT" ? " · ouvert" : ""}
               </option>
             ))}
-          </Select>
-        </Card>
+          </select>
+        </label>
       </div>
       <div className="topbar-right">
         <button

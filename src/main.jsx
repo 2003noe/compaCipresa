@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ExerciceProvider } from "./context/ExerciceContext";
 import "./styles/tokens.css";
 import "./styles/globals.css";
 import "./styles/components.css";
@@ -13,7 +14,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <App />
+          <ExerciceProvider>
+            <App />
+          </ExerciceProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

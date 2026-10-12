@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../../components/ui/Card';
-import Select from '../../components/ui/Select';
+import { useExercice } from '../../context/ExerciceContext';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
 
 export default function CompteResultat() {
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,18 +17,14 @@ export default function CompteResultat() {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
 
     Promise.all([
-      supabase.from('exercices_comptables').select('id,code,annee,date_debut,date_fin,statut').order('annee', { ascending: false }),
       supabase.from('comptes_comptables').select('id,numero,libelle,nature'),
       supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(date_ecriture,statut)'),
-    ]).then(([ex, ac, ln]) => {
-      if (ex.error || ac.error || ln.error) {
-        setNotice(`Impossible de charger le compte de résultat : ${(ex.error || ac.error || ln.error).message}`);
+    ]).then(([ac, ln]) => {
+      if (ac.error || ln.error) {
+        setNotice(`Impossible de charger le compte de résultat : ${(ac.error || ln.error).message}`);
         setLoading(false);
         return;
       }
-      setExercises(ex.data || []);
-      const openExercise = ex.data?.find((e) => e.statut === 'OUVERT') || ex.data?.[0];
-      if (openExercise) setExerciceId(openExercise.id);
       setAccounts((ac.data || []).filter((a) => a.nature === 'CHARGE' || a.nature === 'PRODUIT'));
       setLines((ln.data || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
       setLoading(false);
@@ -102,12 +97,6 @@ export default function CompteResultat() {
         </div>
       </div>
 
-      <Card className="ledger-toolbar">
-        <Select label="Exercice" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
-          {exercises.length === 0 && <option value="">Aucun exercice</option>}
-          {exercises.map((e) => <option key={e.id} value={e.id}>{e.code} ({e.annee})</option>)}
-        </Select>
-      </Card>
 
       {notice && <div className="message error" role="alert">{notice}</div>}
 

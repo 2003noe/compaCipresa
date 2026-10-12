@@ -5,6 +5,7 @@ import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 
 const formatMoney = (val) => {
   if (val === null || val === undefined || val === '') return '';
@@ -52,8 +53,7 @@ const classNumber = (classeStr) => {
 export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const [devise, setDevise] = useState('CFA');
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { exercices: exercises, selectedExerciceId: exerciceId, selectedExercice } = useExercice();
   const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
   const [periodEnd, setPeriodEnd] = useState(`${new Date().getFullYear()}-12-31`);
   
@@ -77,29 +77,19 @@ export default function GrandLivre() {
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('exercices_comptables').select('id,code,annee,statut,date_debut,date_fin').order('annee', { ascending: false }),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit,devise').order('numero'),
       supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))'),
-    ]).then(([paramRes, exRes, acRes, lineRes]) => {
+    ]).then(([paramRes, acRes, lineRes]) => {
       if (paramRes.data?.nom_entreprise) {
         setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
       } else if (paramRes.data?.nom) {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
 
-      if (exRes.error || acRes.error || lineRes.error) {
-        setNotice(`Erreur : ${(exRes.error || acRes.error || lineRes.error).message}`);
+      if (acRes.error || lineRes.error) {
+        setNotice(`Erreur : ${(acRes.error || lineRes.error).message}`);
         setLoading(false);
         return;
-      }
-
-      const exList = exRes.data || [];
-      setExercises(exList);
-      const activeEx = exList.find((e) => e.statut === 'OUVERT') || exList[0];
-      if (activeEx) {
-        setExerciceId(activeEx.id);
-        if (activeEx.date_debut) setPeriodStart(activeEx.date_debut);
-        if (activeEx.date_fin) setPeriodEnd(activeEx.date_fin);
       }
 
       setAccounts(acRes.data || []);
@@ -108,15 +98,12 @@ export default function GrandLivre() {
     });
   }, []);
 
-  const handleExerciseChange = (e) => {
-    const id = e.target.value;
-    setExerciceId(id);
-    const ex = exercises.find((item) => item.id === id);
-    if (ex) {
-      if (ex.date_debut) setPeriodStart(ex.date_debut);
-      if (ex.date_fin) setPeriodEnd(ex.date_fin);
-    }
-  };
+  // La période suit l'exercice choisi dans la topbar
+  useEffect(() => {
+    if (!selectedExercice) return;
+    if (selectedExercice.date_debut) setPeriodStart(selectedExercice.date_debut);
+    if (selectedExercice.date_fin) setPeriodEnd(selectedExercice.date_fin);
+  }, [selectedExercice]);
 
   const classesList = useMemo(() => {
     const set = new Set(accounts.map((a) => a.classe).filter(Boolean));
@@ -287,14 +274,6 @@ export default function GrandLivre() {
 
       <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
         <div className="grid grid-4" style={{ gap: '12px' }}>
-          <Select label="Exercice comptable" value={exerciceId} onChange={handleExerciseChange}>
-            {exercises.length === 0 && <option value="">Aucun exercice</option>}
-            {exercises.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.code} ({e.annee})
-              </option>
-            ))}
-          </Select>
           <Input label="Période du" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
           <Input label="au" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           <Select label="Filtrer par classe" value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>

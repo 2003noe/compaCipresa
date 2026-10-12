@@ -15,16 +15,15 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
-import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 import { computeDepreciation } from '../../lib/depreciation';
 
 export default function LivreInventaire() {
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [physicalAssets, setPhysicalAssets] = useState([]);
@@ -61,10 +60,6 @@ export default function LivreInventaire() {
 
     Promise.all([
       supabase
-        .from('exercices_comptables')
-        .select('id,code,annee,date_debut,date_fin,statut')
-        .order('annee', { ascending: false }),
-      supabase
         .from('comptes_comptables')
         .select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit,devise')
         .order('numero'),
@@ -81,21 +76,12 @@ export default function LivreInventaire() {
         .limit(1)
         .maybeSingle(),
     ])
-      .then(([exRes, acRes, lnRes, immoRes, compRes]) => {
-        if (exRes.error || acRes.error || lnRes.error) {
-          const err = exRes.error || acRes.error || lnRes.error;
+      .then(([acRes, lnRes, immoRes, compRes]) => {
+        if (acRes.error || lnRes.error) {
+          const err = acRes.error || lnRes.error;
           setNotice(`Impossible de charger le livre d'inventaire : ${err.message}`);
           setLoading(false);
           return;
-        }
-
-        const exList = exRes.data || [];
-        setExercises(exList);
-
-        const currentEx = exList.find((e) => e.statut === 'OUVERT') || exList[0];
-        if (currentEx) {
-          setExerciceId(currentEx.id);
-          setCutoffDate(currentEx.date_fin || new Date().toISOString().slice(0, 10));
         }
 
         setAccounts(acRes.data || []);
@@ -122,13 +108,11 @@ export default function LivreInventaire() {
     return exercises.find((e) => e.annee === selectedExercice.annee - 1) || null;
   }, [exercises, selectedExercice]);
 
-  const handleExerciceChange = (newId) => {
-    setExerciceId(newId);
-    const ex = exercises.find((e) => e.id === newId);
-    if (ex?.date_fin) {
-      setCutoffDate(ex.date_fin);
-    }
-  };
+  // La date d'arrêté suit l'exercice choisi dans la topbar
+  useEffect(() => {
+    if (!selectedExercice) return;
+    setCutoffDate(selectedExercice.date_fin || new Date().toISOString().slice(0, 10));
+  }, [selectedExercice]);
 
   // Calcul du solde d'un compte à la date d'arrêté
   const getAccountBalanceAsOf = (account, dateLimit) => {
@@ -395,18 +379,6 @@ export default function LivreInventaire() {
       {/* Barre d'outils et de filtres */}
       <Card className="livre-toolbar no-print" style={{ marginBottom: '20px', padding: '16px' }}>
         <div className="grid grid-3" style={{ gap: '16px', alignItems: 'flex-end' }}>
-          <Select
-            label="Exercice comptable"
-            value={exerciceId}
-            onChange={(e) => handleExerciceChange(e.target.value)}
-          >
-            {exercises.length === 0 && <option value="">Aucun exercice disponible</option>}
-            {exercises.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.code || e.annee} ({e.statut}) — du {e.date_debut} au {e.date_fin}
-              </option>
-            ))}
-          </Select>
 
           <Input
             label="Date d'arrêté d'inventaire"
