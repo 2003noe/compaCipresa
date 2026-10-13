@@ -109,7 +109,7 @@ export default function Dashboard() {
 
   const previousExercice = null;
 
-  // --- Bilan (même source que la page Bilan : fonction SQL soldes_comptes) ---
+  // --- Bilan (même source que la page Bilan : soldes bornés par identifiant d'exercice) ---
   useEffect(() => {
     if (!supabaseConfigured || !selectedExercice?.date_debut || !selectedExercice?.date_fin) {
       setSoldesBilan(null);
@@ -118,7 +118,8 @@ export default function Dashboard() {
     let active = true;
     setSoldesBilan(null);
     supabase
-      .rpc("soldes_comptes", {
+      .rpc("soldes_comptes_exercice", {
+        p_exercice_id: selectedExercice.id,
         p_date_fin: selectedExercice.date_fin,
         p_date_debut: selectedExercice.date_debut,
       })
@@ -143,21 +144,23 @@ export default function Dashboard() {
       lignesTout.filter(
         (l) =>
           selectedExercice &&
-          l.ecritures_comptables?.exercice_id === selectedExercice.id,
+          l.ecritures_comptables?.exercice_id === selectedExercice.id &&
+          l.ecritures_comptables?.date_ecriture >= selectedExercice.date_debut &&
+          l.ecritures_comptables?.date_ecriture <= selectedExercice.date_fin,
       ),
     [lignesTout, selectedExercice],
   );
   const selectedRecentes = useMemo(
     () =>
       recentes.filter(
-        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
+        (e) => selectedExercice && e.exercice_id === selectedExercice.id && e.date_ecriture >= selectedExercice.date_debut && e.date_ecriture <= selectedExercice.date_fin,
       ),
     [recentes, selectedExercice],
   );
   const selectedEcrituresLight = useMemo(
     () =>
       ecrituresLight.filter(
-        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
+        (e) => selectedExercice && e.exercice_id === selectedExercice.id && e.date_ecriture >= selectedExercice.date_debut && e.date_ecriture <= selectedExercice.date_fin,
       ),
     [ecrituresLight, selectedExercice],
   );
@@ -216,7 +219,7 @@ export default function Dashboard() {
           (l) =>
             comptesTresorerie.some((a) => a.id === l.compte_id) &&
             l.ecritures_comptables?.date_ecriture?.slice(0, 7) ===
-            moisCourantKey,
+              moisCourantKey,
         )
         .reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0),
     [selectedLignes, comptesTresorerie, moisCourantKey],
@@ -250,10 +253,10 @@ export default function Dashboard() {
           );
           const rawN1 = previousExercice
             ? periodNet(
-              a.id,
-              previousExercice.date_debut,
-              previousExercice.date_fin,
-            )
+                a.id,
+                previousExercice.date_debut,
+                previousExercice.date_fin,
+              )
             : null;
           const sign = a.nature === "CHARGE" ? 1 : -1;
           return {

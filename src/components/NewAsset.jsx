@@ -41,6 +41,7 @@ export default function NewAsset() {
       return;
     }
     if (!formExerciceId) { setError('Sélectionnez un exercice comptable.'); return; }
+    if (formExercice?.statut !== 'OUVERT') { setError('Impossible d’ajouter une immobilisation dans un exercice clôturé.'); return; }
     if (!formExercice || form.dateAcquisition < formExercice.date_debut || form.dateAcquisition > formExercice.date_fin) {
       setError("La date d'acquisition doit être comprise dans l'exercice sélectionné dans le formulaire.");
       return;
@@ -124,8 +125,8 @@ export default function NewAsset() {
 
         <div className="form-actions left-actions">
           <Button variant="secondary" disabled={saving} onClick={() => nav('/immobilisations')}>Annuler</Button>
-          <Button icon={Save} disabled={saving} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer l\u2019immobilisation'}</Button>
-          <Button variant="secondary" disabled={saving} onClick={() => save(true)}>Enregistrer et créer une autre</Button>
+          <Button icon={Save} disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer l\u2019immobilisation'}</Button>
+          <Button variant="secondary" disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(true)}>Enregistrer et créer une autre</Button>
         </div>
       </Card>
     </div>

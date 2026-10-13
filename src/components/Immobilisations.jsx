@@ -66,6 +66,10 @@ export default function Immobilisations() {
 
       {notice && <div className="message error" role="alert">{notice}</div>}
 
+      <div className="message warning" role="status">
+        Les amortissements affichés sont des estimations de registre. Cette page ne génère pas encore les écritures comptables d’amortissement ; vérifiez le calcul et comptabilisez les dotations selon les règles de votre entreprise.
+      </div>
+
       <div className="cr-kpis">
         <Card><span className="ledger-summary-label">Valeur brute totale</span><strong>{money(totalBrut)} FCFA</strong></Card>
         <Card><span className="ledger-summary-label">Amortissements cumulés</span><strong>{money(totalAmort)} FCFA</strong></Card>

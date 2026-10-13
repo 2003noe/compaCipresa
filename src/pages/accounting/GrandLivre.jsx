@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Printer, RefreshCw, Filter, Search, Download } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
@@ -52,10 +52,10 @@ const classNumber = (classeStr) => {
 
 export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
-  const [devise, setDevise] = useState('CFA');
+  const devise = 'FCFA';
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
-  const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
-  const [periodEnd, setPeriodEnd] = useState(`${new Date().getFullYear()}-12-31`);
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
   
   const [accounts, setAccounts] = useState([]);
   const [rawLines, setRawLines] = useState([]);
@@ -84,8 +84,8 @@ export default function GrandLivre() {
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit,devise').eq('exercice_id', exerciceId).order('numero'),
-      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').or(`exercice_id.eq.${exerciceId},exercice_id.is.null`).order('numero'),
+      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
     ]).then(([paramRes, acRes, lineRes]) => {
       if (!active) return;
       if (paramRes.data?.nom_entreprise) {
@@ -105,7 +105,7 @@ export default function GrandLivre() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exerciceId, exercicesLoading]);
+  }, [exerciceId, selectedExercice, exercicesLoading]);
 
   // La période suit l'exercice choisi dans la topbar
   useEffect(() => {
@@ -113,6 +113,17 @@ export default function GrandLivre() {
     if (selectedExercice.date_debut) setPeriodStart(selectedExercice.date_debut);
     if (selectedExercice.date_fin) setPeriodEnd(selectedExercice.date_fin);
   }, [selectedExercice]);
+
+  useEffect(() => {
+    setSelectedAccountId('ALL');
+    setSelectedClasse('ALL');
+  }, [exerciceId]);
+
+  const hasUnassignedOpeningBalance = useMemo(
+    () => accounts.some((account) => !account.exercice_id
+      && (Number(account.solde_ouverture_debit || 0) !== 0 || Number(account.solde_ouverture_credit || 0) !== 0)),
+    [accounts],
+  );
 
   const classesList = useMemo(() => {
     const set = new Set(accounts.map((a) => a.classe).filter(Boolean));
@@ -124,8 +135,10 @@ export default function GrandLivre() {
     const accMap = {};
 
     accounts.forEach((acc) => {
-      const initDebit = Number(acc.solde_ouverture_debit || 0);
-      const initCredit = Number(acc.solde_ouverture_credit || 0);
+      // Legacy/shared accounts have no exercise-specific opening balance.
+      const openingBelongsToExercise = acc.exercice_id === exerciceId;
+      const initDebit = openingBelongsToExercise ? Number(acc.solde_ouverture_debit || 0) : 0;
+      const initCredit = openingBelongsToExercise ? Number(acc.solde_ouverture_credit || 0) : 0;
 
       accMap[acc.id] = {
         account: acc,
@@ -189,7 +202,7 @@ export default function GrandLivre() {
       const startNet = startDebit - startCredit;
 
       // Sort movements chronologically
-      accObj.movements.sort((a, b) => a.date.localeCompare(b.date));
+      accObj.movements.sort((a, b) => a.date.localeCompare(b.date) || a.piece.localeCompare(b.piece) || a.id.localeCompare(b.id));
 
       // Build movement rows with running balance
       let runningBalance = startNet;
@@ -203,15 +216,12 @@ export default function GrandLivre() {
         const openingDebit = startNet > 0 ? startNet : 0;
         const openingCredit = startNet < 0 ? Math.abs(startNet) : 0;
 
-        accountTotalDebit += openingDebit;
-        accountTotalCredit += openingCredit;
-
         rows.push({
           isOpening: true,
           dateShort: formatDateShort(periodStart),
           journal: 'JOD',
           piece: '1',
-          libelle: "Bilan d'ouverture",
+          libelle: "Solde antérieur / à-nouveau",
           lettrage: '',
           debit: openingDebit,
           credit: openingCredit,
@@ -274,7 +284,8 @@ export default function GrandLivre() {
           <h1 className="page-title">Grand-livre des comptes</h1>
           <p className="page-subtitle">Format réglementaire SYSCOHADA / Sage 100 Comptabilité</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
           <Button icon={Printer} onClick={handlePrint}>
             Imprimer le Grand-Livre
           </Button>
@@ -283,8 +294,16 @@ export default function GrandLivre() {
 
       <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
         <div className="grid grid-4" style={{ gap: '12px' }}>
-          <Input label="Période du" type="date" min={selectedExercice?.date_debut} max={periodEnd || selectedExercice?.date_fin} value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
-          <Input label="au" type="date" min={periodStart || selectedExercice?.date_debut} max={selectedExercice?.date_fin} value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+          <Input label="Période du" type="date" min={selectedExercice?.date_debut} max={periodEnd || selectedExercice?.date_fin} value={periodStart} onChange={(e) => {
+            const nextStart = e.target.value;
+            setPeriodStart(nextStart);
+            if (periodEnd && nextStart > periodEnd) setPeriodEnd(nextStart);
+          }} />
+          <Input label="au" type="date" min={periodStart || selectedExercice?.date_debut} max={selectedExercice?.date_fin} value={periodEnd} onChange={(e) => {
+            const nextEnd = e.target.value;
+            setPeriodEnd(nextEnd);
+            if (periodStart && nextEnd < periodStart) setPeriodStart(nextEnd);
+          }} />
           <Select label="Filtrer par classe" value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>
             <option value="ALL">Toutes les classes</option>
             {classesList.map((cls) => (
@@ -314,6 +333,12 @@ export default function GrandLivre() {
 
       {notice && <div className="message error no-print">{notice}</div>}
 
+      {hasUnassignedOpeningBalance && (
+        <div className="message warning no-print" role="status">
+          Certains comptes partagés (sans exercice associé) ont un solde d’ouverture qui ne peut pas être attribué à cet exercice. Le Grand Livre affiche leurs mouvements de l’exercice sélectionné, mais ignore ces soldes d’ouverture non datés. Rattachez ou reprenez ces soldes pour fiabiliser les à-nouveaux.
+        </div>
+      )}
+
       {/* SAGE 100 / SYSCOHADA GRAND-LIVRE DOCUMENT CONTAINER */}
       <div className="sage-gl-document">
         {/* Document Header Box */}
@@ -322,7 +347,7 @@ export default function GrandLivre() {
             <div className="company-name">{companyName}</div>
             <div className="document-title-center">
               <h2>Grand-livre des comptes</h2>
-              <div className="sub-type">Complet</div>
+              <div className="sub-type">{selectedExercice ? `Exercice ${selectedExercice.code || selectedExercice.annee}` : 'Aucun exercice sélectionné'}</div>
             </div>
             <div className="period-info">
               <div>Période du &nbsp; <strong>{formatDateFull(periodStart)}</strong></div>

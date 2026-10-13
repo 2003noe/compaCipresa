@@ -56,7 +56,7 @@ export function classify(row) {
 }
 
 /**
- * Construit le bilan à partir des lignes retournées par soldes_comptes().
+ * Construit le bilan à partir des lignes retournées par soldes_comptes_exercice().
  * Retourne les comptes par groupe, les résultats et les totaux.
  */
 export function buildBilan(soldes) {

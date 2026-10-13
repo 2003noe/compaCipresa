@@ -60,14 +60,18 @@ export default function Bilan() {
 
   const selected = useMemo(() => exercises.find((e) => e.id === exerciceId), [exercises, exerciceId]);
 
-  // 2. Soldes calculés côté base (fonction SQL soldes_comptes)
+  // 2. Soldes calculés côté base et bornés à l'exercice exact sélectionné.
   useEffect(() => {
     if (!supabaseConfigured || !selected) return undefined;
     let active = true;
     setLoadingData(true);
     setNotice('');
 
-    const call = (ex) => supabase.rpc('soldes_comptes', { p_date_fin: ex.date_fin, p_date_debut: ex.date_debut });
+    const call = (ex) => supabase.rpc('soldes_comptes_exercice', {
+      p_exercice_id: ex.id,
+      p_date_fin: ex.date_fin,
+      p_date_debut: ex.date_debut,
+    });
 
     call(selected).then((n) => {
         if (!active) return;
@@ -76,7 +80,7 @@ export default function Bilan() {
           const missing = /soldes_comptes|PGRST202|42883/.test(`${err.code} ${err.message}`);
           setNotice(
             missing
-              ? "La fonction SQL « soldes_comptes » est introuvable : exécutez le script bilan_soldes_comptes.sql dans Supabase."
+              ? "La fonction SQL « soldes_comptes_exercice » est introuvable : exécutez la migration bilan_soldes_comptes_exercice.sql dans Supabase."
               : `Impossible de charger le bilan : ${err.message}`,
           );
           setSoldesN(null);
