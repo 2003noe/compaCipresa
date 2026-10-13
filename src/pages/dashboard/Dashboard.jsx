@@ -216,7 +216,7 @@ export default function Dashboard() {
           (l) =>
             comptesTresorerie.some((a) => a.id === l.compte_id) &&
             l.ecritures_comptables?.date_ecriture?.slice(0, 7) ===
-              moisCourantKey,
+            moisCourantKey,
         )
         .reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0),
     [selectedLignes, comptesTresorerie, moisCourantKey],
@@ -250,10 +250,10 @@ export default function Dashboard() {
           );
           const rawN1 = previousExercice
             ? periodNet(
-                a.id,
-                previousExercice.date_debut,
-                previousExercice.date_fin,
-              )
+              a.id,
+              previousExercice.date_debut,
+              previousExercice.date_fin,
+            )
             : null;
           const sign = a.nature === "CHARGE" ? 1 : -1;
           return {
