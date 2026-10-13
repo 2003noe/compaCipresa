@@ -4,6 +4,17 @@
     box-sizing: border-box
 }
 
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 html,
 body,
 #root {

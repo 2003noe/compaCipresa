@@ -57,7 +57,12 @@ export default function JournalEntryForm() {
       supabase.from('journaux').select('id,code,libelle').order('code'),
       supabase.from('comptes_comptables').select('numero,libelle').order('numero'),
     ]).then(([ex, jr, ac]) => {
-      if (!isEdit) setExercise(ex.data?.[0] || null);
+      if (!isEdit)
+        {
+          setExercise(ex.data?.[0] || null);
+          console.log('Exercice ouvert :', ex.data?.[0] || 'aucun');
+
+        } 
       setJournals(jr.data || []);
       if (!isEdit && jr.data?.[0]) setJournalId(jr.data[0].id);
       setAccountOptions(ac.data || []);
@@ -139,6 +144,12 @@ export default function JournalEntryForm() {
   const removeAttachment = (id) => setAttachments((current) => current.filter((a) => a.id !== id));
   const handleFileInputChange = (e) => { addAttachments(e.target.files); e.target.value = ''; };
   const handleDrop = (e) => { e.preventDefault(); setDragOver(false); addAttachments(e.dataTransfer.files); };
+
+
+
+
+
+  
 
   const save = async (statut) => {
     setError(''); setNotice('');
