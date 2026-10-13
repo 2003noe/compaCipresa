@@ -59,7 +59,7 @@ export default function Sidebar() {
         {isOpen && (
           <div className="user-dropdown" role="menu">
             <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={() => navigate('/faq')}>
-              <CircleHelp size={16} /><span className="nav-label">{faqItem[1]}</span>
+              <CircleHelp size={16} /><span className="nav-label">{faqItem[1]} / Aide</span>
             </NavLink>
             <button type="button" className="user-dropdown-item" onClick={() => navigate('/profil')}>
               <UserRound size={15} /> <span>Mon profil</span>
