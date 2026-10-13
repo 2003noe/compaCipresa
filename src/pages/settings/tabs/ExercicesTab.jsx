@@ -5,11 +5,18 @@ import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
 import { useExercice } from '../../../context/ExerciceContext';
+import { useAuth } from '../../../context/AuthContext';
 
 const empty = { code: '', annee: '', date_debut: '', date_fin: '' };
 
 export default function ExercicesTab() {
   const { reloadExercices } = useExercice();
+  const { can, hasRole, accessLoading, accessError } = useAuth();
+  // COMPTA_CLOTURE couvre la gestion des périodes (création, modification et clôture).
+  // Il n'existe pas de permission dédiée à la suppression : cette action reste ADMIN.
+  const canRead = hasRole('ADMIN') || can('COMPTA_READ');
+  const canManage = hasRole('ADMIN') || can('COMPTA_CLOTURE');
+  const canDelete = hasRole('ADMIN');
   const [exercices, setExercices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(empty);
@@ -20,6 +27,16 @@ export default function ExercicesTab() {
   const [working, setWorking] = useState('');
 
   const load = useCallback(async () => {
+    if (accessLoading) return;
+    if (accessError) {
+      setError(`Impossible de charger vos droits : ${accessError}`);
+      setLoading(false);
+      return;
+    }
+    if (!canRead) {
+      setLoading(false);
+      return;
+    }
     if (!supabaseConfigured) {
       setError("Supabase n'est pas configuré.");
       setLoading(false);
@@ -34,7 +51,7 @@ export default function ExercicesTab() {
     if (fetchError) setError(fetchError.message);
     else setExercices(data || []);
     setLoading(false);
-  }, []);
+  }, [accessLoading, accessError, canRead]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -79,6 +96,7 @@ export default function ExercicesTab() {
   };
 
   const save = async () => {
+    if (!canManage) { setError('Le privilège COMPTA_CLOTURE est requis pour gérer les exercices.'); return; }
     setError('');
     const validationError = validateForm();
     if (validationError) { setError(validationError); return; }
@@ -122,6 +140,7 @@ export default function ExercicesTab() {
   };
 
   const startEdit = (exercice) => {
+    if (!canManage) return;
     setError('');
     setEditingId(exercice.id);
     setForm({
@@ -135,6 +154,7 @@ export default function ExercicesTab() {
   };
 
   const deleteExercise = async (exercice) => {
+    if (!canDelete) { setError('Seul un administrateur peut supprimer un exercice.'); return; }
     const confirmed = window.confirm(
       `Supprimer l’exercice ${exercice.code} (${exercice.date_debut} au ${exercice.date_fin}) ?\n\nLa suppression sera refusée par Supabase si des écritures, comptes ou autres données y sont rattachés.`,
     );
@@ -156,6 +176,7 @@ export default function ExercicesTab() {
   };
 
   const toggleStatut = async (exercice) => {
+    if (!canManage) { setError('Le privilège COMPTA_CLOTURE est requis pour modifier le statut.'); return; }
     setError('');
     setWorking(exercice.id);
     const { error: updateError } = await supabase
@@ -168,7 +189,9 @@ export default function ExercicesTab() {
     await reloadExercices();
   };
 
-  if (loading) return <p className="page-subtitle">Chargement…</p>;
+  if (loading || accessLoading) return <p className="page-subtitle">Chargement…</p>;
+  if (accessError) return <div className="message error" role="alert">Impossible de charger vos droits : {accessError}</div>;
+  if (!canRead) return <div className="message error" role="alert">Le privilège COMPTA_READ est requis pour consulter les exercices.</div>;
 
   const dateMin = form.annee ? `${String(form.annee).padStart(4, '0')}-01-01` : undefined;
   const dateMax = form.annee ? `${String(form.annee).padStart(4, '0')}-12-31` : undefined;
@@ -177,12 +200,12 @@ export default function ExercicesTab() {
     <div>
       <div className="params-tab-header">
         <h2 className="params-content-title">Exercices comptables</h2>
-        <Button size="sm" icon={Plus} onClick={() => {
+        {canManage && <Button size="sm" icon={Plus} onClick={() => {
           if (showForm && !editingId) resetForm();
           else { setError(''); setEditingId(null); setForm(empty); setShowForm(true); }
         }}>
           Nouvel exercice
-        </Button>
+        </Button>}
       </div>
 
       {error && <div className="message error" role="alert">{error}</div>}
@@ -206,7 +229,7 @@ export default function ExercicesTab() {
 
       <div className="table-wrap">
         <table className="balance-table">
-          <thead><tr><th>Code</th><th>Année</th><th>Période</th><th>Statut</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Code</th><th>Année</th><th>Période</th><th>Statut</th>{canManage && <th>Actions</th>}</tr></thead>
           <tbody>
             {exercices.map((exercice) => (
               <tr key={exercice.id}>
@@ -214,16 +237,16 @@ export default function ExercicesTab() {
                 <td>{exercice.annee}</td>
                 <td>{new Date(`${exercice.date_debut}T00:00:00`).toLocaleDateString('fr-FR')} → {new Date(`${exercice.date_fin}T00:00:00`).toLocaleDateString('fr-FR')}</td>
                 <td><Badge tone={exercice.statut === 'OUVERT' ? 'success' : 'neutral'}>{exercice.statut === 'OUVERT' ? 'Ouvert' : 'Clôturé'}</Badge></td>
-                <td>
+                {canManage && <td>
                   <div className="form-actions">
                     <Button variant="secondary" size="sm" icon={Edit2} disabled={Boolean(working) || saving} onClick={() => startEdit(exercice)}>Modifier</Button>
                     <Button variant="secondary" size="sm" disabled={Boolean(working) || saving} onClick={() => toggleStatut(exercice)}>{working === exercice.id ? '…' : (exercice.statut === 'OUVERT' ? 'Clôturer' : 'Rouvrir')}</Button>
-                    <Button variant="secondary" size="sm" icon={Trash2} disabled={Boolean(working) || saving} onClick={() => deleteExercise(exercice)}>{working === exercice.id ? '…' : 'Supprimer'}</Button>
+                    {canDelete && <Button variant="secondary" size="sm" icon={Trash2} disabled={Boolean(working) || saving} onClick={() => deleteExercise(exercice)}>{working === exercice.id ? '…' : 'Supprimer'}</Button>}
                   </div>
-                </td>
+                </td>}
               </tr>
             ))}
-            {exercices.length === 0 && <tr><td colSpan={5}>Aucun exercice créé.</td></tr>}
+            {exercices.length === 0 && <tr><td colSpan={canManage ? 5 : 4}>Aucun exercice créé.</td></tr>}
           </tbody>
         </table>
       </div>
