@@ -196,6 +196,10 @@ export default function AccountForm() {
       setError('Sélectionnez un exercice comptable avant de créer un compte.');
       return;
     }
+    if (formExercice?.statut !== 'OUVERT') {
+      setError('Impossible de créer un compte dans un exercice clôturé. Sélectionnez un exercice ouvert.');
+      return;
+    }
 
     if (selectedParent && !form.code.trim().startsWith(selectedParent.num_compte)) {
       setError(`Le numéro de compte doit obligatoirement commencer par le numéro du compte parent (${selectedParent.num_compte}).`);
@@ -313,8 +317,8 @@ export default function AccountForm() {
         {notice && <div className="message success" role="status">{notice}</div>}
 
         <div className="form-actions left-actions">
-          <Button disabled={saving} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer le compte'}</Button>
-          <Button variant="secondary" disabled={saving} onClick={() => save(true)}>Enregistrer et créer un autre</Button>
+          <Button disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer le compte'}</Button>
+          <Button variant="secondary" disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(true)}>Enregistrer et créer un autre</Button>
           <button className="text-button" type="button" onClick={() => nav('/plan-comptable')}>Annuler</button>
         </div>
       </Card>

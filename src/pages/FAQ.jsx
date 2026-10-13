@@ -91,7 +91,7 @@ const QUESTIONS = [
   {
     category: 'États financiers',
     question: 'Comment enregistrer une immobilisation ?',
-    answer: 'Ouvrez Immobilisations puis Nouvelle immobilisation. Sélectionnez l’exercice, le compte d’immobilisation, la date d’acquisition, la valeur, la durée et les autres informations demandées. La date d’acquisition doit appartenir à la période de l’exercice choisi. L’écran calcule une estimation d’amortissement selon les paramètres renseignés.',
+    answer: 'Ouvrez Immobilisations puis Nouvelle immobilisation. Sélectionnez l’exercice, le compte d’immobilisation, la date d’acquisition, la valeur, la durée et les autres informations demandées. La date d’acquisition doit appartenir à la période de l’exercice choisi. Le registre affiche une estimation d’amortissement à titre indicatif : il ne génère pas encore l’écriture comptable de dotation.',
   },
   {
     category: 'Clôture',

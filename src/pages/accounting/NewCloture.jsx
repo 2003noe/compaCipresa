@@ -44,6 +44,7 @@ export default function NewCloture() {
   const save = async () => {
     setError('');
     if (!exerciceId || !periodeSelectionnee) { setError('Exercice et période sont obligatoires.'); return; }
+    if (exercice?.statut !== 'OUVERT') { setError('Impossible de créer une clôture mensuelle dans un exercice déjà clôturé.'); return; }
     setSaving(true);
     if (!supabaseConfigured) { setSaving(false); setError("Supabase n'est pas configuré."); return; }
 
@@ -90,7 +91,7 @@ export default function NewCloture() {
 
         <div className="form-actions left-actions">
           <Button variant="secondary" disabled={saving} onClick={() => nav('/clotures')}>Annuler</Button>
-          <Button icon={Save} disabled={saving} onClick={save}>{saving ? 'Création…' : 'Créer la clôture'}</Button>
+          <Button icon={Save} disabled={saving || exercice?.statut !== 'OUVERT'} onClick={save}>{saving ? 'Création…' : 'Créer la clôture'}</Button>
         </div>
       </Card>
     </div>

@@ -92,7 +92,7 @@ export default function JournalEntryForm() {
     let active = true;
     supabase
       .from('ecritures_comptables')
-      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,exercices_comptables(date_debut,date_fin),lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
+      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,exercices_comptables(date_debut,date_fin,statut),lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
       .eq('id', editId)
       .single()
       .then(({ data, error: err }) => {
@@ -113,6 +113,10 @@ export default function JournalEntryForm() {
           setError('Seules les écritures en brouillon peuvent être modifiées.');
           setLocked(true);
         }
+        if (data.exercices_comptables?.statut !== 'OUVERT') {
+          setError('Cet exercice est clôturé : son écriture ne peut plus être modifiée.');
+          setLocked(true);
+        }
         const loaded = (data.lignes_ecritures || []).map((l) => ({
           account: l.comptes_comptables?.numero || '',
           label: l.libelle || '',
@@ -126,7 +130,7 @@ export default function JournalEntryForm() {
         setPiece(data.numero);
         setReference(data.reference_piece && data.reference_piece !== data.numero ? data.reference_piece : '');
         setJournalId(data.journal_id);
-        setExercise({ id: data.exercice_id, date_debut: data.exercices_comptables?.date_debut, date_fin: data.exercices_comptables?.date_fin });
+        setExercise({ id: data.exercice_id, date_debut: data.exercices_comptables?.date_debut, date_fin: data.exercices_comptables?.date_fin, statut: data.exercices_comptables?.statut });
         setLoadingEntry(false);
       });
     return () => { active = false; };
@@ -174,6 +178,10 @@ export default function JournalEntryForm() {
     if (!supabaseConfigured) { setError("Supabase n'est pas configuré."); return; }
     if (!exercise?.id || !journalId) {
       setError("Sélectionnez un exercice et un journal avant d'enregistrer l'écriture.");
+      return;
+    }
+    if (exercise.statut !== 'OUVERT') {
+      setError('Cet exercice est clôturé. Sélectionnez un exercice ouvert pour saisir ou modifier une écriture.');
       return;
     }
     if (lines.some((l) => !l.account.trim() || !l.label.trim())) {
@@ -314,6 +322,8 @@ export default function JournalEntryForm() {
         <div className={`balanced-pill ${balanced ? 'ok' : 'warning'}`}><CheckCircle2 size={14} />{balanced ? 'Écriture équilibrée ✓' : 'Écriture déséquilibrée'}</div>
       </div>
 
+      {exercise?.statut && exercise.statut !== 'OUVERT' && <div className="message error" role="alert">Exercice clôturé : les écritures de cette période ne peuvent pas être créées ou modifiées.</div>}
+
       <div className="entry-grid">
         <div className="entry-main-col">
           <Card className="entry-meta-card">
@@ -325,7 +335,7 @@ export default function JournalEntryForm() {
                 setJournalId('');
                 if (next) setDate(next.date_debut);
               }} />
-              <Select label="Journal comptable" value={journalId} onChange={(e) => setJournalId(e.target.value)} disabled={locked}>
+            <Select label="Journal comptable" value={journalId} onChange={(e) => setJournalId(e.target.value)} disabled={locked || exercise?.statut !== 'OUVERT'}>
                 <option value="">Sélectionner un journal</option>
                 {journals.map((j) => <option key={j.id} value={j.id}>{j.code} — {j.libelle}</option>)}
               </Select>
@@ -356,8 +366,8 @@ export default function JournalEntryForm() {
           </Card>
 
           <div className="entry-actions">
-            <Button variant="secondary" disabled={saving || locked} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>
-            <Button disabled={saving || locked} onClick={() => save('VALIDEE')}>{saving ? 'Enregistrement…' : "Valider l'écriture"}</Button>
+            <Button variant="secondary" disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>
+            <Button disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('VALIDEE')}>{saving ? 'Enregistrement…' : "Valider l'écriture"}</Button>
             <button type="button" className="text-button" onClick={() => nav('/journal')}>Annuler</button>
           </div>
           {error && <div className="message error" role="alert">{error}</div>}

@@ -1,13 +1,17 @@
 const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const addMonths = (date, n) => { const d = new Date(date); d.setMonth(d.getMonth() + n); return d; };
 const endOfMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
-const fmt = (d) => d.toISOString().slice(0, 10);
+const parseDateOnly = (value) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // La clôture CIPRESA est mensuelle (cf. classeur : "Clôture mensuelle").
 export function genererPeriodesMensuelles(exercice) {
   if (!exercice?.date_debut || !exercice?.date_fin) return [];
-  const start = new Date(exercice.date_debut);
-  const end = new Date(exercice.date_fin);
+  const start = parseDateOnly(exercice.date_debut);
+  const end = parseDateOnly(exercice.date_fin);
   const periods = [];
   let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
   while (cursor <= end) {

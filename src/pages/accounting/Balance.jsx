@@ -26,7 +26,7 @@ export default function Balance() {
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
     if (exercicesLoading) return;
-    if (!exerciceId) { setAccounts([]); setMovementsByAccount({}); setLoading(false); return; }
+    if (!exerciceId || !selectedExercice) { setAccounts([]); setMovementsByAccount({}); setLoading(false); return; }
     setLoading(true);
     setAccounts([]);
     setMovementsByAccount({});
@@ -36,7 +36,7 @@ export default function Balance() {
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).order('numero'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin),
     ]).then(([paramRes, acRes, mvRes]) => {
       if (!active) return;
       if (paramRes.data?.nom_entreprise) {
@@ -64,7 +64,7 @@ export default function Balance() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exercicesLoading, exerciceId]);
+  }, [exercicesLoading, exerciceId, selectedExercice]);
 
   const classOptions = useMemo(() => ['Toutes classes', ...new Set(accounts.map((a) => a.classe))].sort((a, b) => (a === 'Toutes classes' ? -1 : classNumber(a) - classNumber(b))), [accounts]);
 
@@ -84,6 +84,29 @@ export default function Balance() {
         closingCredit: closingNet < 0 ? Math.abs(closingNet) : 0,
       };
     }), [accounts, movementsByAccount, exerciceId, classFilter]);
+
+  // Contrôles de cohérence globaux, indépendants du filtre de classe affiché.
+  const integrity = useMemo(() => {
+    const totals = accounts.reduce((acc, account) => {
+      const movement = movementsByAccount[`${account.id}__${exerciceId}`] || { debit: 0, credit: 0 };
+      const openingNet = Number(account.solde_ouverture_debit || 0) - Number(account.solde_ouverture_credit || 0);
+      const closingNet = openingNet + movement.debit - movement.credit;
+      acc.openingDebit += Number(account.solde_ouverture_debit || 0);
+      acc.openingCredit += Number(account.solde_ouverture_credit || 0);
+      acc.movementDebit += movement.debit;
+      acc.movementCredit += movement.credit;
+      acc.closingDebit += Math.max(closingNet, 0);
+      acc.closingCredit += Math.max(-closingNet, 0);
+      return acc;
+    }, { openingDebit: 0, openingCredit: 0, movementDebit: 0, movementCredit: 0, closingDebit: 0, closingCredit: 0 });
+    const balanced = (debit, credit) => Math.abs(debit - credit) < 0.01;
+    return {
+      ...totals,
+      openingBalanced: balanced(totals.openingDebit, totals.openingCredit),
+      movementsBalanced: balanced(totals.movementDebit, totals.movementCredit),
+      closingBalanced: balanced(totals.closingDebit, totals.closingCredit),
+    };
+  }, [accounts, movementsByAccount, exerciceId]);
 
   const groups = useMemo(() => {
     const byClass = {};
@@ -190,6 +213,17 @@ export default function Balance() {
           {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
         </Select>
       </Card>
+
+      {!loading && accounts.length > 0 && (
+        <div className={`message ${integrity.openingBalanced && integrity.movementsBalanced && integrity.closingBalanced ? 'success' : 'error'} no-print`} role="status">
+          <strong>Contrôle de cohérence global (toutes classes) :</strong>{' '}
+          {integrity.openingBalanced ? 'à-nouveaux équilibrés' : `écart des à-nouveaux : ${money(Math.abs(integrity.openingDebit - integrity.openingCredit))} FCFA`}
+          {' · '}
+          {integrity.movementsBalanced ? 'mouvements équilibrés' : `écart des mouvements : ${money(Math.abs(integrity.movementDebit - integrity.movementCredit))} FCFA`}
+          {' · '}
+          {integrity.closingBalanced ? 'soldes de clôture équilibrés' : `écart de clôture : ${money(Math.abs(integrity.closingDebit - integrity.closingCredit))} FCFA`}
+        </div>
+      )}
 
       {notice && <div className="message error no-print" role="alert">{notice}</div>}
 

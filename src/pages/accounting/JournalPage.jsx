@@ -89,7 +89,7 @@ export default function JournalPage() {
   const requestedPaths = useRef(new Set());
 
   // Référentiels
-  const { selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
+  const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
   const [journaux, setJournaux] = useState([]);
   const [filtersReady, setFiltersReady] = useState(false);
 
@@ -130,7 +130,7 @@ export default function JournalPage() {
   // 2. Écritures (rechargées à chaque changement de filtre serveur)
   useEffect(() => {
     if (!filtersReady || exercicesLoading || !supabaseConfigured) return undefined;
-    if (!exerciceId) { setRowsValidees([]); setRowsBrouillons([]); setLoading(false); return undefined; }
+    if (!exerciceId || !selectedExercice) { setRowsValidees([]); setRowsBrouillons([]); setLoading(false); return undefined; }
     let active = true;
     setLoading(true);
     setError('');
@@ -148,7 +148,9 @@ export default function JournalPage() {
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);
 
-          q = q.eq('exercice_id', exerciceId);
+          q = q.eq('exercice_id', exerciceId)
+            .gte('date_ecriture', selectedExercice.date_debut)
+            .lte('date_ecriture', selectedExercice.date_fin);
           if (journalId) q = q.eq('journal_id', journalId);
           if (dateFrom) q = q.gte('date_ecriture', dateFrom);
           if (dateTo) q = q.lte('date_ecriture', dateTo);
@@ -199,7 +201,7 @@ export default function JournalPage() {
     })();
 
     return () => { active = false; };
-  }, [filtersReady, exercicesLoading, exerciceId, journalId, dateFrom, dateTo, order]);
+  }, [filtersReady, exercicesLoading, exerciceId, selectedExercice, journalId, dateFrom, dateTo, order]);
 
   // 3. Filtrage texte (côté client) + totaux sur TOUTES les écritures filtrées
   const matches = (row) =>
