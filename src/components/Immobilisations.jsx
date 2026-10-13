@@ -5,6 +5,7 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { computeDepreciation } from '../lib/depreciation';
+import { useExercice } from '../context/ExerciceContext';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const STATUT_LABEL = { EN_SERVICE: 'En service', CEDE: 'Cédé', REFORME: 'Réformé' };
@@ -12,6 +13,7 @@ const METHODE_LABEL = { LINEAIRE: 'Linéaire', DEGRESSIF: 'Dégressif', AUCUNE: 
 
 export default function Immobilisations() {
   const nav = useNavigate();
+  const { selectedExercice, selectedExerciceId, loading: exercicesLoading } = useExercice();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
@@ -22,14 +24,22 @@ export default function Immobilisations() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
-    supabase.from('immobilisations').select('*').order('code').then(({ data, error }) => {
+    if (exercicesLoading) return;
+    if (!selectedExercice) { setAssets([]); setLoading(false); return; }
+    setLoading(true);
+    setAssets([]);
+    setNotice('');
+    let active = true;
+    supabase.from('immobilisations').select('*').eq('exercice_id', selectedExerciceId).order('code').then(({ data, error }) => {
+      if (!active) return;
       if (error) { setNotice(`Impossible de charger le registre : ${error.message}`); setLoading(false); return; }
       setAssets(data || []);
       setLoading(false);
     });
-  }, [refreshTick]);
+    return () => { active = false; };
+  }, [refreshTick, selectedExerciceId, selectedExercice, exercicesLoading]);
 
-  const withDepreciation = useMemo(() => assets.map((a) => ({ ...a, ...computeDepreciation(a) })), [assets, refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const withDepreciation = useMemo(() => assets.map((a) => ({ ...a, ...computeDepreciation(a, selectedExercice?.date_fin ? new Date(`${selectedExercice.date_fin}T23:59:59`) : new Date()) })), [assets, refreshTick, selectedExercice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const categories = useMemo(() => ['Tout', ...new Set(assets.map((a) => a.categorie))], [assets]);
 
@@ -49,7 +59,7 @@ export default function Immobilisations() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Registre des immobilisations</h1>
-          <p className="page-subtitle">Suivi des actifs immobilisés et de leurs amortissements{loading ? ' · Chargement…' : ''}</p>
+          <p className="page-subtitle">Situation des immobilisations au {selectedExercice?.date_fin || '—'} — exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
         <Button icon={Plus} onClick={() => nav('/nouvelle-immobilisation')}>Nouvelle immobilisation</Button>
       </div>

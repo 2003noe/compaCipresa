@@ -53,7 +53,7 @@ const classNumber = (classeStr) => {
 export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const [devise, setDevise] = useState('CFA');
-  const { exercices: exercises, selectedExerciceId: exerciceId, selectedExercice } = useExercice();
+  const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
   const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
   const [periodEnd, setPeriodEnd] = useState(`${new Date().getFullYear()}-12-31`);
   
@@ -74,12 +74,20 @@ export default function GrandLivre() {
       setLoading(false);
       return;
     }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
+    setLoading(true);
+    setAccounts([]);
+    setRawLines([]);
+    setNotice('');
+    let active = true;
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit,devise').order('numero'),
-      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))'),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit,devise').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId),
     ]).then(([paramRes, acRes, lineRes]) => {
+      if (!active) return;
       if (paramRes.data?.nom_entreprise) {
         setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
       } else if (paramRes.data?.nom) {
@@ -96,7 +104,8 @@ export default function GrandLivre() {
       setRawLines(lineRes.data || []);
       setLoading(false);
     });
-  }, []);
+    return () => { active = false; };
+  }, [exerciceId, exercicesLoading]);
 
   // La période suit l'exercice choisi dans la topbar
   useEffect(() => {
@@ -113,20 +122,15 @@ export default function GrandLivre() {
   // Compute transactions and totals per account
   const ledgerData = useMemo(() => {
     const accMap = {};
-    const exerciceDebut = selectedExercice?.date_debut || null;
 
     accounts.forEach((acc) => {
       const initDebit = Number(acc.solde_ouverture_debit || 0);
       const initCredit = Number(acc.solde_ouverture_credit || 0);
 
-      // Comptes de gestion (6, 7, 8) : pas de solde d'ouverture, ils repartent de zéro à chaque exercice
-      const isGestion = ['6', '7', '8'].includes(String(acc.numero || '').trim()[0]);
-
       accMap[acc.id] = {
         account: acc,
-        isGestion,
-        initialDebit: isGestion ? 0 : initDebit,
-        initialCredit: isGestion ? 0 : initCredit,
+        initialDebit: initDebit,
+        initialCredit: initCredit,
         beforeDebit: 0,
         beforeCredit: 0,
         movements: [],
@@ -136,6 +140,7 @@ export default function GrandLivre() {
     rawLines.forEach((line) => {
       const ecrit = line.ecritures_comptables;
       if (!ecrit || ecrit.statut !== 'VALIDEE') return;
+      if (exerciceId && ecrit.exercice_id !== exerciceId) return;
 
       const accObj = accMap[line.compte_id];
       if (!accObj) return;
@@ -145,9 +150,6 @@ export default function GrandLivre() {
       const creditVal = Number(line.credit || 0);
 
       if (dateStr < periodStart) {
-        // Report à nouveau : les comptes de bilan (1 à 5) reportent les exercices précédents ;
-        // les comptes de gestion ne comptent que depuis le début de l'exercice choisi.
-        if (accObj.isGestion && exerciceDebut && dateStr < exerciceDebut) return;
         accObj.beforeDebit += debitVal;
         accObj.beforeCredit += creditVal;
       } else if (dateStr <= periodEnd) {
@@ -258,7 +260,7 @@ export default function GrandLivre() {
       globalCreditSum,
       globalNetBalance,
     };
-  }, [accounts, rawLines, selectedExercice, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
+  }, [accounts, rawLines, exerciceId, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
 
   const handlePrint = () => {
     window.print();
@@ -281,8 +283,8 @@ export default function GrandLivre() {
 
       <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
         <div className="grid grid-4" style={{ gap: '12px' }}>
-          <Input label="Période du" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
-          <Input label="au" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+          <Input label="Période du" type="date" min={selectedExercice?.date_debut} max={periodEnd || selectedExercice?.date_fin} value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+          <Input label="au" type="date" min={periodStart || selectedExercice?.date_debut} max={selectedExercice?.date_fin} value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           <Select label="Filtrer par classe" value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>
             <option value="ALL">Toutes les classes</option>
             {classesList.map((cls) => (

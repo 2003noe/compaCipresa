@@ -28,11 +28,12 @@ export default function TopBar() {
 
   useEffect(() => {
     if (!supabaseConfigured) return undefined;
+    let active = true;
     window.clearTimeout(debounceRef.current);
-    if (query.trim().length < 2) {
+    if (query.trim().length < 2 || !selectedExerciceId) {
       setResults({ comptes: [], ecritures: [] });
       setSearching(false);
-      return undefined;
+      return () => { active = false; };
     }
     setSearching(true);
     debounceRef.current = window.setTimeout(async () => {
@@ -41,14 +42,17 @@ export default function TopBar() {
         supabase
           .from("comptes_comptables")
           .select("id,numero,libelle")
+          .eq("exercice_id", selectedExerciceId)
           .or(`numero.ilike.${term},libelle.ilike.${term}`)
           .limit(5),
         supabase
           .from("ecritures_comptables")
           .select("id,numero,libelle,reference_piece,date_ecriture")
+          .eq("exercice_id", selectedExerciceId)
           .or(
             `numero.ilike.${term},libelle.ilike.${term},reference_piece.ilike.${term}`,
           ) ]);
+      if (!active) return;
       setResults({
         comptes: comptesRes.data || [],
         ecritures: ecrituresRes.data || [],
@@ -56,8 +60,8 @@ export default function TopBar() {
       setSearching(false);
     }, 300);
 
-    return () => window.clearTimeout(debounceRef.current);
-  }, [query]);
+    return () => { active = false; window.clearTimeout(debounceRef.current); };
+  }, [query, selectedExerciceId]);
 
   useEffect(() => {
     const onClick = (e) => {

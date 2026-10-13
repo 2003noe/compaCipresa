@@ -5,6 +5,7 @@ import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
@@ -14,8 +15,7 @@ const classNumber = (classe) => {
 };
 
 export default function Balance() {
-  const [exercises, setExercises] = useState([]);
-  const [exerciceId, setExerciceId] = useState('');
+  const { selectedExercice, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [movementsByAccount, setMovementsByAccount] = useState({});
   const [classFilter, setClassFilter] = useState('Toutes classes');
@@ -25,33 +25,37 @@ export default function Balance() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setMovementsByAccount({}); setLoading(false); return; }
+    setLoading(true);
+    setAccounts([]);
+    setMovementsByAccount({});
+    setNotice('');
+    let active = true;
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('exercices_comptables').select('id,code,annee,statut').order('annee', { ascending: false }),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(exercice_id,statut)'),
-    ]).then(([paramRes, exRes, acRes, mvRes]) => {
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
+    ]).then(([paramRes, acRes, mvRes]) => {
+      if (!active) return;
       if (paramRes.data?.nom_entreprise) {
         setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
       } else if (paramRes.data?.nom) {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
 
-      if (exRes.error || acRes.error || mvRes.error) {
-        setNotice(`Impossible de charger la balance : ${(exRes.error || acRes.error || mvRes.error).message}`);
+      if (acRes.error || mvRes.error) {
+        setNotice(`Impossible de charger la balance : ${(acRes.error || mvRes.error).message}`);
         setLoading(false);
         return;
       }
-      setExercises(exRes.data || []);
-      const openExercise = exRes.data?.find((e) => e.statut === 'OUVERT') || exRes.data?.[0];
-      if (openExercise) setExerciceId(openExercise.id);
       setAccounts(acRes.data || []);
 
       const grouped = {};
       (mvRes.data || []).forEach((line) => {
         if (line.ecritures_comptables?.statut !== 'VALIDEE') return;
-        const key = `${line.compte_id}__${line.ecritures_comptables.exercice_id}`;
+        const key = `${line.compte_id}__${exerciceId}`;
         if (!grouped[key]) grouped[key] = { debit: 0, credit: 0 };
         grouped[key].debit += Number(line.debit || 0);
         grouped[key].credit += Number(line.credit || 0);
@@ -59,9 +63,8 @@ export default function Balance() {
       setMovementsByAccount(grouped);
       setLoading(false);
     });
-  }, []);
-
-  const selectedExercise = useMemo(() => exercises.find((e) => e.id === exerciceId) || null, [exercises, exerciceId]);
+    return () => { active = false; };
+  }, [exercicesLoading, exerciceId]);
 
   const classOptions = useMemo(() => ['Toutes classes', ...new Set(accounts.map((a) => a.classe))].sort((a, b) => (a === 'Toutes classes' ? -1 : classNumber(a) - classNumber(b))), [accounts]);
 
@@ -159,7 +162,7 @@ export default function Balance() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Balance Générale');
 
-    const exCode = selectedExercise?.code || 'Exercice';
+    const exCode = selectedExercice?.code || 'Exercice';
     const fileName = `Balance_Generale_${exCode}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
@@ -182,10 +185,7 @@ export default function Balance() {
       </div>
 
       <Card className="ledger-toolbar no-print">
-        <Select label="Exercice" value={exerciceId} onChange={(e) => setExerciceId(e.target.value)}>
-          {exercises.length === 0 && <option value="">Aucun exercice</option>}
-          {exercises.map((e) => <option key={e.id} value={e.id}>{e.code} ({e.annee})</option>)}
-        </Select>
+        <div className="field"><span className="field-label">Exercice actif</span><div className="input" aria-live="polite">{selectedExercice?.code || (exercicesLoading ? 'Chargement…' : 'Aucun exercice')}</div></div>
         <Select label="Filtrer" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
           {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
         </Select>
@@ -201,7 +201,7 @@ export default function Balance() {
               <div>
                 <h2 style={{ margin: 0, fontSize: '18px' }}>{companyName}</h2>
                 <p style={{ margin: '2px 0 0 0', fontSize: '15px', fontWeight: 'bold' }}>
-                  BALANCE GÉNÉRALE DES COMPTES — {selectedExercise ? `${selectedExercise.code} (${selectedExercise.annee})` : ''}
+                  BALANCE GÉNÉRALE DES COMPTES — {selectedExercice ? `${selectedExercice.code} (${selectedExercice.annee})` : ''}
                 </p>
                 {classFilter !== 'Toutes classes' && (
                   <p style={{ margin: '2px 0 0 0', fontSize: '12px' }}>Filtre : {classFilter}</p>

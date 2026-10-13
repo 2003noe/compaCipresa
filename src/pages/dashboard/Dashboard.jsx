@@ -28,7 +28,7 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
-  const { exercices, selectedExercice } = useExercice();
+  const { selectedExercice } = useExercice();
   const [soldesBilan, setSoldesBilan] = useState(null);
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
@@ -52,7 +52,7 @@ export default function Dashboard() {
       supabase
         .from("comptes_comptables")
         .select(
-          "id,numero,libelle,nature,solde_ouverture_debit,solde_ouverture_credit",
+          "id,numero,libelle,nature,exercice_id,solde_ouverture_debit,solde_ouverture_credit",
         ),
       supabase
         .from("lignes_ecritures")
@@ -107,10 +107,7 @@ export default function Dashboard() {
     });
   }, []);
 
-  const previousExercice = exercices.find(
-    (e) =>
-      e.annee === (selectedExercice?.annee ? selectedExercice.annee - 1 : null),
-  );
+  const previousExercice = null;
 
   // --- Bilan (même source que la page Bilan : fonction SQL soldes_comptes) ---
   useEffect(() => {
@@ -119,6 +116,7 @@ export default function Dashboard() {
       return undefined;
     }
     let active = true;
+    setSoldesBilan(null);
     supabase
       .rpc("soldes_comptes", {
         p_date_fin: selectedExercice.date_fin,
@@ -144,7 +142,7 @@ export default function Dashboard() {
     () =>
       lignesTout.filter(
         (l) =>
-          !selectedExercice ||
+          selectedExercice &&
           l.ecritures_comptables?.exercice_id === selectedExercice.id,
       ),
     [lignesTout, selectedExercice],
@@ -152,36 +150,45 @@ export default function Dashboard() {
   const selectedRecentes = useMemo(
     () =>
       recentes.filter(
-        (e) => !selectedExercice || e.exercice_id === selectedExercice.id,
+        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
       ),
     [recentes, selectedExercice],
   );
   const selectedEcrituresLight = useMemo(
     () =>
       ecrituresLight.filter(
-        (e) => !selectedExercice || e.exercice_id === selectedExercice.id,
+        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
       ),
     [ecrituresLight, selectedExercice],
   );
   const selectedDeclarations = useMemo(
     () =>
       declarations.filter(
-        (d) => !selectedExercice || d.exercice_id === selectedExercice.id,
+        (d) => selectedExercice && d.exercice_id === selectedExercice.id,
       ),
     [declarations, selectedExercice],
   );
   const selectedClotures = useMemo(
     () =>
       clotures.filter(
-        (c) => !selectedExercice || c.exercice_id === selectedExercice.id,
+        (c) => selectedExercice && c.exercice_id === selectedExercice.id,
       ),
     [clotures, selectedExercice],
   );
 
+  const comptesExercice = useMemo(
+    () => comptes.filter((c) => selectedExercice && c.exercice_id === selectedExercice.id),
+    [comptes, selectedExercice],
+  );
+  const releveExercice = useMemo(
+    () => releveNonRapproche.filter((r) => comptesExercice.some((c) => c.id === r.compte_id)),
+    [releveNonRapproche, comptesExercice],
+  );
+
   // --- Trésorerie (cumulée, toutes périodes — cohérent avec la page Trésorerie) ---
   const comptesTresorerie = useMemo(
-    () => comptes.filter((c) => c.nature === "TRESORERIE"),
-    [comptes],
+    () => comptesExercice.filter((c) => c.nature === "TRESORERIE"),
+    [comptesExercice],
   );
   const soldeTresorerie = useMemo(
     () =>
@@ -233,7 +240,7 @@ export default function Dashboard() {
 
   const crRows = useMemo(
     () =>
-      comptes
+      comptesExercice
         .filter((a) => a.nature === "CHARGE" || a.nature === "PRODUIT")
         .map((a) => {
           const rawN = periodNet(
@@ -255,7 +262,7 @@ export default function Dashboard() {
             valueN1: rawN1 === null ? null : rawN1 * sign,
           };
         }),
-    [comptes, selectedLignes, selectedExercice, previousExercice],
+    [comptesExercice, selectedLignes, selectedExercice, previousExercice],
   ); // eslint-disable-line react-hooks/exhaustive-deps
 
   const produitsExploit = crRows.filter(
@@ -330,8 +337,10 @@ export default function Dashboard() {
   // --- Flux de trésorerie 12 mois (entrées/sorties réelles) ---
   const monthlyFlows = useMemo(() => {
     const buckets = [];
-    for (let i = 11; i >= 0; i -= 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    if (!selectedExercice?.date_debut || !selectedExercice?.date_fin) return buckets;
+    const start = new Date(`${selectedExercice.date_debut}T00:00:00`);
+    const end = new Date(`${selectedExercice.date_fin}T00:00:00`);
+    for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d.setMonth(d.getMonth() + 1)) {
       buckets.push({
         key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
         label: MONTH_LABELS[d.getMonth()],
@@ -349,12 +358,12 @@ export default function Dashboard() {
         bucket.sorties += Number(l.credit || 0);
       });
     return buckets;
-  }, [selectedLignes, comptesTresorerie]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLignes, comptesTresorerie, selectedExercice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Alertes réelles ---
   const comptesMap = useMemo(
-    () => Object.fromEntries(comptes.map((c) => [c.id, c])),
-    [comptes],
+    () => Object.fromEntries(comptesExercice.map((c) => [c.id, c])),
+    [comptesExercice],
   );
   const clotureProgress = useMemo(() => {
     const map = {};
@@ -384,9 +393,9 @@ export default function Dashboard() {
           onClick: () => nav(`/clotures/${c.id}`),
         });
       });
-    if (releveNonRapproche.length > 0) {
+    if (releveExercice.length > 0) {
       const parCompte = {};
-      releveNonRapproche.forEach((r) => {
+      releveExercice.forEach((r) => {
         parCompte[r.compte_id] = (parCompte[r.compte_id] || 0) + 1;
       });
       Object.entries(parCompte)
@@ -427,7 +436,7 @@ export default function Dashboard() {
   }, [
     selectedClotures,
     clotureProgress,
-    releveNonRapproche,
+    releveExercice,
     comptesMap,
     ecrituresBrouillon,
     profiles,

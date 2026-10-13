@@ -26,7 +26,6 @@ const COMPANY_FIELDS = [
 export default function Bilan() {
   const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
   const [soldesN, setSoldesN] = useState(null);
-  const [soldesN1, setSoldesN1] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [notice, setNotice] = useState('');
@@ -61,14 +60,6 @@ export default function Bilan() {
 
   const selected = useMemo(() => exercises.find((e) => e.id === exerciceId), [exercises, exerciceId]);
 
-  // Exercice précédent = celui qui se termine le plus récemment avant le début de l'exercice choisi
-  const previous = useMemo(() => {
-    if (!selected) return null;
-    return exercises
-      .filter((e) => e.date_fin < selected.date_debut)
-      .sort((a, b) => (a.date_fin < b.date_fin ? 1 : -1))[0] || null;
-  }, [exercises, selected]);
-
   // 2. Soldes calculés côté base (fonction SQL soldes_comptes)
   useEffect(() => {
     if (!supabaseConfigured || !selected) return undefined;
@@ -78,10 +69,9 @@ export default function Bilan() {
 
     const call = (ex) => supabase.rpc('soldes_comptes', { p_date_fin: ex.date_fin, p_date_debut: ex.date_debut });
 
-    Promise.all([call(selected), previous ? call(previous) : Promise.resolve({ data: null, error: null })])
-      .then(([n, n1]) => {
+    call(selected).then((n) => {
         if (!active) return;
-        const err = n.error || n1.error;
+        const err = n.error;
         if (err) {
           const missing = /soldes_comptes|PGRST202|42883/.test(`${err.code} ${err.message}`);
           setNotice(
@@ -90,20 +80,18 @@ export default function Bilan() {
               : `Impossible de charger le bilan : ${err.message}`,
           );
           setSoldesN(null);
-          setSoldesN1(null);
         } else {
           setSoldesN(n.data || []);
-          setSoldesN1(n1.data);
         }
         setLoadingData(false);
       });
 
     return () => { active = false; };
-  }, [selected, previous]);
+  }, [selected]);
 
   const bilanN = useMemo(() => (soldesN ? buildBilan(soldesN) : null), [soldesN]);
-  const bilanN1 = useMemo(() => (soldesN1 ? buildBilan(soldesN1) : null), [soldesN1]);
-  const showN1 = Boolean(previous && bilanN1);
+  const bilanN1 = null;
+  const showN1 = false;
 
   // 3. Lignes d'affichage ACTIF / PASSIF
   const { actifRows, passifRows } = useMemo(() => {

@@ -6,6 +6,8 @@ import Select from '../ui/Select';
 import Toggle from '../ui/Toggle';
 import Button from '../ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
+import ExerciceSelect from './ExerciceSelect';
 
 const ACCOUNT_CLASSES = [
   'Classe 1 - Ressources durables',
@@ -80,11 +82,16 @@ const emptyForm = () => ({
 
 export default function AccountForm() {
   const nav = useNavigate();
+  const { selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
+  const [formExerciceId, setFormExerciceId] = useState(selectedExerciceId);
   const [form, setForm] = useState(emptyForm());
   const [parentOptions, setParentOptions] = useState([]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => setFormExerciceId(selectedExerciceId), [selectedExerciceId]);
+  const formExercice = exercices.find((exercice) => exercice.id === formExerciceId) || null;
 
   // Chargement des comptes parents depuis default_compt
   useEffect(() => {
@@ -185,6 +192,10 @@ export default function AccountForm() {
       setError('Le numéro et le libellé du compte sont obligatoires.');
       return;
     }
+    if (!formExerciceId || exercicesLoading) {
+      setError('Sélectionnez un exercice comptable avant de créer un compte.');
+      return;
+    }
 
     if (selectedParent && !form.code.trim().startsWith(selectedParent.num_compte)) {
       setError(`Le numéro de compte doit obligatoirement commencer par le numéro du compte parent (${selectedParent.num_compte}).`);
@@ -212,6 +223,7 @@ export default function AccountForm() {
       notes: form.notes.trim() || null,
       solde_ouverture_debit: Number(form.soldeDebit) || 0,
       solde_ouverture_credit: Number(form.soldeCredit) || 0,
+      exercice_id: formExerciceId,
     });
 
     setSaving(false);
@@ -233,12 +245,14 @@ export default function AccountForm() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Nouveau compte comptable</h1>
+          <p className="page-subtitle">Exercice : {formExercice?.code || 'aucun exercice sélectionné'}</p>
           <p className="page-subtitle">Créez un nouveau compte dans votre plan comptable SYSCOHADA</p>
         </div>
       </div>
       <Card className="account-card">
         <div className="form-section precise-section">
           <h2>Identification du compte</h2>
+          <ExerciceSelect value={formExerciceId} onChange={(event) => setFormExerciceId(event.target.value)} />
           <Select label="Compte parent" value={form.parentId} onChange={handleParentChange}>
             <option value="">Aucun</option>
             {parentOptions.map((account) => (
