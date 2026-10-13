@@ -130,6 +130,7 @@ export default function JournalPage() {
   // 2. Écritures (rechargées à chaque changement de filtre serveur)
   useEffect(() => {
     if (!filtersReady || exercicesLoading || !supabaseConfigured) return undefined;
+    if (!exerciceId) { setRowsValidees([]); setRowsBrouillons([]); setLoading(false); return undefined; }
     let active = true;
     setLoading(true);
     setError('');
@@ -147,7 +148,7 @@ export default function JournalPage() {
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);
 
-          if (exerciceId) q = q.eq('exercice_id', exerciceId);
+          q = q.eq('exercice_id', exerciceId);
           if (journalId) q = q.eq('journal_id', journalId);
           if (dateFrom) q = q.gte('date_ecriture', dateFrom);
           if (dateTo) q = q.lte('date_ecriture', dateTo);

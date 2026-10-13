@@ -23,7 +23,7 @@ import { useExercice } from '../../context/ExerciceContext';
 import { computeDepreciation } from '../../lib/depreciation';
 
 export default function LivreInventaire() {
-  const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
+  const { exercices: exercises, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [physicalAssets, setPhysicalAssets] = useState([]);
@@ -54,18 +54,26 @@ export default function LivreInventaire() {
       setLoading(false);
       return;
     }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setLines([]); setPhysicalAssets([]); setLoading(false); return; }
 
     setLoading(true);
     setNotice('');
+    const selected = exercises.find((e) => e.id === exerciceId);
+    let active = true;
 
     Promise.all([
       supabase
         .from('comptes_comptables')
         .select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit,devise')
+        .eq('exercice_id', exerciceId)
         .order('numero'),
       supabase
         .from('lignes_ecritures')
-        .select('compte_id,debit,credit,ecritures_comptables(exercice_id,date_ecriture,statut)'),
+        .select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)')
+        .eq('ecritures_comptables.exercice_id', exerciceId)
+        .gte('ecritures_comptables.date_ecriture', selected?.date_debut)
+        .lte('ecritures_comptables.date_ecriture', selected?.date_fin),
       supabase
         .from('immobilisations')
         .select('*')
@@ -77,6 +85,7 @@ export default function LivreInventaire() {
         .maybeSingle(),
     ])
       .then(([acRes, lnRes, immoRes, compRes]) => {
+        if (!active) return;
         if (acRes.error || lnRes.error) {
           const err = acRes.error || lnRes.error;
           setNotice(`Impossible de charger le livre d'inventaire : ${err.message}`);
@@ -86,27 +95,26 @@ export default function LivreInventaire() {
 
         setAccounts(acRes.data || []);
         setLines((lnRes.data || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
-        setPhysicalAssets(immoRes.data || []);
+        setPhysicalAssets((immoRes.data || []).filter((asset) => !selected || asset.date_acquisition <= selected.date_fin));
         if (compRes?.data) {
           setCompany(compRes.data);
         }
         setLoading(false);
       })
       .catch((err) => {
+        if (!active) return;
         setNotice(`Erreur inattendue : ${err.message}`);
         setLoading(false);
       });
-  }, [refreshKey]);
+    return () => { active = false; };
+  }, [refreshKey, exerciceId, exercicesLoading, exercises]);
 
   const selectedExercice = useMemo(
     () => exercises.find((e) => e.id === exerciceId) || null,
     [exercises, exerciceId]
   );
 
-  const previousExercice = useMemo(() => {
-    if (!selectedExercice?.annee) return null;
-    return exercises.find((e) => e.annee === selectedExercice.annee - 1) || null;
-  }, [exercises, selectedExercice]);
+  const previousExercice = null;
 
   // La date d'arrêté suit l'exercice choisi dans la topbar
   useEffect(() => {
@@ -398,7 +406,7 @@ export default function LivreInventaire() {
         </div>
 
         {/* Navigation par onglets */}
-        <div className="livre-tabs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
+        <div className="livre-tabs" style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
           {[
             { id: 'ALL', label: 'Vue Complète Patrimoine', icon: Layers },
             { id: 'ACTIF_IMMO', label: 'Actif Immobilisé (Cl. 2)', icon: Building2 },
@@ -512,27 +520,18 @@ export default function LivreInventaire() {
             </div>
           </div>
 
-          <div style={{ width: '100%' }}>
-            <table className="balance-table" style={{ width: '100%', tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '28%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-              </colgroup>
+          <div className="table-responsive">
+            <table className="balance-table">
               <thead>
                 <tr>
-                  <th style={{ whiteSpace: 'normal' }}>Code Bien</th>
-                  <th style={{ whiteSpace: 'normal' }}>Désignation de l'immobilisation</th>
-                  <th style={{ whiteSpace: 'normal' }}>Catégorie</th>
-                  <th style={{ whiteSpace: 'normal' }}>Date Acq.</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Valeur Brute ({devise})</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Amort. Cumulé</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Valeur Nette (VNC)</th>
-                  <th className="text-center" style={{ whiteSpace: 'normal' }}>Statut</th>
+                  <th style={{ width: '120px' }}>Code Bien</th>
+                  <th>Désignation de l'immobilisation</th>
+                  <th>Catégorie</th>
+                  <th>Date Acq.</th>
+                  <th className="text-right">Valeur Brute ({devise})</th>
+                  <th className="text-right">Amort. Cumulé</th>
+                  <th className="text-right">Valeur Nette (VNC)</th>
+                  <th className="text-center">Statut</th>
                 </tr>
               </thead>
               <tbody>
@@ -545,8 +544,8 @@ export default function LivreInventaire() {
                 ) : (
                   computedAssets.map((asset) => (
                     <tr key={asset.id}>
-                      <td className="account-cell" style={{ fontWeight: 600, wordBreak: 'break-word' }}>{asset.code}</td>
-                      <td style={{ wordBreak: 'break-word' }}>{asset.designation}</td>
+                      <td className="account-cell" style={{ fontWeight: 600 }}>{asset.code}</td>
+                      <td>{asset.designation}</td>
                       <td><Badge variant="neutral">{asset.categorie || 'Général'}</Badge></td>
                       <td>{asset.date_acquisition ? new Date(asset.date_acquisition).toLocaleDateString('fr-FR') : '—'}</td>
                       <td className="text-right">{money(asset.valeur_brute)}</td>
@@ -594,29 +593,20 @@ export default function LivreInventaire() {
             </div>
           </div>
 
-          <div style={{ width: '100%' }}>
-            <table className="balance-table" style={{ width: '100%', tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: previousExercice ? '9%' : '10%' }} />
-                <col />
-                <col style={{ width: previousExercice ? '14%' : '16%' }} />
-                <col style={{ width: previousExercice ? '13%' : '16%' }} />
-                <col style={{ width: previousExercice ? '13%' : '16%' }} />
-                {previousExercice && <col style={{ width: '13%' }} />}
-                {previousExercice && <col style={{ width: '13%' }} />}
-              </colgroup>
+          <div className="table-responsive">
+            <table className="balance-table">
               <thead>
                 <tr>
-                  <th style={{ whiteSpace: 'normal' }}>N° Compte</th>
-                  <th style={{ whiteSpace: 'normal' }}>Intitulé de l'élément / Rubrique</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Valeur Brute ({devise})</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Amort. & Dépréc.</th>
-                  <th className="text-right" style={{ whiteSpace: 'normal' }}>Valeur Nette N</th>
+                  <th style={{ width: '110px' }}>N° Compte</th>
+                  <th>Intitulé de l'élément / Rubrique</th>
+                  <th className="text-right" style={{ width: '140px' }}>Valeur Brute ({devise})</th>
+                  <th className="text-right" style={{ width: '140px' }}>Amort. & Dépréc.</th>
+                  <th className="text-right" style={{ width: '140px' }}>Valeur Nette N</th>
                   {previousExercice && (
-                    <th className="text-right" style={{ whiteSpace: 'normal' }}>Valeur N-1</th>
+                    <th className="text-right" style={{ width: '130px' }}>Valeur N-1</th>
                   )}
                   {previousExercice && (
-                    <th className="text-right" style={{ whiteSpace: 'normal' }}>Variation N / N-1</th>
+                    <th className="text-right" style={{ width: '130px' }}>Variation N / N-1</th>
                   )}
                 </tr>
               </thead>

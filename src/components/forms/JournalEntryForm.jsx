@@ -6,6 +6,8 @@ import Select from '../ui/Select';
 import Button from '../ui/Button';
 import { CalendarDays, CloudUpload, Paperclip, PlusCircle, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
+import ExerciceSelect from './ExerciceSelect';
 
 const money = (value) => new Intl.NumberFormat('fr-FR').format(value || 0);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -31,6 +33,7 @@ export default function JournalEntryForm() {
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
   const isEdit = Boolean(editId);
+  const { selectedExercice, selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
   const [loadingEntry, setLoadingEntry] = useState(isEdit);
   const [locked, setLocked] = useState(false);
   const [existingPieces, setExistingPieces] = useState([]);
@@ -52,26 +55,35 @@ export default function JournalEntryForm() {
 
   useEffect(() => {
     if (!supabaseConfigured) return;
+    if (exercicesLoading || !exercise?.id) return;
+    setJournals([]);
+    setAccountOptions([]);
+    let active = true;
     Promise.all([
-      supabase.from('exercices_comptables').select('id,code,annee,statut,date_debut,date_fin').eq('statut', 'OUVERT').order('annee', { ascending: false }).limit(1),
       supabase.from('journaux').select('id,code,libelle').order('code'),
-      supabase.from('comptes_comptables').select('numero,libelle').order('numero'),
-    ]).then(([ex, jr, ac]) => {
-      if (!isEdit)
-        {
-          setExercise(ex.data?.[0] || null);
-          console.log('Exercice ouvert :', ex.data?.[0] || 'aucun');
-
-        } 
+      supabase.from('comptes_comptables').select('numero,libelle').eq('exercice_id', exercise.id).order('numero'),
+    ]).then(([jr, ac]) => {
+      if (!active) return;
       setJournals(jr.data || []);
-      if (!isEdit && jr.data?.[0]) setJournalId(jr.data[0].id);
       setAccountOptions(ac.data || []);
     });
-  }, [isEdit]);
+    return () => { active = false; };
+  }, [exercicesLoading, exercise?.id]);
+
+  useEffect(() => {
+    if (!isEdit) setExercise(selectedExercice);
+  }, [isEdit, selectedExercice]);
+
+  useEffect(() => {
+    if (!isEdit && exercise && (date < exercise.date_debut || date > exercise.date_fin)) {
+      const now = today();
+      setDate(now >= exercise.date_debut && now <= exercise.date_fin ? now : exercise.date_debut);
+    }
+  }, [isEdit, exercise, date]);
 
   // Mode édition : charger le brouillon à modifier
   useEffect(() => {
-    if (!isEdit) return undefined;
+    if (!isEdit || exercicesLoading || !selectedExerciceId) return undefined;
     if (!supabaseConfigured) {
       setError("Supabase n'est pas configuré.");
       setLoadingEntry(false);
@@ -87,6 +99,12 @@ export default function JournalEntryForm() {
         if (!active) return;
         if (err || !data) {
           setError(`Impossible de charger l'écriture : ${err?.message || 'introuvable'}`);
+          setLocked(true);
+          setLoadingEntry(false);
+          return;
+        }
+        if (data.exercice_id !== selectedExerciceId) {
+          setError("Cette écriture appartient à un autre exercice que celui sélectionné dans la barre supérieure.");
           setLocked(true);
           setLoadingEntry(false);
           return;
@@ -112,7 +130,7 @@ export default function JournalEntryForm() {
         setLoadingEntry(false);
       });
     return () => { active = false; };
-  }, [isEdit, editId]);
+  }, [isEdit, editId, exercicesLoading, selectedExerciceId]);
 
   const totals = useMemo(() => lines.reduce((acc, line) => ({
     debit: acc.debit + Number(line.debit || 0),
@@ -145,12 +163,6 @@ export default function JournalEntryForm() {
   const handleFileInputChange = (e) => { addAttachments(e.target.files); e.target.value = ''; };
   const handleDrop = (e) => { e.preventDefault(); setDragOver(false); addAttachments(e.dataTransfer.files); };
 
-
-
-
-
-  
-
   const save = async (statut) => {
     setError(''); setNotice('');
 
@@ -160,8 +172,8 @@ export default function JournalEntryForm() {
       return;
     }
     if (!supabaseConfigured) { setError("Supabase n'est pas configuré."); return; }
-    if (!exercise || !journalId) {
-      setError("Aucun exercice ouvert ou journal disponible. Vérifiez la configuration comptable (voir plus bas).");
+    if (!exercise?.id || !journalId) {
+      setError("Sélectionnez un exercice et un journal avant d'enregistrer l'écriture.");
       return;
     }
     if (lines.some((l) => !l.account.trim() || !l.label.trim())) {
@@ -181,7 +193,7 @@ export default function JournalEntryForm() {
 
     // 1. Résoudre les comptes avant toute écriture en base
     const numeros = [...new Set(lines.map((l) => l.account.trim()))];
-    const accountRows = await supabase.from('comptes_comptables').select('id,numero').in('numero', numeros);
+    const accountRows = await supabase.from('comptes_comptables').select('id,numero').eq('exercice_id', exercise.id).in('numero', numeros);
     if (accountRows.error) { setSaving(false); setError(accountRows.error.message); return; }
 
     const accountMap = Object.fromEntries((accountRows.data || []).map((a) => [a.numero, a.id]));
@@ -307,8 +319,14 @@ export default function JournalEntryForm() {
           <Card className="entry-meta-card">
             <div className="entry-fields-grid">
               <Input label="Date d'écriture" type="date" icon={CalendarDays} value={date} min={exercise?.date_debut} max={exercise?.date_fin} onChange={(e) => setDate(e.target.value)} />
-              <Select label="Journal comptable" value={journalId} onChange={(e) => setJournalId(e.target.value)}>
-                {journals.length === 0 && <option value="">Aucun journal disponible</option>}
+              <ExerciceSelect value={exercise?.id || ''} disabled={isEdit} onChange={(event) => {
+                const next = exercices.find((item) => item.id === event.target.value) || null;
+                setExercise(next);
+                setJournalId('');
+                if (next) setDate(next.date_debut);
+              }} />
+              <Select label="Journal comptable" value={journalId} onChange={(e) => setJournalId(e.target.value)} disabled={locked}>
+                <option value="">Sélectionner un journal</option>
                 {journals.map((j) => <option key={j.id} value={j.id}>{j.code} — {j.libelle}</option>)}
               </Select>
               <Input label="N° de Pièce" value={piece} onChange={(e) => setPiece(e.target.value)} />

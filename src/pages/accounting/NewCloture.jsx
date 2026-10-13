@@ -3,15 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Save } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
-import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { genererPeriodesMensuelles } from '../../lib/clotures';
 import { useExercice } from '../../context/ExerciceContext';
+import ExerciceSelect from '../../components/forms/ExerciceSelect';
 
 export default function NewCloture() {
   const nav = useNavigate();
-  const { selectedExerciceId: exerciceId, selectedExercice: exercice } = useExercice();
+  const { selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
+  const [exerciceId, setExerciceId] = useState(selectedExerciceId);
+  const exercice = exercices.find((item) => item.id === exerciceId) || null;
   const [periodeKey, setPeriodeKey] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [responsableId, setResponsableId] = useState('');
@@ -19,15 +21,21 @@ export default function NewCloture() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => setExerciceId(selectedExerciceId), [selectedExerciceId]);
+
   useEffect(() => {
     if (!supabaseConfigured) return;
     supabase.from('profiles').select('id,nom,prenom').eq('actif', true).then(({ data }) => setProfiles(data || []));
   }, []);
 
   useEffect(() => {
-    if (!exerciceId) return;
-    supabase.from('clotures_comptables').select('periode_debut,periode_fin').eq('exercice_id', exerciceId).then(({ data }) => setExistantes(data || []));
-  }, [exerciceId]);
+    setPeriodeKey('');
+    setExistantes([]);
+    if (exercicesLoading || !exerciceId) return undefined;
+    let active = true;
+    supabase.from('clotures_comptables').select('periode_debut,periode_fin').eq('exercice_id', exerciceId).then(({ data }) => { if (active) setExistantes(data || []); });
+    return () => { active = false; };
+  }, [exerciceId, exercicesLoading]);
 
   const periodes = useMemo(() => genererPeriodesMensuelles(exercice), [exercice]);
   const periodesDisponibles = periodes.filter((p) => !existantes.some((e) => e.periode_debut === p.debut && e.periode_fin === p.fin));
@@ -64,8 +72,8 @@ export default function NewCloture() {
       <Card>
         <div className="form-section precise-section">
           <h2>Période à clôturer</h2>
+          <ExerciceSelect value={exerciceId} onChange={(event) => setExerciceId(event.target.value)} />
           <div className="grid grid-2">
-            <Input label="Exercice" value={exercice ? `Exercice ${exercice.code || exercice.annee}` : 'Aucun exercice'} readOnly disabled />
             <Select label="Période (mensuelle)" required value={periodeKey} onChange={(e) => setPeriodeKey(e.target.value)}>
               <option value="">Sélectionner…</option>
               {periodesDisponibles.map((p) => <option key={`${p.debut}_${p.fin}`} value={`${p.debut}_${p.fin}`}>{p.libelle}</option>)}

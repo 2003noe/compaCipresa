@@ -7,7 +7,7 @@ const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
 
 export default function CompteResultat() {
-  const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
+  const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,11 +15,19 @@ export default function CompteResultat() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setLines([]); setLoading(false); return; }
+    setLoading(true);
+    setAccounts([]);
+    setLines([]);
+    setNotice('');
+    let active = true;
 
     Promise.all([
-      supabase.from('comptes_comptables').select('id,numero,libelle,nature'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(date_ecriture,statut)'),
+      supabase.from('comptes_comptables').select('id,numero,libelle,nature').eq('exercice_id', exerciceId),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
     ]).then(([ac, ln]) => {
+      if (!active) return;
       if (ac.error || ln.error) {
         setNotice(`Impossible de charger le compte de résultat : ${(ac.error || ln.error).message}`);
         setLoading(false);
@@ -29,10 +37,10 @@ export default function CompteResultat() {
       setLines((ln.data || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
       setLoading(false);
     });
-  }, []);
+    return () => { active = false; };
+  }, [exerciceId, exercicesLoading]);
 
-  const selected = exercises.find((e) => e.id === exerciceId);
-  const previous = exercises.find((e) => e.annee === (selected?.annee ? selected.annee - 1 : null));
+  const selected = selectedExercice;
 
   const periodNet = (compteId, start, end) => {
     if (!start || !end) return 0;
@@ -43,10 +51,9 @@ export default function CompteResultat() {
 
   const rows = useMemo(() => accounts.map((a) => {
     const rawN = periodNet(a.id, selected?.date_debut, selected?.date_fin);
-    const rawN1 = previous ? periodNet(a.id, previous.date_debut, previous.date_fin) : null;
     const sign = a.nature === 'CHARGE' ? 1 : -1;
-    return { ...a, valueN: rawN * sign, valueN1: rawN1 === null ? null : rawN1 * sign };
-  }), [accounts, lines, selected, previous]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { ...a, valueN: rawN * sign };
+  }), [accounts, lines, selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const produitsExploit = rows.filter((r) => r.nature === 'PRODUIT' && !r.numero.startsWith('77'));
   const chargesExploit = rows.filter((r) => r.nature === 'CHARGE' && !r.numero.startsWith('67'));
@@ -56,25 +63,22 @@ export default function CompteResultat() {
 
   const sum = (list, key = 'valueN') => list.reduce((acc, r) => acc + Number(r[key] || 0), 0);
 
-  const totalProduitsExploitN = sum(produitsExploit); const totalProduitsExploitN1 = sum(produitsExploit, 'valueN1');
-  const totalChargesExploitN = sum(chargesExploit); const totalChargesExploitN1 = sum(chargesExploit, 'valueN1');
+  const totalProduitsExploitN = sum(produitsExploit);
+  const totalChargesExploitN = sum(chargesExploit);
   const resultatExploitN = totalProduitsExploitN - totalChargesExploitN;
-  const resultatExploitN1 = totalProduitsExploitN1 - totalChargesExploitN1;
-  const totalProduitsFinN = sum(produitsFin); const totalProduitsFinN1 = sum(produitsFin, 'valueN1');
-  const totalChargesFinN = sum(chargesFin); const totalChargesFinN1 = sum(chargesFin, 'valueN1');
+  const totalProduitsFinN = sum(produitsFin);
+  const totalChargesFinN = sum(chargesFin);
   const resultatNetN = resultatExploitN + totalProduitsFinN - totalChargesFinN;
-  const resultatNetN1 = resultatExploitN1 + totalProduitsFinN1 - totalChargesFinN1;
   const margeBrute = totalProduitsExploitN > 0 ? ((totalProduitsExploitN - sum(achats)) / totalProduitsExploitN) * 100 : null;
 
   const Group = ({ title, list, refCode, refValue, refValue1, refLabel }) => (
     <>
-      {title && <tr key={`h-${title}`}><td colSpan={4} className="cr-section-title">{title}</td></tr>}
+      {title && <tr key={`h-${title}`}><td colSpan={3} className="cr-section-title">{title}</td></tr>}
       {list.map((r) => (
         <tr key={r.id}>
           <td className="account-cell">{r.numero}</td>
           <td>{r.libelle}</td>
           <td className="text-right">{dash(r.valueN)}</td>
-          <td className="text-right cr-n1">{r.valueN1 === null ? '—' : dash(r.valueN1)}</td>
         </tr>
       ))}
       {refCode && (
@@ -82,7 +86,6 @@ export default function CompteResultat() {
           <td className="account-cell">{refCode}</td>
           <td>{refLabel}</td>
           <td className="text-right">{money(refValue)}</td>
-          <td className="text-right cr-n1">{refValue1 === null ? '—' : money(refValue1)}</td>
         </tr>
       )}
     </>
@@ -112,14 +115,14 @@ export default function CompteResultat() {
             <h2 className="bilan-side-title">Calcul du Résultat Net de l'Exercice</h2>
             <div className="table-wrap">
               <table className="balance-table">
-                <thead><tr><th>Réf</th><th>Libellé des comptes</th><th className="text-right">Exercice N (FCFA)</th><th className="text-right">Exercice N-1 (FCFA)</th></tr></thead>
+                <thead><tr><th>Réf</th><th>Libellé des comptes</th><th className="text-right">Exercice sélectionné (FCFA)</th></tr></thead>
                 <tbody>
-                  <Group title="PRODUITS D'EXPLOITATION" list={produitsExploit} refCode="A" refLabel="TOTAL PRODUITS D'EXPLOITATION" refValue={totalProduitsExploitN} refValue1={previous ? totalProduitsExploitN1 : null} />
-                  <Group title="CHARGES D'EXPLOITATION" list={chargesExploit} refCode="B" refLabel="TOTAL CHARGES D'EXPLOITATION" refValue={totalChargesExploitN} refValue1={previous ? totalChargesExploitN1 : null} />
-                  <tr className="balance-total-row"><td className="account-cell">C (A-B)</td><td>RÉSULTAT D'EXPLOITATION</td><td className="text-right">{money(resultatExploitN)}</td><td className="text-right">{previous ? money(resultatExploitN1) : '—'}</td></tr>
+                  <Group title="PRODUITS D'EXPLOITATION" list={produitsExploit} refCode="A" refLabel="TOTAL PRODUITS D'EXPLOITATION" refValue={totalProduitsExploitN} />
+                  <Group title="CHARGES D'EXPLOITATION" list={chargesExploit} refCode="B" refLabel="TOTAL CHARGES D'EXPLOITATION" refValue={totalChargesExploitN} />
+                  <tr className="balance-total-row"><td className="account-cell">C (A-B)</td><td>RÉSULTAT D'EXPLOITATION</td><td className="text-right">{money(resultatExploitN)}</td></tr>
                   <Group list={produitsFin} />
                   <Group list={chargesFin} />
-                  <tr className="balance-total-row"><td className="account-cell">R.NET</td><td>RÉSULTAT NET DE L'EXERCICE</td><td className="text-right">{money(resultatNetN)}</td><td className="text-right">{previous ? money(resultatNetN1) : '—'}</td></tr>
+                  <tr className="balance-total-row"><td className="account-cell">R.NET</td><td>RÉSULTAT NET DE L'EXERCICE</td><td className="text-right">{money(resultatNetN)}</td></tr>
                 </tbody>
               </table>
             </div>

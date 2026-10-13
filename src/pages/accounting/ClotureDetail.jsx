@@ -6,12 +6,14 @@ import Badge from '../../components/ui/Badge';
 import Toggle from '../../components/ui/Toggle';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import { useExercice } from '../../context/ExerciceContext';
 import { STATUT_LABEL, STATUT_TONE, CONTROLE_STATUT_LABEL, dateFr } from '../../lib/clotures';
 
 export default function ClotureDetail() {
   const { id } = useParams();
   const nav = useNavigate();
   const { profile } = useAuth();
+  const { selectedExerciceId, loading: exercicesLoading } = useExercice();
   const [cloture, setCloture] = useState(null);
   const [controles, setControles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,8 +22,14 @@ export default function ClotureDetail() {
 
   const load = () => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
+    if (exercicesLoading) return;
+    if (!selectedExerciceId) { setCloture(null); setControles([]); setLoading(false); return; }
+    setLoading(true);
+    setCloture(null);
+    setControles([]);
+    setNotice('');
     Promise.all([
-      supabase.from('clotures_comptables').select('*').eq('id', id).maybeSingle(),
+      supabase.from('clotures_comptables').select('*').eq('id', id).eq('exercice_id', selectedExerciceId).maybeSingle(),
       supabase.from('controles_cloture').select('*, referentiel_controles_cloture(numero,controle,frequence,responsable_type,justificatif_attendu)').eq('cloture_id', id),
     ]).then(([cRes, ctrlRes]) => {
       if (cRes.error || ctrlRes.error) { setNotice((cRes.error || ctrlRes.error).message); setLoading(false); return; }
@@ -30,7 +38,7 @@ export default function ClotureDetail() {
       setLoading(false);
     });
   };
-  useEffect(load, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [id, selectedExerciceId, exercicesLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalFaits = controles.filter((c) => c.statut !== 'A_FAIRE').length;
   const pct = controles.length ? Math.round((totalFaits / controles.length) * 100) : 0;

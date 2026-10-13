@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { exportToExcel, downloadPDF, GenericTablePDF } from '../../lib/generateFile';
 import ListPage from './ListPage';
+import { useExercice } from '../../context/ExerciceContext';
 
 /* ─── Colonnes ────────────────────────────────────────────────────── */
 const COLUMNS = [
@@ -22,6 +23,7 @@ const formatBalance = (row) => {
 
 /* ─── Composant principal ─────────────────────────────────────────── */
 export default function ChartOfAccounts() {
+  const { selectedExerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
   const [rows,      setRows]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [notice,    setNotice]    = useState('');
@@ -39,9 +41,15 @@ export default function ChartOfAccounts() {
       setLoading(false);
       return undefined;
     }
+    if (exercicesLoading) return undefined;
+    if (!selectedExerciceId) { setRows([]); setLoading(false); return undefined; }
+    setLoading(true);
+    setRows([]);
+    setNotice('');
     supabase
       .from('comptes_comptables')
       .select('id,numero,libelle,classe,nature,actif,devise,solde_ouverture_debit,solde_ouverture_credit')
+      .eq('exercice_id', selectedExerciceId)
       .order('numero')
       .then(({ data, error }) => {
         if (!active) return;
@@ -64,7 +72,7 @@ export default function ChartOfAccounts() {
         setLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [selectedExerciceId, selectedExercice, exercicesLoading]);
 
   /* Valeurs uniques pour chaque filtre (calculées dynamiquement) */
   const uniqueValues = (key) =>
@@ -120,7 +128,7 @@ export default function ChartOfAccounts() {
   return (
     <ListPage
       title="Plan comptable"
-      subtitle="Gérez les comptes et la structure de votre plan comptable"
+      subtitle={`Plan comptable de l'exercice ${selectedExercice?.code || ''}`}
       primary="Nouveau compte"
       primaryPath="/nouveau-compte"
       columns={COLUMNS}

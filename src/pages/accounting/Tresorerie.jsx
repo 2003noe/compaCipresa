@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../../components/ui/Card';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const isCaisse = (numero) => (numero || '').startsWith('57');
@@ -8,6 +9,7 @@ const isCaisse = (numero) => (numero || '').startsWith('57');
 const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
 export default function Tresorerie() {
+  const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,20 +17,30 @@ export default function Tresorerie() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setLines([]); setLoading(false); return; }
+    setLoading(true);
+    setAccounts([]);
+    setLines([]);
+    setNotice('');
+    let active = true;
 
-    supabase.from('comptes_comptables').select('id,numero,libelle,solde_ouverture_debit,solde_ouverture_credit').eq('nature', 'TRESORERIE').order('numero').then(({ data: accs, error: accErr }) => {
+    supabase.from('comptes_comptables').select('id,numero,libelle,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).eq('nature', 'TRESORERIE').order('numero').then(({ data: accs, error: accErr }) => {
+      if (!active) return;
       if (accErr) { setNotice(`Impossible de charger les comptes de trésorerie : ${accErr.message}`); setLoading(false); return; }
       setAccounts(accs || []);
       const ids = (accs || []).map((a) => a.id);
       if (ids.length === 0) { setLoading(false); return; }
 
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables(date_ecriture,numero,libelle,statut)').in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,numero,libelle,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin).in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
+        if (!active) return;
         if (lnErr) { setNotice(`Impossible de charger les mouvements : ${lnErr.message}`); setLoading(false); return; }
         setLines((ln || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
         setLoading(false);
       });
     });
-  }, []);
+    return () => { active = false; };
+  }, [exerciceId, selectedExercice, exercicesLoading]);
 
   const accountBalances = useMemo(() => accounts.map((a) => {
     const base = Number(a.solde_ouverture_debit || 0) - Number(a.solde_ouverture_credit || 0);
@@ -57,10 +69,11 @@ export default function Tresorerie() {
     .slice(0, 10), [lines, accounts]);
 
   const monthlyFlows = useMemo(() => {
-    const now = new Date();
     const buckets = [];
-    for (let i = 5; i >= 0; i -= 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    if (!selectedExercice?.date_debut || !selectedExercice?.date_fin) return buckets;
+    const start = new Date(`${selectedExercice.date_debut}T00:00:00`);
+    const end = new Date(`${selectedExercice.date_fin}T00:00:00`);
+    for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d.setMonth(d.getMonth() + 1)) {
       buckets.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: MONTH_LABELS[d.getMonth()], entrees: 0, sorties: 0 });
     }
     lines.forEach((l) => {
@@ -73,7 +86,7 @@ export default function Tresorerie() {
       bucket.sorties += Number(l.credit || 0);
     });
     return buckets;
-  }, [lines]);
+  }, [lines, selectedExercice]);
 
   const maxFlow = Math.max(1, ...monthlyFlows.flatMap((b) => [b.entrees, b.sorties]));
 
@@ -82,7 +95,7 @@ export default function Tresorerie() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Suivi de Trésorerie</h1>
-          <p className="page-subtitle">Vue d'ensemble des disponibilités{loading ? ' · Chargement…' : ''}</p>
+          <p className="page-subtitle">Trésorerie de l'exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
       </div>
 
