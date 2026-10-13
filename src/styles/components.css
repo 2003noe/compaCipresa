@@ -1882,8 +1882,19 @@
     }
 }
 
+.balance-table {
+    width: 100%;
+    table-layout: fixed
+}
+
 .balance-table th {
-    white-space: nowrap
+    white-space: normal;
+    word-break: break-word
+}
+
+.balance-table td {
+    overflow-wrap: break-word;
+    word-break: break-word
 }
 
 .balance-table .text-center {
@@ -1944,7 +1955,7 @@
 
 .cr-kpis {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     margin-bottom: 16px
 }
@@ -1956,12 +1967,33 @@
 }
 
 .cr-kpis strong {
-    font-size: 22px
+    font-size: 18px
 }
 
 .cr-kpis small {
     color: var(--color-subtle);
     font-size: 11px
+}
+
+@media (max-width: 1200px) {
+    .cr-kpis {
+        grid-template-columns: repeat(3, 1fr)
+    }
+    .cr-kpis strong {
+        font-size: 16px
+    }
+}
+
+@media (max-width: 768px) {
+    .cr-kpis {
+        grid-template-columns: repeat(2, 1fr)
+    }
+}
+
+@media (max-width: 480px) {
+    .cr-kpis {
+        grid-template-columns: 1fr
+    }
 }
 
 .cr-section-title {
