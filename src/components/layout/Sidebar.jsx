@@ -7,9 +7,9 @@ const items = [
   ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
   ['/grand-livre', 'Grand livre', Book], ['/balance', 'Balance', Scale], ['/bilan', 'Bilan', FileText],
   ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet],
-  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings], ['/faq', 'Aide & FAQ', CircleHelp]
+  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
 ];
-
+const faqItem = ['/faq', 'FAQ', CircleHelp];
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
@@ -58,6 +58,9 @@ export default function Sidebar() {
       <div className="user-menu" ref={menuRef}>
         {isOpen && (
           <div className="user-dropdown" role="menu">
+            <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={() => navigate('/faq')}>
+              <CircleHelp size={16} /><span className="nav-label">{faqItem[1]}</span>
+            </NavLink>
             <button type="button" className="user-dropdown-item" onClick={() => navigate('/profil')}>
               <UserRound size={15} /> <span>Mon profil</span>
             </button>
