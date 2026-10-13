@@ -1800,6 +1800,12 @@
     color: #047857
 }
 
+.message.warning {
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    color: #92400e
+}
+
 .toolbar-search input {
     border: 0;
     outline: 0;

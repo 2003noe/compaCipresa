@@ -1,45 +1,72 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { TrendingUp, Wallet, FileText, Award, Scale } from "lucide-react";
-import Card from "../../components/ui/Card";
-import KpiCard from "../../components/accounting/KpiCard";
-import AccountingTable from "../../components/accounting/AccountingTable";
-import AlertCard from "../../components/accounting/AlertCard";
-import ChartCard from "../../components/accounting/ChartCard";
-import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
-import { useExercice } from "../../context/ExerciceContext";
-import { buildBilan } from "../../lib/bilan";
-import {
-  money,
-  dateFr,
-  CHARGE_PREFIX_LABEL,
-  MONTH_LABELS,
-  DONUT_COLORS,
-} from "../../lib/dashboard";
+import React, { useEffect, useMemo, useState } from 'react';
+import { Printer } from 'lucide-react';
+import Card from '../../components/ui/Card';
+import Select from '../../components/ui/Select';
+import Input from '../../components/ui/Input';
+import Button from '../../components/ui/Button';
+import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useExercice } from '../../context/ExerciceContext';
 
-const todayFr = () =>
-  new Date().toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const formatMoney = (val) => {
+  if (val === null || val === undefined || val === '') return '';
+  const num = Number(val);
+  if (isNaN(num) || num === 0) return '';
+  if (num < 0) return `- ${Math.abs(num).toLocaleString('fr-FR')}`;
+  return num.toLocaleString('fr-FR');
+};
 
-export default function Dashboard() {
-  const nav = useNavigate();
+const formatSolde = (val) => {
+  const num = Number(val || 0);
+  if (num === 0) return '0';
+  if (num < 0) return `- ${Math.abs(num).toLocaleString('fr-FR')}`;
+  return num.toLocaleString('fr-FR');
+};
+
+const formatDateShort = (isoStr) => {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}${month}${year}`;
+};
+
+const formatDateFull = (isoStr) => {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
+};
+
+const classNumber = (classeStr) => {
+  const match = /classe\s*(\d+)/i.exec(classeStr || '');
+  if (match) return Number(match[1]);
+  const firstDigit = (classeStr || '').trim()[0];
+  if (/\d/.test(firstDigit)) return Number(firstDigit);
+  return 99;
+};
+
+export default function GrandLivre() {
+  const [companyName, setCompanyName] = useState('CIPRESA SARL');
+  const devise = 'FCFA';
+  const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  
+  const [accounts, setAccounts] = useState([]);
+  const [rawLines, setRawLines] = useState([]);
+  
+  const [selectedAccountId, setSelectedAccountId] = useState('ALL');
+  const [selectedClasse, setSelectedClasse] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState("");
-  const { selectedExercice } = useExercice();
-  const [soldesBilan, setSoldesBilan] = useState(null);
-  const [comptes, setComptes] = useState([]);
-  const [lignesTout, setLignesTout] = useState([]);
-  const [recentes, setRecentes] = useState([]);
-  const [ecrituresLight, setEcrituresLight] = useState([]);
-  const [declarations, setDeclarations] = useState([]);
-  const [clotures, setClotures] = useState([]);
-  const [controlesCloture, setControlesCloture] = useState([]);
-  const [releveNonRapproche, setReleveNonRapproche] = useState([]);
-  const [profiles, setProfiles] = useState([]);
-  const [userRoles, setUserRoles] = useState([]);
+  const [notice, setNotice] = useState('');
+  const [printDate] = useState(new Date());
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -47,569 +74,607 @@ export default function Dashboard() {
       setLoading(false);
       return;
     }
+    if (exercicesLoading) return;
+    if (!exerciceId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
+    setLoading(true);
+    setAccounts([]);
+    setRawLines([]);
+    setNotice('');
+    let active = true;
 
     Promise.all([
-      supabase
-        .from("comptes_comptables")
-        .select(
-          "id,numero,libelle,nature,exercice_id,solde_ouverture_debit,solde_ouverture_credit",
-        ),
-      supabase
-        .from("lignes_ecritures")
-        .select(
-          "compte_id,debit,credit,ecritures_comptables(exercice_id,date_ecriture,statut)",
-        ),
-      supabase
-        .from("ecritures_comptables")
-        .select(
-          "id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures(debit,credit)",
-        )
-        .order("date_ecriture", { ascending: false })
-        .limit(8),
-      supabase
-        .from("ecritures_comptables")
-        .select("id,exercice_id,date_ecriture,statut"),
-      supabase
-        .from("declarations_tva")
-        .select("id,exercice_id,periode_libelle,statut,date_echeance"),
-      supabase
-        .from("clotures_comptables")
-        .select("id,exercice_id,periode,statut"),
-      supabase.from("controles_cloture").select("cloture_id,statut"),
-      supabase
-        .from("lignes_releve_bancaire")
-        .select("id,compte_id,rapproche")
-        .eq("rapproche", false),
-      supabase.from("profiles").select("id,nom,prenom,actif"),
-      supabase.from("user_roles").select("user_id"),
-    ]).then((results) => {
-      const errs = results.filter((r) => r.error);
-      if (errs.length) {
-        setNotice(
-          `Certaines données n'ont pas pu être chargées : ${errs[0].error.message}`,
-        );
+      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').or(`exercice_id.eq.${exerciceId},exercice_id.is.null`).order('numero'),
+      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
+    ]).then(([paramRes, acRes, lineRes]) => {
+      if (!active) return;
+      if (paramRes.data?.nom_entreprise) {
+        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
+      } else if (paramRes.data?.nom) {
+        setCompanyName(paramRes.data.nom.toUpperCase());
       }
-      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] =
-        results.map((r) => r.data || []);
-      setComptes(ac);
-      setLignesTout(
-        ln.filter((l) => l.ecritures_comptables?.statut === "VALIDEE"),
-      );
-      setRecentes(rec);
-      setEcrituresLight(ecl);
-      setDeclarations(decl);
-      setClotures(clo);
-      setControlesCloture(ctrl);
-      setReleveNonRapproche(releve);
-      setProfiles(prof);
-      setUserRoles(roles);
+
+      if (acRes.error || lineRes.error) {
+        setNotice(`Erreur : ${(acRes.error || lineRes.error).message}`);
+        setLoading(false);
+        return;
+      }
+
+      setAccounts(acRes.data || []);
+      setRawLines(lineRes.data || []);
       setLoading(false);
     });
-  }, []);
+    return () => { active = false; };
+  }, [exerciceId, selectedExercice, exercicesLoading]);
 
-  const previousExercice = null;
-
-  // --- Bilan (même source que la page Bilan : fonction SQL soldes_comptes) ---
+  // La période suit l'exercice choisi dans la topbar
   useEffect(() => {
-    if (!supabaseConfigured || !selectedExercice?.date_debut || !selectedExercice?.date_fin) {
-      setSoldesBilan(null);
-      return undefined;
-    }
-    let active = true;
-    setSoldesBilan(null);
-    supabase
-      .rpc("soldes_comptes", {
-        p_date_fin: selectedExercice.date_fin,
-        p_date_debut: selectedExercice.date_debut,
-      })
-      .then(({ data, error }) => {
-        if (!active) return;
-        setSoldesBilan(error ? null : data || []);
-      });
-    return () => {
-      active = false;
-    };
+    if (!selectedExercice) return;
+    if (selectedExercice.date_debut) setPeriodStart(selectedExercice.date_debut);
+    if (selectedExercice.date_fin) setPeriodEnd(selectedExercice.date_fin);
   }, [selectedExercice]);
 
-  const bilan = useMemo(
-    () => (soldesBilan ? buildBilan(soldesBilan) : null),
-    [soldesBilan],
-  );
-  const bilanEcart = bilan ? Math.abs(bilan.ecart) : 0;
-  const bilanEquilibre = bilanEcart < 1;
+  useEffect(() => {
+    setSelectedAccountId('ALL');
+    setSelectedClasse('ALL');
+  }, [exerciceId]);
 
-  const selectedLignes = useMemo(
-    () =>
-      lignesTout.filter(
-        (l) =>
-          selectedExercice &&
-          l.ecritures_comptables?.exercice_id === selectedExercice.id,
-      ),
-    [lignesTout, selectedExercice],
-  );
-  const selectedRecentes = useMemo(
-    () =>
-      recentes.filter(
-        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
-      ),
-    [recentes, selectedExercice],
-  );
-  const selectedEcrituresLight = useMemo(
-    () =>
-      ecrituresLight.filter(
-        (e) => selectedExercice && e.exercice_id === selectedExercice.id,
-      ),
-    [ecrituresLight, selectedExercice],
-  );
-  const selectedDeclarations = useMemo(
-    () =>
-      declarations.filter(
-        (d) => selectedExercice && d.exercice_id === selectedExercice.id,
-      ),
-    [declarations, selectedExercice],
-  );
-  const selectedClotures = useMemo(
-    () =>
-      clotures.filter(
-        (c) => selectedExercice && c.exercice_id === selectedExercice.id,
-      ),
-    [clotures, selectedExercice],
+  const hasUnassignedOpeningBalance = useMemo(
+    () => accounts.some((account) => !account.exercice_id
+      && (Number(account.solde_ouverture_debit || 0) !== 0 || Number(account.solde_ouverture_credit || 0) !== 0)),
+    [accounts],
   );
 
-  const comptesExercice = useMemo(
-    () => comptes.filter((c) => selectedExercice && c.exercice_id === selectedExercice.id),
-    [comptes, selectedExercice],
-  );
-  const releveExercice = useMemo(
-    () => releveNonRapproche.filter((r) => comptesExercice.some((c) => c.id === r.compte_id)),
-    [releveNonRapproche, comptesExercice],
-  );
+  const classesList = useMemo(() => {
+    const set = new Set(accounts.map((a) => a.classe).filter(Boolean));
+    return Array.from(set).sort((a, b) => classNumber(a) - classNumber(b));
+  }, [accounts]);
 
-  // --- Trésorerie (cumulée, toutes périodes — cohérent avec la page Trésorerie) ---
-  const comptesTresorerie = useMemo(
-    () => comptesExercice.filter((c) => c.nature === "TRESORERIE"),
-    [comptesExercice],
-  );
-  const soldeTresorerie = useMemo(
-    () =>
-      comptesTresorerie.reduce((acc, a) => {
-        const base =
-          Number(a.solde_ouverture_debit || 0) -
-          Number(a.solde_ouverture_credit || 0);
-        const mvt = selectedLignes
-          .filter((l) => l.compte_id === a.id)
-          .reduce(
-            (s, l) => s + Number(l.debit || 0) - Number(l.credit || 0),
-            0,
-          );
-        return acc + base + mvt;
-      }, 0),
-    [comptesTresorerie, selectedLignes],
-  );
+  // Compute transactions and totals per account
+  const ledgerData = useMemo(() => {
+    const accMap = {};
 
-  const now = new Date();
-  const moisCourantKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const deltaTresorerieMois = useMemo(
-    () =>
-      selectedLignes
-        .filter(
-          (l) =>
-            comptesTresorerie.some((a) => a.id === l.compte_id) &&
-            l.ecritures_comptables?.date_ecriture?.slice(0, 7) ===
-              moisCourantKey,
-        )
-        .reduce((s, l) => s + Number(l.debit || 0) - Number(l.credit || 0), 0),
-    [selectedLignes, comptesTresorerie, moisCourantKey],
-  );
+    accounts.forEach((acc) => {
+      // Legacy/shared accounts have no exercise-specific opening balance.
+      const openingBelongsToExercise = acc.exercice_id === exerciceId;
+      const initDebit = openingBelongsToExercise ? Number(acc.solde_ouverture_debit || 0) : 0;
+      const initCredit = openingBelongsToExercise ? Number(acc.solde_ouverture_credit || 0) : 0;
 
-  // --- CA & résultat net (exercice courant, logique identique à la page Compte de résultat) ---
-  const periodNet = (compteId, start, end) => {
-    if (!start || !end) return 0;
-    return selectedLignes
-      .filter(
-        (l) =>
-          l.compte_id === compteId &&
-          l.ecritures_comptables.date_ecriture >= start &&
-          l.ecritures_comptables.date_ecriture <= end,
-      )
-      .reduce(
-        (acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0),
-        0,
-      );
+      accMap[acc.id] = {
+        account: acc,
+        initialDebit: initDebit,
+        initialCredit: initCredit,
+        beforeDebit: 0,
+        beforeCredit: 0,
+        movements: [],
+      };
+    });
+
+    rawLines.forEach((line) => {
+      const ecrit = line.ecritures_comptables;
+      if (!ecrit || ecrit.statut !== 'VALIDEE') return;
+      if (exerciceId && ecrit.exercice_id !== exerciceId) return;
+
+      const accObj = accMap[line.compte_id];
+      if (!accObj) return;
+
+      const dateStr = ecrit.date_ecriture;
+      const debitVal = Number(line.debit || 0);
+      const creditVal = Number(line.credit || 0);
+
+      if (dateStr < periodStart) {
+        accObj.beforeDebit += debitVal;
+        accObj.beforeCredit += creditVal;
+      } else if (dateStr <= periodEnd) {
+        accObj.movements.push({
+          id: line.id,
+          date: dateStr,
+          journal: ecrit.journaux?.code || 'OD',
+          piece: ecrit.numero || '1',
+          libelle: ecrit.libelle || '—',
+          debit: debitVal,
+          credit: creditVal,
+        });
+      }
+    });
+
+    const resultList = [];
+    let globalDebitSum = 0;
+    let globalCreditSum = 0;
+
+    accounts.forEach((acc) => {
+      const accObj = accMap[acc.id];
+      if (!accObj) return;
+
+      // Filter by selection criteria
+      if (selectedAccountId !== 'ALL' && acc.id !== selectedAccountId) return;
+      if (selectedClasse !== 'ALL' && acc.classe !== selectedClasse) return;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchNum = acc.numero.toLowerCase().includes(q);
+        const matchLib = acc.libelle.toLowerCase().includes(q);
+        if (!matchNum && !matchLib) return;
+      }
+
+      // Calculate starting balance
+      const startDebit = accObj.initialDebit + accObj.beforeDebit;
+      const startCredit = accObj.initialCredit + accObj.beforeCredit;
+      const startNet = startDebit - startCredit;
+
+      // Sort movements chronologically
+      accObj.movements.sort((a, b) => a.date.localeCompare(b.date) || a.piece.localeCompare(b.piece) || a.id.localeCompare(b.id));
+
+      // Build movement rows with running balance
+      let runningBalance = startNet;
+      let accountTotalDebit = 0;
+      let accountTotalCredit = 0;
+
+      const rows = [];
+
+      // Add Bilan d'ouverture line if starting balance is not 0
+      if (startNet !== 0 || accObj.movements.length === 0) {
+        const openingDebit = startNet > 0 ? startNet : 0;
+        const openingCredit = startNet < 0 ? Math.abs(startNet) : 0;
+
+        rows.push({
+          isOpening: true,
+          dateShort: formatDateShort(periodStart),
+          journal: 'JOD',
+          piece: '1',
+          libelle: "Solde antérieur / à-nouveau",
+          lettrage: '',
+          debit: openingDebit,
+          credit: openingCredit,
+          runningBalance: runningBalance,
+        });
+      }
+
+      accObj.movements.forEach((m) => {
+        runningBalance += m.debit - m.credit;
+        accountTotalDebit += m.debit;
+        accountTotalCredit += m.credit;
+
+        rows.push({
+          isOpening: false,
+          dateShort: formatDateShort(m.date),
+          journal: m.journal,
+          piece: m.piece,
+          libelle: m.libelle,
+          lettrage: '',
+          debit: m.debit,
+          credit: m.credit,
+          runningBalance: runningBalance,
+        });
+      });
+
+      // Keep accounts that have movements or non-zero balance
+      if (rows.length > 0 || startNet !== 0) {
+        globalDebitSum += accountTotalDebit;
+        globalCreditSum += accountTotalCredit;
+
+        resultList.push({
+          account: acc,
+          rows: rows,
+          totalDebit: accountTotalDebit,
+          totalCredit: accountTotalCredit,
+          finalBalance: runningBalance,
+        });
+      }
+    });
+
+    const globalNetBalance = globalDebitSum - globalCreditSum;
+
+    return {
+      accounts: resultList,
+      globalDebitSum,
+      globalCreditSum,
+      globalNetBalance,
+    };
+  }, [accounts, rawLines, exerciceId, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
+
+  const handlePrint = () => {
+    window.print();
   };
 
-  const crRows = useMemo(
-    () =>
-      comptesExercice
-        .filter((a) => a.nature === "CHARGE" || a.nature === "PRODUIT")
-        .map((a) => {
-          const rawN = periodNet(
-            a.id,
-            selectedExercice?.date_debut,
-            selectedExercice?.date_fin,
-          );
-          const rawN1 = previousExercice
-            ? periodNet(
-                a.id,
-                previousExercice.date_debut,
-                previousExercice.date_fin,
-              )
-            : null;
-          const sign = a.nature === "CHARGE" ? 1 : -1;
-          return {
-            ...a,
-            valueN: rawN * sign,
-            valueN1: rawN1 === null ? null : rawN1 * sign,
-          };
-        }),
-    [comptesExercice, selectedLignes, selectedExercice, previousExercice],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const produitsExploit = crRows.filter(
-    (r) => r.nature === "PRODUIT" && !r.numero.startsWith("77"),
-  );
-  const chargesExploit = crRows.filter(
-    (r) => r.nature === "CHARGE" && !r.numero.startsWith("67"),
-  );
-  const produitsFin = crRows.filter(
-    (r) => r.nature === "PRODUIT" && r.numero.startsWith("77"),
-  );
-  const chargesFin = crRows.filter(
-    (r) => r.nature === "CHARGE" && r.numero.startsWith("67"),
-  );
-  const sum = (list, key = "valueN") =>
-    list.reduce((acc, r) => acc + Number(r[key] || 0), 0);
-
-  const caN = sum(produitsExploit);
-  const caN1 = sum(produitsExploit, "valueN1");
-  const resultatExploitN = caN - sum(chargesExploit);
-  const resultatExploitN1 = caN1 - sum(chargesExploit, "valueN1");
-  const resultatNetN = resultatExploitN + sum(produitsFin) - sum(chargesFin);
-  const resultatNetN1 =
-    resultatExploitN1 +
-    sum(produitsFin, "valueN1") -
-    sum(chargesFin, "valueN1");
-
-  const pctChange = (n, n1) =>
-    previousExercice && n1 ? ((n - n1) / Math.abs(n1)) * 100 : null;
-  const caPct = pctChange(caN, caN1);
-  const resultatPct = pctChange(resultatNetN, resultatNetN1);
-
-  // --- Écritures ---
-  const ecrituresCeMois = selectedEcrituresLight.filter(
-    (e) => e.date_ecriture?.slice(0, 7) === moisCourantKey,
-  ).length;
-  const ecrituresBrouillon = selectedEcrituresLight.filter(
-    (e) => e.statut === "BROUILLON",
-  ).length;
-
-  // --- Répartition des charges (donut, exercice courant) ---
-  const donutData = useMemo(() => {
-    const groups = {};
-    chargesExploit.forEach((r) => {
-      const prefix = r.numero.slice(0, 2);
-      groups[prefix] = (groups[prefix] || 0) + Number(r.valueN || 0);
-    });
-    const entries = Object.entries(groups)
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1]);
-    const total = entries.reduce((a, [, v]) => a + v, 0);
-    const top = entries.slice(0, 4);
-    const autres = entries.slice(4).reduce((a, [, v]) => a + v, 0);
-    const items = [
-      ...top.map(([k, v]) => ({
-        label: CHARGE_PREFIX_LABEL[k] || `Classe ${k}`,
-        value: v,
-      })),
-      ...(autres > 0 ? [{ label: "Autres", value: autres }] : []),
-    ];
-    return { items, total };
-  }, [chargesExploit]);
-
-  let cumPct = 0;
-  const gradientStops = donutData.items.map((it, i) => {
-    const pct = donutData.total > 0 ? (it.value / donutData.total) * 100 : 0;
-    const start = cumPct;
-    cumPct += pct;
-    return `${DONUT_COLORS[i % DONUT_COLORS.length]} ${start.toFixed(1)}% ${cumPct.toFixed(1)}%`;
-  });
-
-  // --- Flux de trésorerie 12 mois (entrées/sorties réelles) ---
-  const monthlyFlows = useMemo(() => {
-    const buckets = [];
-    if (!selectedExercice?.date_debut || !selectedExercice?.date_fin) return buckets;
-    const start = new Date(`${selectedExercice.date_debut}T00:00:00`);
-    const end = new Date(`${selectedExercice.date_fin}T00:00:00`);
-    for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d.setMonth(d.getMonth() + 1)) {
-      buckets.push({
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-        label: MONTH_LABELS[d.getMonth()],
-        entrees: 0,
-        sorties: 0,
-      });
-    }
-    selectedLignes
-      .filter((l) => comptesTresorerie.some((a) => a.id === l.compte_id))
-      .forEach((l) => {
-        const key = l.ecritures_comptables?.date_ecriture?.slice(0, 7);
-        const bucket = buckets.find((b) => b.key === key);
-        if (!bucket) return;
-        bucket.entrees += Number(l.debit || 0);
-        bucket.sorties += Number(l.credit || 0);
-      });
-    return buckets;
-  }, [selectedLignes, comptesTresorerie, selectedExercice]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // --- Alertes réelles ---
-  const comptesMap = useMemo(
-    () => Object.fromEntries(comptesExercice.map((c) => [c.id, c])),
-    [comptesExercice],
-  );
-  const clotureProgress = useMemo(() => {
-    const map = {};
-    controlesCloture.forEach((c) => {
-      map[c.cloture_id] = map[c.cloture_id] || { total: 0, faits: 0 };
-      map[c.cloture_id].total += 1;
-      if (c.statut !== "A_FAIRE") map[c.cloture_id].faits += 1;
-    });
-    return map;
-  }, [controlesCloture]);
-  const rolesUserIds = useMemo(
-    () => new Set(userRoles.map((r) => r.user_id)),
-    [userRoles],
-  );
-
-  const alerts = useMemo(() => {
-    const items = [];
-    selectedClotures
-      .filter((c) => c.statut !== "CLOTUREE")
-      .slice(0, 2)
-      .forEach((c) => {
-        const p = clotureProgress[c.id] || { total: 0, faits: 0 };
-        items.push({
-          key: `clot-${c.id}`,
-          tone: "warning",
-          text: `Clôture ${c.periode} en cours (${p.faits}/${p.total} contrôles)`,
-          onClick: () => nav(`/clotures/${c.id}`),
-        });
-      });
-    if (releveExercice.length > 0) {
-      const parCompte = {};
-      releveExercice.forEach((r) => {
-        parCompte[r.compte_id] = (parCompte[r.compte_id] || 0) + 1;
-      });
-      Object.entries(parCompte)
-        .slice(0, 2)
-        .forEach(([compteId, n]) => {
-          items.push({
-            key: `rappro-${compteId}`,
-            tone: "warning",
-            text: `${n} ligne(s) de relevé en attente — ${comptesMap[compteId]?.libelle || "compte de trésorerie"}`,
-            onClick: () => nav("/tresorerie"),
-          });
-        });
-    }
-    items.push({
-      key: "inventaire-check",
-      tone: "info",
-      text: "Livre d'inventaire patrimonial prêt pour consultation et arrêté",
-      onClick: () => nav("/livre-inventaire"),
-    });
-    if (ecrituresBrouillon > 0)
-      items.push({
-        key: "brouillons",
-        tone: "info",
-        text: `${ecrituresBrouillon} écriture(s) en brouillon à valider`,
-        onClick: () => nav("/journal"),
-      });
-    const sansRole = profiles.filter(
-      (p) => p.actif && !rolesUserIds.has(p.id),
-    ).length;
-    if (sansRole > 0)
-      items.push({
-        key: "roles",
-        tone: "info",
-        text: `${sansRole} utilisateur(s) actif(s) sans rôle assigné`,
-        onClick: () => nav("/configuration"),
-      });
-    return items.slice(0, 6);
-  }, [
-    selectedClotures,
-    clotureProgress,
-    releveExercice,
-    comptesMap,
-    ecrituresBrouillon,
-    profiles,
-    rolesUserIds,
-    nav,
-  ]);
-
-  // --- Table écritures récentes ---
-  const recentRows = useMemo(
-    () =>
-      selectedRecentes.map((e) => {
-        const debit = (e.lignes_ecritures || []).reduce(
-          (a, l) => a + Number(l.debit || 0),
-          0,
-        );
-        const credit = (e.lignes_ecritures || []).reduce(
-          (a, l) => a + Number(l.credit || 0),
-          0,
-        );
-        return {
-          id: e.id,
-          date: e.date_ecriture
-            ? new Date(e.date_ecriture).toLocaleDateString("fr-FR")
-            : "—",
-          ref: e.reference_piece || e.numero,
-          description: e.libelle,
-          debit: money(debit),
-          credit: money(credit),
-          status: e.statut === "VALIDEE" ? "Validée" : "Brouillon",
-          statusTone: e.statut === "VALIDEE" ? "success" : "warning",
-        };
-      }),
-    [selectedRecentes],
-  );
-
   return (
-    <div className="page-content ">
-      <div className="page-header">
+    <div className="page-content sage-grand-livre-page">
+      {/* Control Toolbar (Hidden when printing) */}
+      <div className="page-header no-print">
         <div>
-          <h1 className="page-title">Tableau de bord</h1>
-          <p className="page-subtitle">
-            Vue d'ensemble de votre activité comptable
-            {selectedExercice
-              ? ` · Exercice ${selectedExercice.code || selectedExercice.annee}`
-              : ""}
-            {loading ? " · Chargement…" : ""}
-          </p>
+          <h1 className="page-title">Grand-livre des comptes</h1>
+          <p className="page-subtitle">Format réglementaire SYSCOHADA / Sage 100 Comptabilité</p>
         </div>
-        <div className="dashboard-date">Dernière mise à jour : {todayFr()}</div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
+          <Button icon={Printer} onClick={handlePrint}>
+            Imprimer le Grand-Livre
+          </Button>
+        </div>
       </div>
 
-      {notice && (
-        <div className="message error" role="alert">
-          {notice}
+      <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
+        <div className="grid grid-4" style={{ gap: '12px' }}>
+          <Input label="Période du" type="date" min={selectedExercice?.date_debut} max={periodEnd || selectedExercice?.date_fin} value={periodStart} onChange={(e) => {
+            const nextStart = e.target.value;
+            setPeriodStart(nextStart);
+            if (periodEnd && nextStart > periodEnd) setPeriodEnd(nextStart);
+          }} />
+          <Input label="au" type="date" min={periodStart || selectedExercice?.date_debut} max={selectedExercice?.date_fin} value={periodEnd} onChange={(e) => {
+            const nextEnd = e.target.value;
+            setPeriodEnd(nextEnd);
+            if (periodStart && nextEnd < periodStart) setPeriodStart(nextEnd);
+          }} />
+          <Select label="Filtrer par classe" value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>
+            <option value="ALL">Toutes les classes</option>
+            {classesList.map((cls) => (
+              <option key={cls} value={cls}>
+                {cls}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="grid grid-2" style={{ marginTop: '12px', gap: '12px' }}>
+          <Select label="Compte spécifique" value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}>
+            <option value="ALL">Tous les comptes</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.numero} - {a.libelle}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Rechercher écriture / compte"
+            placeholder="N° compte ou libellé..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </Card>
+
+      {notice && <div className="message error no-print">{notice}</div>}
+
+      {hasUnassignedOpeningBalance && (
+        <div className="message warning no-print" role="status">
+          Certains comptes partagés (sans exercice associé) ont un solde d’ouverture qui ne peut pas être attribué à cet exercice. Le Grand Livre affiche leurs mouvements de l’exercice sélectionné, mais ignore ces soldes d’ouverture non datés. Rattachez ou reprenez ces soldes pour fiabiliser les à-nouveaux.
         </div>
       )}
 
-      <div className="grid grid-5">
-        <KpiCard
-          label="Trésorerie"
-          value={`${money(soldeTresorerie)} FCFA`}
-          icon={Wallet}
-          onClick={() => nav("/tresorerie")}
-          deltaLabel={`${deltaTresorerieMois >= 0 ? "+" : ""}${money(deltaTresorerieMois)} FCFA ce mois`}
-          trend={deltaTresorerieMois >= 0 ? "up" : "down"}
-        />
-        <KpiCard
-          label="Chiffre d'affaires"
-          value={`${money(caN)} FCFA`}
-          icon={TrendingUp}
-          onClick={() => nav("/compte-resultat")}
-          deltaLabel={
-            caPct === null
-              ? "Pas de comparaison N-1"
-              : `${caPct >= 0 ? "+" : ""}${caPct.toFixed(1)}% vs N-1`
-          }
-          trend={caPct === null ? "neutral" : caPct >= 0 ? "up" : "down"}
-        />
-        <KpiCard
-          label="Résultat net"
-          value={`${money(resultatNetN)} FCFA`}
-          icon={Award}
-          onClick={() => nav("/compte-resultat")}
-          deltaLabel={
-            resultatPct === null
-              ? "Pas de comparaison N-1"
-              : `${resultatPct >= 0 ? "+" : ""}${resultatPct.toFixed(1)}% vs N-1`
-          }
-          trend={
-            resultatPct === null ? "neutral" : resultatPct >= 0 ? "up" : "down"
-          }
-        />
-        <KpiCard
-          label="Bilan"
-          value={bilan ? `${money(Math.round(bilan.totals.actif))} FCFA` : "-"}
-          icon={Scale}
-          onClick={() => nav("/bilan")}
-          deltaLabel={
-            !bilan
-              ? "Total actif"
-              : bilanEquilibre
-                ? "Total actif · équilibré"
-                : `Écart actif/passif : ${money(Math.round(bilanEcart))} FCFA`
-          }
-          trend={!bilan ? "neutral" : bilanEquilibre ? "up" : "down"}
-        />
-        <KpiCard
-          label="Écritures"
-          value={String(ecrituresLight.length)}
-          icon={FileText}
-          onClick={() => nav("/journal")}
-          deltaLabel={`${ecrituresCeMois} ce mois-ci`}
-          trend="neutral"
-        />
-      </div>
+      {/* SAGE 100 / SYSCOHADA GRAND-LIVRE DOCUMENT CONTAINER */}
+      <div className="sage-gl-document">
+        {/* Document Header Box */}
+        <div className="sage-gl-header-box">
+          <div className="sage-gl-header-row top-row">
+            <div className="company-name">{companyName}</div>
+            <div className="document-title-center">
+              <h2>Grand-livre des comptes</h2>
+              <div className="sub-type">{selectedExercice ? `Exercice ${selectedExercice.code || selectedExercice.annee}` : 'Aucun exercice sélectionné'}</div>
+            </div>
+            <div className="period-info">
+              <div>Période du &nbsp; <strong>{formatDateFull(periodStart)}</strong></div>
+              <div>au &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>{formatDateFull(periodEnd)}</strong></div>
+              <div>Tenue de compte : <strong>{devise}</strong></div>
+            </div>
+          </div>
 
-      <div className="grid grid-2 dashboard-middle">
-        <ChartCard data={monthlyFlows} />
-        <Card className="summary-card">
-          <div className="card-heading">
+          <div className="sage-gl-header-row sub-row">
+            <div>Sage 100 Comptabilité 15.01</div>
             <div>
-              <h2>Répartition des charges</h2>
-              <p>
-                Exercice{" "}
-                {selectedExercice?.code ||
-                  selectedExercice?.annee ||
-                  "en cours"}
-              </p>
+              Date de tirage &nbsp; {printDate.toLocaleDateString('fr-FR')} &nbsp;&nbsp;&nbsp;&nbsp; à &nbsp; {printDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </div>
+            <div>Page : 1</div>
           </div>
-          <div className="donut-wrap">
-            <div
-              className="donut"
-              style={
-                donutData.total > 0
-                  ? { background: `conic-gradient(${gradientStops.join(",")})` }
-                  : undefined
-              }
-            >
-              <div>
-                <b>{(donutData.total / 1000000).toFixed(1)}M</b>
-                <span>Total</span>
-              </div>
-            </div>
-            <div className="legend">
-              {donutData.items.map((it, i) => (
-                <span key={it.label}>
-                  <i
-                    style={{
-                      background: DONUT_COLORS[i % DONUT_COLORS.length],
-                    }}
-                  />
-                  {it.label}{" "}
-                  <b>
-                    {donutData.total > 0
-                      ? Math.round((it.value / donutData.total) * 100)
-                      : 0}
-                    %
-                  </b>
-                </span>
-              ))}
-              {donutData.items.length === 0 && (
-                <span>Aucune charge d'exploitation sur la période.</span>
-              )}
-            </div>
-          </div>
-        </Card>
+        </div>
+
+        {/* Main Document Table */}
+        <table className="sage-gl-table">
+          <thead>
+            <tr>
+              <th className="col-date">Date</th>
+              <th className="col-cj">C.j</th>
+              <th className="col-piece">N° pièce</th>
+              <th className="col-libelle">Libellé écriture</th>
+              <th className="col-let">Let</th>
+              <th className="col-debit">Mouvement débit</th>
+              <th className="col-credit">Mouvement crédit</th>
+              <th className="col-solde">Solde progressif</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={8} className="text-center" style={{ padding: '40px' }}>
+                  Chargement des données du Grand-Livre...
+                </td>
+              </tr>
+            ) : ledgerData.accounts.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="text-center" style={{ padding: '40px' }}>
+                  Aucune écriture trouvée pour les critères de recherche.
+                </td>
+              </tr>
+            ) : (
+              ledgerData.accounts.map(({ account, rows, totalDebit, totalCredit, finalBalance }) => (
+                <React.Fragment key={account.id}>
+                  {/* Account Header Line */}
+                  <tr className="sage-gl-account-header-row">
+                    <td colSpan={8} className="sage-gl-account-header-cell">
+                      <span className="acc-num">{account.numero}</span>
+                      <span className="acc-label">{account.libelle}</span>
+                    </td>
+                  </tr>
+
+                  {/* Transaction Lines */}
+                  {rows.map((r, idx) => (
+                    <tr key={idx} className="sage-gl-entry-row">
+                      <td className="col-date">{r.dateShort}</td>
+                      <td className="col-cj">{r.journal}</td>
+                      <td className="col-piece">{r.piece}</td>
+                      <td className="col-libelle">{r.libelle}</td>
+                      <td className="col-let">{r.lettrage}</td>
+                      <td className="col-debit">{formatMoney(r.debit)}</td>
+                      <td className="col-credit">{formatMoney(r.credit)}</td>
+                      <td className="col-solde">{formatSolde(r.runningBalance)}</td>
+                    </tr>
+                  ))}
+
+                  {/* Account Subtotal Line */}
+                  <tr className="sage-gl-account-total-row">
+                    <td colSpan={5} className="sage-gl-total-label-cell">
+                      Total compte {account.numero} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; du {formatDateShort(periodStart)} &nbsp;&nbsp;&nbsp;&nbsp; au {formatDateShort(periodEnd)}
+                    </td>
+                    <td className="col-debit">{formatMoney(totalDebit)}</td>
+                    <td className="col-credit">{formatMoney(totalCredit)}</td>
+                    <td className="col-solde">{formatSolde(finalBalance)}</td>
+                  </tr>
+                </React.Fragment>
+              ))
+            )}
+
+            {/* Document Grand Total / A Reporter Line */}
+            {ledgerData.accounts.length > 0 && (
+              <tr className="sage-gl-grand-total-row">
+                <td colSpan={5} className="sage-gl-reporter-cell">
+                  A reporter
+                </td>
+                <td className="col-debit">{formatMoney(ledgerData.globalDebitSum)}</td>
+                <td className="col-credit">{formatMoney(ledgerData.globalCreditSum)}</td>
+                <td className="col-solde">{formatSolde(ledgerData.globalNetBalance)}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
-      <div className="grid dashboard-bottom">
-        <AccountingTable rows={recentRows} onSeeAll={() => nav("/journal")} />
-        <AlertCard items={alerts} />
-      </div>
+      {/* Embedded CSS for Exact Sage 100 Pixel-Perfect Styling & Print Layout */}
+      {/* Embedded CSS matching CompaCipresa Design System & Print Layout */}
+      <style>{`
+        .sage-grand-livre-page {
+          font-family: inherit;
+          color: var(--color-text, #0f172a);
+        }
+
+        .sage-gl-document {
+          background: var(--color-surface, #ffffff);
+          border: 1px solid var(--color-border, #cbd5e1);
+          border-radius: var(--radius-lg, 12px);
+          padding: 16px;
+          margin: 0 auto;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+          max-width: 100%;
+        }
+
+        .sage-gl-header-box {
+          border: 1px solid var(--color-border, #cbd5e1);
+          border-radius: 8px;
+          margin-bottom: 16px;
+          overflow: hidden;
+          background: var(--color-surface-muted, #f8fafc);
+        }
+
+        .sage-gl-header-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 16px;
+        }
+
+        .sage-gl-header-row.top-row {
+          border-bottom: 1px solid var(--color-border, #e2e8f0);
+        }
+
+        .sage-gl-header-row .company-name {
+          font-weight: 700;
+          font-size: 16px;
+          color: var(--color-primary, #0d9488);
+          width: 30%;
+        }
+
+        .sage-gl-header-row .document-title-center {
+          text-align: center;
+          width: 40%;
+        }
+
+        .sage-gl-header-row .document-title-center h2 {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          color: var(--color-text, #0f172a);
+        }
+
+        .sage-gl-header-row .document-title-center .sub-type {
+          font-size: 13px;
+          margin-top: 2px;
+          color: var(--color-muted, #64748b);
+          font-weight: 500;
+        }
+
+        .sage-gl-header-row .period-info {
+          font-size: 12px;
+          text-align: right;
+          width: 30%;
+          line-height: 1.5;
+          color: var(--color-text, #334155);
+        }
+
+        .sage-gl-header-row.sub-row {
+          font-size: 12px;
+          background: var(--color-surface, #ffffff);
+          color: var(--color-muted, #64748b);
+          border-top: 1px solid var(--color-border, #f1f5f9);
+        }
+
+        .sage-gl-table {
+          width: 100%;
+          table-layout: fixed;
+          border-collapse: collapse;
+          font-size: 13px;
+          border: 1px solid var(--color-border, #cbd5e1);
+          border-radius: 8px;
+          overflow: hidden;
+        }
+
+        .sage-gl-table th, .sage-gl-table td {
+          border: 1px solid var(--color-border, #e2e8f0);
+          padding: 8px 6px;
+          box-sizing: border-box;
+        }
+
+        .sage-gl-table th {
+          background-color: var(--color-surface-muted, #f1f5f9);
+          color: var(--color-text, #0f172a);
+          font-weight: 700;
+          text-align: center;
+          padding: 10px 6px;
+        }
+
+        .col-date { width: 9%; text-align: center; }
+        .col-cj { width: 7%; text-align: center; font-weight: 600; color: var(--color-muted, #64748b); }
+        .col-piece { width: 12%; text-align: center; word-break: break-all; }
+        .col-libelle { width: 32%; text-align: left; word-break: break-word; }
+        .col-let { width: 5%; text-align: center; }
+        .col-debit { width: 11%; text-align: right; white-space: nowrap; }
+        .col-credit { width: 11%; text-align: right; white-space: nowrap; }
+        .col-solde { width: 13%; text-align: right; white-space: nowrap; font-weight: 600; }
+
+        .sage-gl-account-header-row {
+          background-color: rgba(13, 148, 136, 0.05);
+        }
+
+        .sage-gl-account-header-cell {
+          font-weight: 700;
+          font-size: 14px;
+          color: var(--color-primary-dark, #0f766e);
+          padding: 10px 12px !important;
+          border-bottom: 1px solid var(--color-border, #e2e8f0) !important;
+        }
+
+        .sage-gl-account-header-cell .acc-num {
+          display: inline-block;
+          width: 110px;
+          font-weight: 800;
+          color: var(--color-primary, #0d9488);
+        }
+
+        .sage-gl-account-header-cell .acc-label {
+          display: inline-block;
+        }
+
+        .sage-gl-entry-row td {
+          padding-top: 6px;
+          padding-bottom: 6px;
+        }
+
+        .sage-gl-account-total-row td {
+          font-weight: 700;
+          background-color: var(--color-surface-muted, #f8fafc);
+          border-top: 1px solid var(--color-border, #cbd5e1) !important;
+          border-bottom: 2px solid var(--color-border, #cbd5e1) !important;
+          padding: 8px 10px;
+        }
+
+        .sage-gl-total-label-cell {
+          text-align: left;
+          padding-left: 20px !important;
+          color: var(--color-text, #0f172a);
+        }
+
+        .sage-gl-grand-total-row td {
+          font-weight: 800;
+          font-size: 14px;
+          border-top: 2px solid var(--color-primary, #0d9488) !important;
+          border-bottom: 2px solid var(--color-primary, #0d9488) !important;
+          background-color: #ecfdf5;
+          color: #065f46;
+          padding: 12px 10px;
+        }
+
+        .sage-gl-reporter-cell {
+          text-align: right;
+          padding-right: 20px !important;
+          font-size: 14px;
+        }
+
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 8mm 8mm 8mm;
+          }
+          html, body, #root, .app-layout, .main-content, .page-content, .sage-grand-livre-page {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+          }
+          .no-print, .sidebar, header, .app-header, nav {
+            display: none !important;
+          }
+          .sage-gl-document {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+          }
+          .sage-gl-header-box {
+            width: 100% !important;
+            border: 1px solid #000000 !important;
+            border-radius: 0 !important;
+            margin-bottom: 8px !important;
+          }
+          .sage-gl-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border: 1px solid #000000 !important;
+            border-radius: 0 !important;
+          }
+          .sage-gl-table th, .sage-gl-table td {
+            border: 1px solid #000000 !important;
+            padding: 4px 5px !important;
+            font-size: 10px !important;
+          }
+          .sage-gl-account-header-row td {
+            background-color: #f1f5f9 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sage-gl-account-total-row td, .sage-gl-grand-total-row td {
+            background-color: #f8fafc !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          tr {
+            page-break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
