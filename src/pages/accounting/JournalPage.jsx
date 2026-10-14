@@ -1,8 +1,9 @@
 // src/pages/accounting/JournalPage.jsx
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Edit2, Trash2, FileText } from 'lucide-react';
+import { Edit2, Trash2, FileText, Download, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -295,6 +296,45 @@ export default function JournalPage() {
     setOrder('desc');
   };
 
+  // Export Excel
+  const handleExportXLSX = () => {
+    const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
+    const dataToExport = filteredValidees.map((r) => ({
+      'Date': r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—',
+      'Journal': r.journal,
+      'Référence': r.ref,
+      'Description': r.description,
+      'Débit (FCFA)': r.debitValue,
+      'Crédit (FCFA)': r.creditValue,
+      'Statut': r.status,
+    }));
+
+    // Ligne de total
+    dataToExport.push({
+      'Date': '',
+      'Journal': '',
+      'Référence': '',
+      'Description': `TOTAL (${filteredValidees.length} écriture(s))`,
+      'Débit (FCFA)': totalsValidees.debit,
+      'Crédit (FCFA)': totalsValidees.credit,
+      'Statut': equilibre ? 'Équilibré ✓' : 'Écart détecté',
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    // Largeurs de colonnes
+    worksheet['!cols'] = [
+      { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 40 },
+      { wch: 16 }, { wch: 16 }, { wch: 12 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Journal');
+    const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
+    XLSX.writeFile(workbook, `Journal_comptable_${suffix}.xlsx`);
+  };
+
+  // Impression / PDF via le navigateur
+  const handlePrint = () => window.print();
+
   // Rendu des tableaux
   const renderHead = (withActions) => (
     <thead>
@@ -345,12 +385,52 @@ export default function JournalPage() {
 
   return (
     <div className="page-content">
-      <div className="page-header">
+      <div className="page-header no-print">
         <div>
           <h1 className="page-title">Journal comptable</h1>
           <p className="page-subtitle">Consultez et gérez les écritures comptables</p>
         </div>
-        <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            icon={Download}
+            variant="outline"
+            onClick={handleExportXLSX}
+            disabled={filteredValidees.length === 0}
+            title="Exporter les écritures validées en Excel"
+          >
+            Exporter Excel
+          </Button>
+          <Button
+            icon={Printer}
+            variant="outline"
+            onClick={handlePrint}
+            title="Imprimer ou sauvegarder en PDF"
+          >
+            Imprimer / PDF
+          </Button>
+          <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
+        </div>
+      </div>
+
+      {/* En-tête visible uniquement à l'impression */}
+      <div className="print-only" style={{ display: 'none', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '12px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>JOURNAL COMPTABLE</h2>
+            <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>Système Comptable SYSCOHADA</p>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: '12px' }}>
+            {selectedExercice && <p style={{ margin: 0 }}>Exercice : {selectedExercice.code || selectedExercice.annee}</p>}
+            {(dateFrom || dateTo) && (
+              <p style={{ margin: 0 }}>Période : {dateFrom || '…'} → {dateTo || '…'}</p>
+            )}
+            <p style={{ margin: 0 }}>Imprimé le : {new Date().toLocaleDateString('fr-FR')}</p>
+          </div>
+        </div>
+        <p style={{ fontSize: '12px', margin: '0 0 8px' }}>
+          {filteredValidees.length} écriture(s) validée(s) · Débit total : {money(totalsValidees.debit)} FCFA · Crédit total : {money(totalsValidees.credit)} FCFA
+          {equilibre ? ' · ✓ Équilibré' : ` · ⚠ Écart : ${money(Math.abs(totalsValidees.debit - totalsValidees.credit))} FCFA`}
+        </p>
       </div>
 
       {notice && <div className="message success" role="status" style={{ marginBottom: '16px' }}>{notice}</div>}
@@ -406,6 +486,25 @@ export default function JournalPage() {
           <div>
             <h2 className="section-title">Écritures validées</h2>
             <p className="page-subtitle">{filteredValidees.length} écriture(s) comptabilisée(s)</p>
+          </div>
+          <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              icon={Download}
+              variant="outline"
+              size="sm"
+              onClick={handleExportXLSX}
+              disabled={filteredValidees.length === 0}
+            >
+              Excel
+            </Button>
+            <Button
+              icon={Printer}
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+            >
+              PDF
+            </Button>
           </div>
         </div>
 
