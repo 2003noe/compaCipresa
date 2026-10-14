@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Ces clés VITE_* sont PUBLIQUES par conception (elles finissent dans le JS du navigateur).
+  # On désactive donc leur détection par le scanner de secrets de Netlify.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,VITE_VAPID_PUBLIC_KEY"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
