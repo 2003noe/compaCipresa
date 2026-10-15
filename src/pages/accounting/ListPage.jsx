@@ -3,7 +3,7 @@ import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import { Plus, Printer, Download, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Printer, Download, Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ListPage({
