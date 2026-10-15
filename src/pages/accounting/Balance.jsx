@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { Printer, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { exportBalanceExcel, exportBalancePDF, BalancePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
@@ -21,6 +21,8 @@ export default function Balance() {
   const [classFilter, setClassFilter] = useState('Toutes classes');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
 
   useEffect(() => {
@@ -118,76 +120,27 @@ export default function Balance() {
   const grandTotal = ['openingDebit', 'openingCredit', 'mvtDebit', 'mvtCredit', 'closingDebit', 'closingCredit']
     .reduce((acc, key) => ({ ...acc, [key]: sumCol(rows, key) }), {});
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      await exportBalancePDF({
+        groups,
+        grandTotal,
+        exercice: selectedExercice,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF balance:', err);
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   const handleExportExcel = () => {
-    const exportData = [];
-
-    groups.forEach(([classe, list]) => {
-      list.forEach((r) => {
-        exportData.push({
-          'Classe': classe,
-          'N° Compte': r.numero,
-          'Libellé du compte': r.libelle,
-          'Solde Ouverture Débit': Number(r.openingDebit || 0),
-          'Solde Ouverture Crédit': Number(r.openingCredit || 0),
-          'Mouvements Débit': Number(r.mvtDebit || 0),
-          'Mouvements Crédit': Number(r.mvtCredit || 0),
-          'Solde Clôture Débit': Number(r.closingDebit || 0),
-          'Solde Clôture Crédit': Number(r.closingCredit || 0),
-        });
-      });
-
-      // Ligne de sous-total par classe
-      exportData.push({
-        'Classe': classe,
-        'N° Compte': `Sous-total ${classe.split(' - ')[0]}`,
-        'Libellé du compte': '',
-        'Solde Ouverture Débit': sumCol(list, 'openingDebit'),
-        'Solde Ouverture Crédit': sumCol(list, 'openingCredit'),
-        'Mouvements Débit': sumCol(list, 'mvtDebit'),
-        'Mouvements Crédit': sumCol(list, 'mvtCredit'),
-        'Solde Clôture Débit': sumCol(list, 'closingDebit'),
-        'Solde Clôture Crédit': sumCol(list, 'closingCredit'),
-      });
+    exportBalanceExcel({
+      groups,
+      grandTotal,
+      exercice: selectedExercice,
     });
-
-    // Ligne de Total Général
-    exportData.push({
-      'Classe': '',
-      'N° Compte': 'Total général',
-      'Libellé du compte': '',
-      'Solde Ouverture Débit': grandTotal.openingDebit,
-      'Solde Ouverture Crédit': grandTotal.openingCredit,
-      'Mouvements Débit': grandTotal.mvtDebit,
-      'Mouvements Crédit': grandTotal.mvtCredit,
-      'Solde Clôture Débit': grandTotal.closingDebit,
-      'Solde Clôture Crédit': grandTotal.closingCredit,
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-    // Ajustement de la largeur des colonnes Excel
-    worksheet['!cols'] = [
-      { wch: 25 }, // Classe
-      { wch: 15 }, // N° Compte
-      { wch: 35 }, // Libellé
-      { wch: 18 }, // Solde Ouv Débit
-      { wch: 18 }, // Solde Ouv Crédit
-      { wch: 18 }, // Mvt Débit
-      { wch: 18 }, // Mvt Crédit
-      { wch: 18 }, // Solde Clot Débit
-      { wch: 18 }, // Solde Clot Crédit
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Balance Générale');
-
-    const exCode = selectedExercice?.code || 'Exercice';
-    const fileName = `Balance_Generale_${exCode}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
   };
 
   return (
@@ -198,7 +151,7 @@ export default function Balance() {
           <p className="page-subtitle">Vue synthétique des soldes des comptes{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button variant="secondary" icon={Printer} onClick={handlePrint} disabled={loading || rows.length === 0}>
+          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading || rows.length === 0}>
             Imprimer (PDF)
           </Button>
           <Button variant="primary" icon={Download} onClick={handleExportExcel} disabled={loading || rows.length === 0}>
@@ -327,6 +280,25 @@ export default function Balance() {
           tr { page-break-inside: avoid !important; }
         }
       `}</style>
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Balance générale des comptes"
+          subtitle={`Exercice : ${selectedExercice?.code || ''}`}
+          filename={`Balance_Generale_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <BalancePDFDocument
+              groups={groups}
+              grandTotal={grandTotal}
+              exercice={selectedExercice}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

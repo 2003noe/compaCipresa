@@ -13,7 +13,6 @@ import {
   ShieldCheck, 
   Layers
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -21,6 +20,7 @@ import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { computeDepreciation } from '../../lib/depreciation';
+import { exportLivreInventaireExcel, exportLivreInventairePDF, LivreInventairePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 export default function LivreInventaire() {
   const { exercices: exercises, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
@@ -34,6 +34,8 @@ export default function LivreInventaire() {
   const [searchTerm, setSearchTerm] = useState('');
   const [cutoffDate, setCutoffDate] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   const devise = company?.devise || 'FCFA';
 
@@ -319,28 +321,39 @@ export default function LivreInventaire() {
     return map;
   }, [filteredAccounts]);
 
+  const filteredTotals = useMemo(() => {
+    return {
+      brut: filteredAccounts.reduce((acc, a) => acc + Number(a.balanceBrute || 0), 0),
+      amort: filteredAccounts.reduce((acc, a) => acc + Number(a.amortDeprec || 0), 0),
+      net: filteredAccounts.reduce((acc, a) => acc + Number(a.balanceNette || 0), 0),
+    };
+  }, [filteredAccounts]);
+
   const handleExportXLSX = () => {
-    const dataToExport = filteredAccounts.map((a) => ({
-      'N° Compte': a.numero,
-      'Libellé du compte': a.libelle,
-      'Section OHADA': a.sectionName,
-      [`Valeur Brute (${devise})`]: a.balanceBrute,
-      [`Amort. / Dépréc. (${devise})`]: a.amortDeprec,
-      [`Valeur Nette N (${devise})`]: a.balanceNette,
-      [`Valeur N-1 (${devise})`]: a.balancePrecedente ?? '',
-      [`Variation (${devise})`]: a.variation ?? '',
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Livre d'inventaire");
-
-    const fileName = `Livre_Inventaire_${selectedExercice?.code || 'Exercice'}_${cutoffDate || 'cloture'}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    exportLivreInventaireExcel({
+      rows: filteredAccounts,
+      totals: filteredTotals,
+      exercice: selectedExercice,
+      cutoffDate,
+      devise,
+    });
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      await exportLivreInventairePDF({
+        rows: filteredAccounts,
+        totals: filteredTotals,
+        exercice: selectedExercice,
+        cutoffDate,
+        devise,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF livre inventaire:', err);
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   const companyName = company?.raison_sociale || 'Entreprise';
@@ -372,7 +385,7 @@ export default function LivreInventaire() {
           <Button icon={Download} variant="outline" onClick={handleExportXLSX} disabled={filteredAccounts.length === 0}>
             Exporter Excel
           </Button>
-          <Button icon={Printer} onClick={handlePrint}>
+          <Button icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={filteredAccounts.length === 0}>
             Imprimer / PDF
           </Button>
         </div>
@@ -734,6 +747,27 @@ export default function LivreInventaire() {
           </div>
         </div>
       </Card>
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Livre d'inventaire du patrimoine"
+          subtitle={`Exercice : ${selectedExercice?.code || ''} — Date d'arrêté : ${cutoffDate || 'clôture'}`}
+          filename={`Livre_Inventaire_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <LivreInventairePDFDocument
+              rows={filteredAccounts}
+              totals={filteredTotals}
+              exercice={selectedExercice}
+              cutoffDate={cutoffDate}
+              devise={devise}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

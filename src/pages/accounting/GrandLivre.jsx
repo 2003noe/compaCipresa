@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Printer, Download } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { exportGrandLivreExcel, exportGrandLivrePDF, GrandLivrePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const formatMoney = (val) => {
   if (val === null || val === undefined || val === '') return '';
@@ -66,6 +67,8 @@ export default function GrandLivre() {
   
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [printDate] = useState(new Date());
 
   useEffect(() => {
@@ -272,8 +275,29 @@ export default function GrandLivre() {
     };
   }, [accounts, rawLines, exerciceId, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      await exportGrandLivrePDF({
+        ledgerData,
+        exercice: selectedExercice,
+        periodStart,
+        periodEnd,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF grand livre:', err);
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    exportGrandLivreExcel({
+      ledgerData,
+      exercice: selectedExercice,
+      periodStart,
+      periodEnd,
+    });
   };
 
   return (
@@ -286,7 +310,19 @@ export default function GrandLivre() {
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
-          <Button icon={Printer} onClick={handlePrint}>
+          <Button
+            variant="outline"
+            icon={Download}
+            onClick={handleExportExcel}
+            disabled={loading || ledgerData.accounts.length === 0}
+          >
+            Exporter Excel
+          </Button>
+          <Button
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || ledgerData.accounts.length === 0}
+          >
             Imprimer le Grand-Livre
           </Button>
         </div>
@@ -675,6 +711,26 @@ export default function GrandLivre() {
           }
         }
       `}</style>
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Grand-livre des comptes"
+          subtitle={`Exercice : ${selectedExercice?.code || ''} — Période : ${periodStart || '—'} au ${periodEnd || '—'}`}
+          filename={`Grand_Livre_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <GrandLivrePDFDocument
+              ledgerData={ledgerData}
+              exercice={selectedExercice}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

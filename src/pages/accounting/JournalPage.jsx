@@ -10,6 +10,7 @@ import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
 const PAGE_SIZE = 25;       // lignes affichées par page (écritures validées)
@@ -87,6 +88,8 @@ export default function JournalPage() {
   const [rowsValidees, setRowsValidees] = useState([]);
   const [rowsBrouillons, setRowsBrouillons] = useState([]);
   const [pieceUrls, setPieceUrls] = useState({});
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
   const requestedPaths = useRef(new Set());
 
   // Référentiels
@@ -299,41 +302,33 @@ export default function JournalPage() {
   // Export Excel
   const handleExportXLSX = () => {
     const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
-    const dataToExport = filteredValidees.map((r) => ({
-      'Date': r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—',
-      'Journal': r.journal,
-      'Référence': r.ref,
-      'Description': r.description,
-      'Débit (FCFA)': r.debitValue,
-      'Crédit (FCFA)': r.creditValue,
-      'Statut': r.status,
-    }));
-
-    // Ligne de total
-    dataToExport.push({
-      'Date': '',
-      'Journal': '',
-      'Référence': '',
-      'Description': `TOTAL (${filteredValidees.length} écriture(s))`,
-      'Débit (FCFA)': totalsValidees.debit,
-      'Crédit (FCFA)': totalsValidees.credit,
-      'Statut': equilibre ? 'Équilibré ✓' : 'Écart détecté',
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    // Largeurs de colonnes
-    worksheet['!cols'] = [
-      { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 40 },
-      { wch: 16 }, { wch: 16 }, { wch: 12 },
-    ];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Journal');
     const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
-    XLSX.writeFile(workbook, `Journal_comptable_${suffix}.xlsx`);
+    exportJournalExcel({
+      rows: filteredValidees,
+      totals: totalsValidees,
+      exercice: selectedExercice,
+      filename: `Journal_comptable_${suffix}`,
+    });
   };
 
-  // Impression / PDF via le navigateur
-  const handlePrint = () => window.print();
+  // Export / Impression PDF
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
+      const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
+      await exportJournalPDF({
+        rows: filteredValidees,
+        totals: totalsValidees,
+        exercice: selectedExercice,
+        filename: `Journal_comptable_${suffix}`,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF journal:', err);
+    } finally {
+      setExportingPDF(false);
+    }
+  };
 
   // Rendu des tableaux
   const renderHead = (withActions) => (
@@ -403,8 +398,9 @@ export default function JournalPage() {
           <Button
             icon={Printer}
             variant="outline"
-            onClick={handlePrint}
-            title="Imprimer ou sauvegarder en PDF"
+            onClick={() => setShowPDFPreview(true)}
+            disabled={filteredValidees.length === 0}
+            title="Prévisualiser et imprimer en PDF"
           >
             Imprimer / PDF
           </Button>
@@ -501,7 +497,8 @@ export default function JournalPage() {
               icon={Printer}
               variant="outline"
               size="sm"
-              onClick={handlePrint}
+              onClick={() => setShowPDFPreview(true)}
+              disabled={filteredValidees.length === 0}
             >
               PDF
             </Button>
@@ -589,6 +586,25 @@ export default function JournalPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Journal comptable"
+          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
+          filename={`Journal_comptable_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <JournalPDFDocument
+              rows={filteredValidees}
+              totals={totalsValidees}
+              exercice={selectedExercice}
+              orientation={orientation}
+            />
+          )}
+        />
       )}
     </div>
   );
