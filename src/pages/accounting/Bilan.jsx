@@ -241,19 +241,20 @@ export default function Bilan() {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
-            variant="outline"
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || loadingData || !bilanN}
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={loading || loadingData || !bilanN}
           >
             Exporter Excel
-          </Button>
-          <Button
-            icon={Printer}
-            onClick={() => setShowPDFPreview(true)}
-            disabled={loading || loadingData || !bilanN}
-          >
-            Imprimer le Bilan
           </Button>
         </div>
       </div>

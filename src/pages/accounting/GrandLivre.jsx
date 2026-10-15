@@ -311,19 +311,20 @@ export default function GrandLivre() {
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
           <Button
-            variant="outline"
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || ledgerData.accounts.length === 0}
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={loading || ledgerData.accounts.length === 0}
           >
             Exporter Excel
-          </Button>
-          <Button
-            icon={Printer}
-            onClick={() => setShowPDFPreview(true)}
-            disabled={loading || ledgerData.accounts.length === 0}
-          >
-            Imprimer le Grand-Livre
           </Button>
         </div>
       </div>

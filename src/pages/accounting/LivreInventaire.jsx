@@ -382,11 +382,11 @@ export default function LivreInventaire() {
           <Button icon={RefreshCw} variant="outline" onClick={() => setRefreshKey((k) => k + 1)} disabled={loading}>
             Actualiser
           </Button>
-          <Button icon={Download} variant="outline" onClick={handleExportXLSX} disabled={filteredAccounts.length === 0}>
-            Exporter Excel
+          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={filteredAccounts.length === 0}>
+            Imprimer (PDF)
           </Button>
-          <Button icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={filteredAccounts.length === 0}>
-            Imprimer / PDF
+          <Button variant="primary" icon={Download} onClick={handleExportXLSX} disabled={filteredAccounts.length === 0}>
+            Exporter Excel
           </Button>
         </div>
       </div>

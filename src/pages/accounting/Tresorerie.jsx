@@ -135,19 +135,20 @@ export default function Tresorerie() {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
-            variant="outline"
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || accounts.length === 0}
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={loading || accounts.length === 0}
           >
             Exporter Excel
-          </Button>
-          <Button
-            icon={Printer}
-            onClick={() => setShowPDFPreview(true)}
-            disabled={loading || accounts.length === 0}
-          >
-            Imprimer / PDF
           </Button>
         </div>
       </div>

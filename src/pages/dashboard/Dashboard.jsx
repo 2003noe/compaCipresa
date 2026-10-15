@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Wallet, FileText, Award, Scale } from "lucide-react";
+import { TrendingUp, Wallet, FileText, Award, Scale, Printer, Download } from "lucide-react";
 import Card from "../../components/ui/Card";
 import KpiCard from "../../components/accounting/KpiCard";
 import AccountingTable from "../../components/accounting/AccountingTable";
@@ -9,6 +9,8 @@ import ChartCard from "../../components/accounting/ChartCard";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useExercice } from "../../context/ExerciceContext";
 import { buildBilan } from "../../lib/bilan";
+import { exportToExcel, GenericTablePDF, PDFPreviewModal } from "../../lib/generateFile";
+import Button from "../../components/ui/Button";
 import {
   money,
   dateFr,
@@ -40,6 +42,7 @@ export default function Dashboard() {
   const [releveNonRapproche, setReleveNonRapproche] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [userRoles, setUserRoles] = useState([]);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -475,6 +478,29 @@ export default function Dashboard() {
     [selectedRecentes],
   );
 
+  /* --- Données tabulaires pour export PDF/Excel --- */
+  const dashboardKpiRows = [
+    { indicateur: 'Trésorerie', valeur: `${money(soldeTresorerie)} FCFA`, variation: `${deltaTresorerieMois >= 0 ? '+' : ''}${money(deltaTresorerieMois)} FCFA ce mois` },
+    { indicateur: "Chiffre d'affaires", valeur: `${money(caN)} FCFA`, variation: caPct === null ? 'Pas de comparaison N-1' : `${caPct >= 0 ? '+' : ''}${caPct.toFixed(1)}% vs N-1` },
+    { indicateur: 'Résultat net', valeur: `${money(resultatNetN)} FCFA`, variation: resultatPct === null ? 'Pas de comparaison N-1' : `${resultatPct >= 0 ? '+' : ''}${resultatPct.toFixed(1)}% vs N-1` },
+    { indicateur: 'Bilan (total actif)', valeur: bilan ? `${money(Math.round(bilan.totals.actif))} FCFA` : '-', variation: !bilan ? 'Total actif' : bilanEquilibre ? 'Équilibré' : `Écart : ${money(Math.round(bilanEcart))} FCFA` },
+    { indicateur: 'Écritures', valeur: String(ecrituresLight.length), variation: `${ecrituresCeMois} ce mois-ci` },
+  ];
+  const dashboardColumns = [
+    { key: 'indicateur', label: 'Indicateur' },
+    { key: 'valeur', label: 'Valeur', align: 'right' },
+    { key: 'variation', label: 'Variation / Détail' },
+  ];
+
+  const handleDashboardExcel = () => {
+    exportToExcel({
+      rows: dashboardKpiRows,
+      columns: dashboardColumns,
+      filename: `Tableau_de_bord_${selectedExercice?.code || 'exercice'}`,
+      sheet: 'Tableau de bord',
+    });
+  };
+
   return (
     <div className="page-content ">
       <div className="page-header">
@@ -488,7 +514,15 @@ export default function Dashboard() {
             {loading ? " · Chargement…" : ""}
           </p>
         </div>
-        <div className="dashboard-date">Dernière mise à jour : {todayFr()}</div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading}>
+            Imprimer (PDF)
+          </Button>
+          <Button variant="primary" icon={Download} onClick={handleDashboardExcel} disabled={loading}>
+            Exporter Excel
+          </Button>
+          <span className="dashboard-date">Dernière mise à jour : {todayFr()}</span>
+        </div>
       </div>
 
       {notice && (
@@ -613,6 +647,26 @@ export default function Dashboard() {
         <AccountingTable rows={recentRows} onSeeAll={() => nav("/journal")} />
         <AlertCard items={alerts} />
       </div>
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Tableau de bord"
+          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
+          filename={`Tableau_de_bord_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="portrait"
+          renderDocument={(orientation) => (
+            <GenericTablePDF
+              title="Tableau de bord — Indicateurs clés"
+              columns={dashboardColumns}
+              rows={dashboardKpiRows}
+              footerText={`Dernière mise à jour : ${todayFr()}`}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

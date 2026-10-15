@@ -387,22 +387,22 @@ export default function JournalPage() {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={filteredValidees.length === 0}
+            title="Prévisualiser et imprimer en PDF"
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
             icon={Download}
-            variant="outline"
             onClick={handleExportXLSX}
             disabled={filteredValidees.length === 0}
             title="Exporter les écritures validées en Excel"
           >
             Exporter Excel
-          </Button>
-          <Button
-            icon={Printer}
-            variant="outline"
-            onClick={() => setShowPDFPreview(true)}
-            disabled={filteredValidees.length === 0}
-            title="Prévisualiser et imprimer en PDF"
-          >
-            Imprimer / PDF
           </Button>
           <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
         </div>
