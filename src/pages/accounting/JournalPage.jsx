@@ -147,7 +147,7 @@ export default function JournalPage() {
         for (let from = 0; from < MAX_ROWS; from += FETCH_BATCH) {
           let q = supabase
             .from('ecritures_comptables')
-            .select('id,numero,date_ecriture,libelle,reference_piece,statut,journaux(code),lignes_ecritures(debit,credit),pieces_comptables(id,type,reference,fichier_url)')
+            .select('id,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code),lignes_ecritures!ligne_ecriture_company_fk(debit,credit),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
             .order('date_ecriture', { ascending: order === 'asc' })
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);

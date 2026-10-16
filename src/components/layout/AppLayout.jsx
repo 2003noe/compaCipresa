@@ -1,5 +1,6 @@
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import AccountingAssistant from "./AccountingAssistant";
 export default function AppLayout({ children }) {
   return (
     <div className="app-shell">
@@ -8,6 +9,7 @@ export default function AppLayout({ children }) {
         <TopBar />
         {children}
       </main>
+      <AccountingAssistant />
     </div>
   );
 }

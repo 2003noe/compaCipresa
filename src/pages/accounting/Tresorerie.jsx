@@ -37,7 +37,7 @@ export default function Tresorerie() {
       const ids = (accs || []).map((a) => a.id);
       if (ids.length === 0) { setLoading(false); return; }
 
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,numero,libelle,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin).in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,numero,libelle,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin).in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
         if (!active) return;
         if (lnErr) { setNotice(`Impossible de charger les mouvements : ${lnErr.message}`); setLoading(false); return; }
         setLines((ln || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));

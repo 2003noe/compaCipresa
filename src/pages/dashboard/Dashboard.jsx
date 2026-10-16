@@ -8,6 +8,7 @@ import AlertCard from "../../components/accounting/AlertCard";
 import ChartCard from "../../components/accounting/ChartCard";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useExercice } from "../../context/ExerciceContext";
+import { useAuth } from "../../context/AuthContext";
 import { buildBilan } from "../../lib/bilan";
 import { exportToExcel, GenericTablePDF, PDFPreviewModal } from "../../lib/generateFile";
 import Button from "../../components/ui/Button";
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const { selectedExercice } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [soldesBilan, setSoldesBilan] = useState(null);
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
@@ -45,55 +47,62 @@ export default function Dashboard() {
   const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   useEffect(() => {
-    if (!supabaseConfigured) {
+    if (!supabaseConfigured || !selectedExercice || !selectedEntrepriseId) {
+      if (!selectedExercice || !selectedEntrepriseId) { setLoading(false); return; }
       setNotice("Supabase n'est pas configuré.");
       setLoading(false);
       return;
     }
 
+    setLoading(true);
     Promise.all([
       supabase
         .from("comptes_comptables")
         .select(
           "id,numero,libelle,nature,exercice_id,solde_ouverture_debit,solde_ouverture_credit",
-        ),
+        ).eq("exercice_id", selectedExercice.id),
       supabase
         .from("lignes_ecritures")
         .select(
-          "compte_id,debit,credit,ecritures_comptables(exercice_id,date_ecriture,statut)",
-        ),
+          "compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)",
+        ).eq("ecritures_comptables.exercice_id", selectedExercice.id),
       supabase
         .from("ecritures_comptables")
         .select(
-          "id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures(debit,credit)",
+          "id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures!ligne_ecriture_company_fk(debit,credit)",
         )
+        .eq("exercice_id", selectedExercice.id)
         .order("date_ecriture", { ascending: false })
         .limit(8),
       supabase
         .from("ecritures_comptables")
-        .select("id,exercice_id,date_ecriture,statut"),
+        .select("id,exercice_id,date_ecriture,statut").eq("exercice_id", selectedExercice.id),
       supabase
         .from("declarations_tva")
-        .select("id,exercice_id,periode_libelle,statut,date_echeance"),
+        .select("id,exercice_id,periode_libelle,statut,date_echeance").eq("exercice_id", selectedExercice.id),
       supabase
         .from("clotures_comptables")
-        .select("id,exercice_id,periode,statut"),
+        .select("id,exercice_id,periode,statut").eq("exercice_id", selectedExercice.id),
       supabase.from("controles_cloture").select("cloture_id,statut"),
       supabase
         .from("lignes_releve_bancaire")
-        .select("id,compte_id,rapproche")
+        .select("id,compte_id,rapproche,compte:comptes_comptables!releve_compte_company_fk!inner(exercice_id)")
+        .eq("compte.exercice_id", selectedExercice.id)
         .eq("rapproche", false),
-      supabase.from("profiles").select("id,nom,prenom,actif"),
-      supabase.from("user_roles").select("user_id"),
-    ]).then((results) => {
+      supabase.from("entreprise_utilisateurs").select("user_id").eq("entreprise_id", selectedEntrepriseId),
+    ]).then(async (results) => {
       const errs = results.filter((r) => r.error);
       if (errs.length) {
         setNotice(
           `Certaines données n'ont pas pu être chargées : ${errs[0].error.message}`,
         );
       }
-      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] =
+      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, members] =
         results.map((r) => r.data || []);
+      const memberIds = [...new Set(members.map((m) => m.user_id))];
+      const { data: prof } = memberIds.length
+        ? await supabase.from("profiles").select("id,nom,prenom,actif").in("id", memberIds)
+        : { data: [] };
       setComptes(ac);
       setLignesTout(
         ln.filter((l) => l.ecritures_comptables?.statut === "VALIDEE"),
@@ -105,10 +114,10 @@ export default function Dashboard() {
       setControlesCloture(ctrl);
       setReleveNonRapproche(releve);
       setProfiles(prof);
-      setUserRoles(roles);
+      setUserRoles(members);
       setLoading(false);
     });
-  }, []);
+  }, [selectedExercice, selectedEntrepriseId]);
 
   const previousExercice = null;
 

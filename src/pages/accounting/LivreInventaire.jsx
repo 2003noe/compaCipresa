@@ -19,11 +19,13 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import { computeDepreciation } from '../../lib/depreciation';
 import { exportLivreInventaireExcel, exportLivreInventairePDF, LivreInventairePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 export default function LivreInventaire() {
   const { exercices: exercises, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [physicalAssets, setPhysicalAssets] = useState([]);
@@ -57,7 +59,7 @@ export default function LivreInventaire() {
       return;
     }
     if (exercicesLoading) return;
-    if (!exerciceId) { setAccounts([]); setLines([]); setPhysicalAssets([]); setLoading(false); return; }
+    if (!exerciceId || !selectedEntrepriseId) { setAccounts([]); setLines([]); setPhysicalAssets([]); setLoading(false); return; }
 
     setLoading(true);
     setNotice('');
@@ -72,18 +74,19 @@ export default function LivreInventaire() {
         .order('numero'),
       supabase
         .from('lignes_ecritures')
-        .select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)')
+        .select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)')
         .eq('ecritures_comptables.exercice_id', exerciceId)
         .gte('ecritures_comptables.date_ecriture', selected?.date_debut)
         .lte('ecritures_comptables.date_ecriture', selected?.date_fin),
       supabase
         .from('immobilisations')
         .select('*')
+        .eq('exercice_id', exerciceId)
         .order('code'),
       supabase
         .from('parametres_entreprise')
         .select('*')
-        .limit(1)
+        .eq('entreprise_id', selectedEntrepriseId)
         .maybeSingle(),
     ])
       .then(([acRes, lnRes, immoRes, compRes]) => {
@@ -109,7 +112,7 @@ export default function LivreInventaire() {
         setLoading(false);
       });
     return () => { active = false; };
-  }, [refreshKey, exerciceId, exercicesLoading, exercises]);
+  }, [refreshKey, exerciceId, exercicesLoading, exercises, selectedEntrepriseId]);
 
   const selectedExercice = useMemo(
     () => exercises.find((e) => e.id === exerciceId) || null,

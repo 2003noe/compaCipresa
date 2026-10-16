@@ -6,6 +6,7 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import { exportGrandLivreExcel, exportGrandLivrePDF, GrandLivrePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const formatMoney = (val) => {
@@ -55,6 +56,7 @@ export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const devise = 'FCFA';
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   
@@ -78,7 +80,7 @@ export default function GrandLivre() {
       return;
     }
     if (exercicesLoading) return;
-    if (!exerciceId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
+    if (!exerciceId || !selectedEntrepriseId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
     setLoading(true);
     setAccounts([]);
     setRawLines([]);
@@ -86,13 +88,13 @@ export default function GrandLivre() {
     let active = true;
 
     Promise.all([
-      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').or(`exercice_id.eq.${exerciceId},exercice_id.is.null`).order('numero'),
-      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
+      supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux!ecriture_journal_company_fk(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
     ]).then(([paramRes, acRes, lineRes]) => {
       if (!active) return;
-      if (paramRes.data?.nom_entreprise) {
-        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
+      if (paramRes.data?.raison_sociale || paramRes.data?.nom_entreprise) {
+        setCompanyName((paramRes.data.raison_sociale || paramRes.data.nom_entreprise).toUpperCase());
       } else if (paramRes.data?.nom) {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
@@ -108,7 +110,7 @@ export default function GrandLivre() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exerciceId, selectedExercice, exercicesLoading]);
+  }, [exerciceId, selectedExercice, exercicesLoading, selectedEntrepriseId]);
 
   // La période suit l'exercice choisi dans la topbar
   useEffect(() => {

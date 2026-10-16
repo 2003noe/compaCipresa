@@ -21,9 +21,10 @@ const RESEND_DELAY = 60; // Supabase impose 60 s minimum entre deux envois
 
 export default function Register() {
   const nav = useNavigate();
-  const { signUp, verifySignupOtp, resendSignupOtp, signOut } = useAuth();
+  const { signUp, verifySignupOtp, resendSignupOtp, signOut, provisionCompany } = useAuth();
   const [step, setStep] = useState("form"); // "form" -> "otp"
   const [form, setForm] = useState({
+    entreprise: "",
     fullName: "",
     email: "",
     phone: "",
@@ -49,6 +50,10 @@ export default function Register() {
       setError("Les mots de passe ne correspondent pas.");
       return;
     }
+    if (form.entreprise.trim().length < 2) {
+      setError("Saisissez le nom de votre entreprise (2 caractères minimum).");
+      return;
+    }
 
     const [prenom, ...rest] = form.fullName.trim().split(/\s+/);
     const nom = rest.join(" ") || prenom;
@@ -61,6 +66,7 @@ export default function Register() {
       nom,
       prenom,
       telephone: form.phone,
+      entreprise: form.entreprise.trim(),
     });
     setSubmitting(false);
 
@@ -71,6 +77,8 @@ export default function Register() {
 
     // Si "Confirm email" est désactivé côté Supabase, une session existe déjà : pas de code à saisir.
     if (data?.session) {
+      const { error: companyError } = await provisionCompany(form.entreprise.trim());
+      if (companyError) { setError(companyError.message); return; }
       await signOut();
       nav("/connexion", {
         replace: true,
@@ -212,6 +220,14 @@ export default function Register() {
       )}
       <form onSubmit={handleSubmit}>
         <div className="auth-form-grid bg-red">
+          <Input
+            icon={UserRound}
+            label="Nom de l'entreprise"
+            placeholder="CIPRESA SARL"
+            required
+            value={form.entreprise}
+            onChange={update("entreprise")}
+          />
           <Input
             icon={UserRound}
             label="Nom complet"

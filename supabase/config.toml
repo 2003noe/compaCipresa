@@ -1,0 +1,4 @@
+project_id = "compacipresa"
+
+[functions.accounting-assistant]
+verify_jwt = true

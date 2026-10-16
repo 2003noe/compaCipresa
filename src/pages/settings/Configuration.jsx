@@ -8,7 +8,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 const ROLE_ORDER = ['ADMIN', 'GERANT', 'COMPTABLE', 'CONSULTANT', 'MAGASINIER', 'AGENT_COMMERCIAL'];
 
 export default function Configuration() {
-  const { hasRole } = useAuth();
+  const { hasRole, selectedEntrepriseId } = useAuth();
   const isAdmin = hasRole('ADMIN');
 
   const [users, setUsers] = useState([]);
@@ -20,24 +20,30 @@ export default function Configuration() {
   const [notice, setNotice] = useState('');
   const [savingUserId, setSavingUserId] = useState(null);
   const [pendingRoleByUser, setPendingRoleByUser] = useState({});
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState("");
 
   const load = async () => {
-    if (!supabaseConfigured || !isAdmin) { setLoading(false); return; }
+    if (!supabaseConfigured || !isAdmin || !selectedEntrepriseId) { setLoading(false); return; }
     setLoading(true);
     setError('');
 
-    const [profilesRes, userRolesRes, rolesRes] = await Promise.all([
-      supabase.from('profiles').select('id,nom,prenom,telephone,actif,created_at').order('created_at'),
-      supabase.from('user_roles').select('user_id,role_id,role:roles(id,code,nom)'),
+    const [userRolesRes, rolesRes] = await Promise.all([
+      supabase.from('entreprise_utilisateurs').select('entreprise_id,user_id,role_id,role:roles(id,code,nom)').eq('entreprise_id', selectedEntrepriseId),
       supabase.from('roles').select('id,code,nom,description').order('nom'),
     ]);
 
-    if (profilesRes.error || userRolesRes.error || rolesRes.error) {
-      setError((profilesRes.error || userRolesRes.error || rolesRes.error).message);
+    if (userRolesRes.error || rolesRes.error) {
+      setError((userRolesRes.error || rolesRes.error).message);
       setLoading(false);
       return;
     }
 
+    const memberIds = [...new Set((userRolesRes.data || []).map((r) => r.user_id))];
+    const profilesRes = memberIds.length
+      ? await supabase.from('profiles').select('id,nom,prenom,telephone,actif,created_at').in('id', memberIds).order('created_at')
+      : { data: [], error: null };
+    if (profilesRes.error) { setError(profilesRes.error.message); setLoading(false); return; }
     setUsers(profilesRes.data || []);
     setUserRoles(userRolesRes.data || []);
     setAllRoles(rolesRes.data || []);
@@ -57,7 +63,7 @@ export default function Configuration() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [isAdmin, selectedEntrepriseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rolesForUser = (userId) => userRoles.filter((r) => r.user_id === userId && r.role);
 
@@ -80,7 +86,7 @@ export default function Configuration() {
     if (!window.confirm(`Attribuer le rôle ${role?.nom || ''} à cet utilisateur ?`)) return;
     setSavingUserId(userId);
     setNotice(''); setError('');
-    const { error: insErr } = await supabase.from('user_roles').insert({ user_id: userId, role_id: roleId });
+    const { error: insErr } = await supabase.from('entreprise_utilisateurs').insert({ entreprise_id: selectedEntrepriseId, user_id: userId, role_id: roleId });
     setSavingUserId(null);
     if (insErr) { setError(`Attribution refusée : ${insErr.message}`); return; }
     setUserRoles((cur) => [...cur, { user_id: userId, role_id: roleId, role }]);
@@ -92,11 +98,26 @@ export default function Configuration() {
     if (!window.confirm(`Retirer le rôle ${roleName} à cet utilisateur ?`)) return;
     setSavingUserId(userId);
     setNotice(''); setError('');
-    const { error: delErr } = await supabase.from('user_roles').delete().eq('user_id', userId).eq('role_id', roleId);
+    const { error: delErr } = await supabase.from('entreprise_utilisateurs').delete().eq('entreprise_id', selectedEntrepriseId).eq('user_id', userId).eq('role_id', roleId);
     setSavingUserId(null);
     if (delErr) { setError(`Révocation refusée : ${delErr.message}`); return; }
     setUserRoles((cur) => cur.filter((r) => !(r.user_id === userId && r.role_id === roleId)));
     setNotice(`Rôle ${roleName} retiré.`);
+  };
+
+  const addExistingUser = async () => {
+    if (!newMemberEmail.trim() || !newMemberRole) return;
+    setSavingUserId("new"); setError(""); setNotice("");
+    const role = allRoles.find((r) => r.code === newMemberRole);
+    const { error: addError } = await supabase.rpc("add_user_to_active_company", {
+      p_email: newMemberEmail.trim(),
+      p_role_code: newMemberRole,
+    });
+    setSavingUserId(null);
+    if (addError) { setError(addError.message); return; }
+    setNewMemberEmail(""); setNewMemberRole("");
+    setNotice(`Utilisateur ajouté avec le rôle ${role?.nom || newMemberRole}.`);
+    await load();
   };
 
   const sortedRoles = useMemo(() => [...allRoles].sort((a, b) => ROLE_ORDER.indexOf(a.code) - ROLE_ORDER.indexOf(b.code)), [allRoles]);
@@ -124,6 +145,15 @@ export default function Configuration() {
 
       <Card>
         <h2 className="bilan-side-title">Utilisateurs &amp; rôles</h2>
+        <div className="config-add-role" style={{ marginBottom: 16 }}>
+          <input className="input" type="email" placeholder="E-mail d’un utilisateur déjà inscrit" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
+          <select className="input select" value={newMemberRole} onChange={(e) => setNewMemberRole(e.target.value)}>
+            <option value="">Attribuer un rôle</option>
+            {sortedRoles.map((role) => <option key={role.id} value={role.code}>{role.nom}</option>)}
+          </select>
+          <Button size="sm" disabled={!newMemberEmail.trim() || !newMemberRole || savingUserId === "new"} onClick={addExistingUser}>{savingUserId === "new" ? "Ajout…" : "Ajouter à l’entreprise"}</Button>
+        </div>
+        <p className="page-subtitle">La personne doit déjà avoir créé son compte. L’ajout et le rôle concernent uniquement l’entreprise active.</p>
         <div className="table-wrap">
           <table className="balance-table">
             <thead><tr><th>Utilisateur</th><th>Contact</th><th>Rôles</th><th>Ajouter un rôle</th><th>Statut</th></tr></thead>

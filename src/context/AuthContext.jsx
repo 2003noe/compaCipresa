@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
+import { companiesService } from "../services/companies";
 
 const AuthContext = createContext(undefined);
 
@@ -9,6 +10,8 @@ export function AuthProvider({ children }) {
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [rolePermissions, setRolePermissions] = useState({});
+  const [companies, setCompanies] = useState([]);
+  const [selectedEntrepriseId, setSelectedEntrepriseId] = useState("");
   const [loading, setLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessError, setAccessError] = useState(null);
@@ -39,6 +42,8 @@ export function AuthProvider({ children }) {
       setRoles([]);
       setPermissions([]);
       setRolePermissions({});
+      setCompanies([]);
+      setSelectedEntrepriseId("");
       setAccessLoading(false);
       return;
     }
@@ -48,6 +53,8 @@ export function AuthProvider({ children }) {
       setRoles([]);
       setPermissions([]);
       setRolePermissions({});
+      setCompanies([]);
+      setSelectedEntrepriseId("");
       setAccessLoading(false);
       setAccessError(null);
       return;
@@ -59,19 +66,16 @@ export function AuthProvider({ children }) {
       setAccessLoading(true);
       setAccessError(null);
 
-      const [profileResult, rolesResult] = await Promise.all([
+      const [profileResult, membershipsResult] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", session.user.id).single(),
-        supabase
-          .from("user_roles")
-          .select("role:roles(id, code, nom, description)")
-          .eq("user_id", session.user.id),
+        companiesService.listMemberships(session.user.id),
       ]);
 
       if (!isMounted) return;
 
-      if (profileResult.error || rolesResult.error) {
+      if (profileResult.error || membershipsResult.error) {
         setAccessLoading(false);
-        setAccessError((profileResult.error || rolesResult.error).message);
+        setAccessError((profileResult.error || membershipsResult.error).message);
         setProfile(null);
         setRoles([]);
         setPermissions([]);
@@ -79,9 +83,18 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const nextRoles = (rolesResult.data || [])
-        .map(({ role }) => role)
-        .filter(Boolean);
+      const memberships = membershipsResult.data || [];
+      const companiesById = new Map();
+      memberships.forEach((m) => {
+        if (!m.entreprise) return;
+        const company = companiesById.get(m.entreprise_id) || { ...m.entreprise, roles: [] };
+        if (m.role && !company.roles.some((r) => r.id === m.role.id)) company.roles.push(m.role);
+        companiesById.set(m.entreprise_id, company);
+      });
+      const nextCompanies = [...companiesById.values()];
+      const storedId = profileResult.data?.active_entreprise_id || "";
+      const nextCompanyId = nextCompanies.some((c) => c.id === storedId) ? storedId : (nextCompanies[0]?.id || "");
+      const nextRoles = memberships.filter((m) => m.entreprise_id === nextCompanyId).map(({ role }) => role).filter(Boolean);
       const roleIds = nextRoles.map(({ id }) => id);
       let nextPermissions = [];
       const nextRolePermissions = {};
@@ -111,6 +124,8 @@ export function AuthProvider({ children }) {
       }
 
       setProfile(profileResult.data);
+      setCompanies(nextCompanies);
+      setSelectedEntrepriseId(nextCompanyId);
       setRoles(nextRoles);
       setPermissions(nextPermissions);
       setRolePermissions(nextRolePermissions);
@@ -123,6 +138,27 @@ export function AuthProvider({ children }) {
     };
   }, [session]);
 
+  async function switchEntreprise(id) {
+    if (!companies.some((company) => company.id === id)) return { error: { message: "Vous n’êtes pas membre de cette entreprise." } };
+    const { error } = await companiesService.setActive(id);
+    if (error) return { error };
+    setSelectedEntrepriseId(id);
+    const membership = companies.find((company) => company.id === id);
+    const nextRoles = membership?.roles || [];
+    const roleIds = nextRoles.map((role) => role.id);
+    const { data, error: permissionError } = roleIds.length
+      ? await supabase.from("role_permissions").select("role_id,permission:permissions(code,nom,description)").in("role_id", roleIds)
+      : { data: [], error: null };
+    if (permissionError) return { error: permissionError };
+    const grouped = {};
+    (data || []).forEach(({ role_id, permission }) => { if (permission?.code) (grouped[role_id] ||= []).push(permission); });
+    setRoles(nextRoles);
+    setRolePermissions(grouped);
+    setPermissions([...new Set(Object.values(grouped).flat().map((p) => p.code))]);
+    setProfile((p) => p ? { ...p, active_entreprise_id: id } : p);
+    return { error: null };
+  }
+
   async function signIn(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
@@ -130,12 +166,12 @@ export function AuthProvider({ children }) {
 
   // --- Inscription avec vérification de l'e-mail par code (OTP) ---
   // Prérequis Supabase : "Confirm email" activé + template "Confirm signup" avec {{ .Token }}.
-  async function signUp({ email, password, nom, prenom, telephone }) {
+  async function signUp({ email, password, nom, prenom, telephone, entreprise }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { nom, prenom, telephone },
+        data: { nom, prenom, telephone, entreprise_nom: entreprise },
       },
     });
     // Supabase ne renvoie pas d'erreur si l'e-mail existe déjà et est confirmé :
@@ -148,7 +184,13 @@ export function AuthProvider({ children }) {
 
   async function verifySignupOtp(email, token) {
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "signup" });
-    return { data, error };
+    if (error) return { data, error };
+    const entrepriseName = data?.user?.user_metadata?.entreprise_nom;
+    if (entrepriseName) {
+      const { error: provisionError } = await companiesService.provision(entrepriseName);
+      if (provisionError) return { data, error: provisionError };
+    }
+    return { data, error: null };
   }
 
   async function resendSignupOtp(email) {
@@ -191,6 +233,10 @@ export function AuthProvider({ children }) {
     setProfile(nextProfile);
   }
 
+  function updateCompanyName(id, nom) {
+    setCompanies((items) => items.map((company) => company.id === id ? { ...company, nom } : company));
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -199,12 +245,17 @@ export function AuthProvider({ children }) {
         roles,
         permissions,
         rolePermissions,
+        companies,
+        selectedEntrepriseId,
+        selectedEntreprise: companies.find((company) => company.id === selectedEntrepriseId) || null,
+        switchEntreprise,
         accessError,
         accessLoading,
         loading,
         hasRole,
         can,
         updateProfile,
+        updateCompanyName,
         signIn,
         signUp,
         verifySignupOtp,
@@ -212,6 +263,7 @@ export function AuthProvider({ children }) {
         resetPassword,
         verifyRecoveryOtp,
         updatePassword,
+        provisionCompany: companiesService.provision,
         signOut,
       }}
     >

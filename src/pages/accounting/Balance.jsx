@@ -5,6 +5,7 @@ import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import { exportBalanceExcel, exportBalancePDF, BalancePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -16,6 +17,7 @@ const classNumber = (classe) => {
 
 export default function Balance() {
   const { selectedExercice, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [movementsByAccount, setMovementsByAccount] = useState({});
   const [classFilter, setClassFilter] = useState('Toutes classes');
@@ -28,7 +30,7 @@ export default function Balance() {
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
     if (exercicesLoading) return;
-    if (!exerciceId || !selectedExercice) { setAccounts([]); setMovementsByAccount({}); setLoading(false); return; }
+    if (!exerciceId || !selectedExercice || !selectedEntrepriseId) { setAccounts([]); setMovementsByAccount({}); setLoading(false); return; }
     setLoading(true);
     setAccounts([]);
     setMovementsByAccount({});
@@ -36,13 +38,13 @@ export default function Balance() {
     let active = true;
 
     Promise.all([
-      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
+      supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).order('numero'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin),
     ]).then(([paramRes, acRes, mvRes]) => {
       if (!active) return;
-      if (paramRes.data?.nom_entreprise) {
-        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
+      if (paramRes.data?.raison_sociale || paramRes.data?.nom_entreprise) {
+        setCompanyName((paramRes.data.raison_sociale || paramRes.data.nom_entreprise).toUpperCase());
       } else if (paramRes.data?.nom) {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
@@ -66,7 +68,7 @@ export default function Balance() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exercicesLoading, exerciceId, selectedExercice]);
+  }, [exercicesLoading, exerciceId, selectedExercice, selectedEntrepriseId]);
 
   const classOptions = useMemo(() => ['Toutes classes', ...new Set(accounts.map((a) => a.classe))].sort((a, b) => (a === 'Toutes classes' ? -1 : classNumber(a) - classNumber(b))), [accounts]);
 

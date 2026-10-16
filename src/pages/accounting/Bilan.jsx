@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Printer, Download, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
@@ -26,6 +27,7 @@ const COMPANY_FIELDS = [
 
 export default function Bilan() {
   const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [soldesN, setSoldesN] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -41,13 +43,13 @@ export default function Bilan() {
       setLoading(false);
       return;
     }
-
-    Promise.all([
-      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-    ]).then(([paramRes]) => {
+    if (!selectedEntrepriseId) return undefined;
+    let active = true;
+    supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle().then((paramRes) => {
+      if (!active) return;
       const p = paramRes.data;
       if (p) {
-        const name = p.nom_entreprise || p.nom;
+        const name = p.raison_sociale || p.nom_entreprise || p.nom;
         const details = COMPANY_FIELDS
           .map(([label, keys]) => {
             const key = keys.find((k) => p[k]);
@@ -59,7 +61,8 @@ export default function Bilan() {
 
       setLoading(false);
     });
-  }, []);
+    return () => { active = false; };
+  }, [selectedEntrepriseId]);
 
   const selected = useMemo(() => exercises.find((e) => e.id === exerciceId), [exercises, exerciceId]);
 

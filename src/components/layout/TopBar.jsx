@@ -6,12 +6,14 @@ import {
   Moon,
   FileText,
   BookOpen,
+  Building2,
 } from "lucide-react";
 import NotificationsPanel from "./NotificationsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useTheme } from "../../context/ThemeContext";
 import { useExercice } from "../../context/ExerciceContext";
+import { useAuth } from "../../context/AuthContext";
 
 export default function TopBar() {
   const location = useLocation();
@@ -25,6 +27,7 @@ export default function TopBar() {
   const debounceRef = useRef(null);
 
   const { exercices, selectedExerciceId, setSelectedExerciceId } = useExercice();
+  const { companies, selectedEntrepriseId, switchEntreprise } = useAuth();
 
   useEffect(() => {
     if (!supabaseConfigured) return undefined;
@@ -168,6 +171,12 @@ export default function TopBar() {
             ))}
           </select>
         </label>
+        {companies.length > 0 && <label className="topbar-exercice" title="Entreprise active pour toutes les pages">
+          <Building2 size={14} />
+          <select value={selectedEntrepriseId} onChange={(e) => switchEntreprise(e.target.value)} aria-label="Entreprise active">
+            {companies.map((company) => <option key={company.id} value={company.id}>{company.nom}</option>)}
+          </select>
+        </label>}
       </div>
       <div className="topbar-right">
         <button
