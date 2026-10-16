@@ -26,6 +26,7 @@ import Profile from "../pages/settings/Profile";
 import Settings from "../pages/settings/Settings";
 import Configuration from "../pages/settings/Configuration";
 import FAQ from "../pages/FAQ";
+import SyncVentes from "../pages/accounting/SyncVentes";
 
 const inside = (Component, props) => (
   <ProtectedRoute>
@@ -52,6 +53,7 @@ export default function AppRoutes() {
       <Route path="/tresorerie" element={inside(Tresorerie)} />
       <Route path="/livre-inventaire" element={inside(LivreInventaire)} />
       <Route path="/immobilisations" element={inside(Immobilisations)} />
+      <Route path="/sync-ventes" element={inside(SyncVentes)} />
       <Route path="/clotures" element={inside(Clotures)} />
       <Route path="/clotures/:id" element={inside(ClotureDetail)} />
       <Route path="/parametres" element={inside(Settings)} />
