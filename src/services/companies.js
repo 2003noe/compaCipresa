@@ -15,7 +15,7 @@ export const companiesService = {
   async provision(entrepriseName) {
     return supabase.rpc("create_entreprise_for_current_user", { p_nom: entrepriseName });
   },
-  async addExistingUser(email, roleCode) {
-    return supabase.rpc("add_user_to_active_company", { p_email: email, p_role_code: roleCode });
+  async addExistingUser(email, roleCode, entrepriseId) {
+    return supabase.rpc("add_user_to_company", { p_email: email, p_role_code: roleCode, p_entreprise_id: entrepriseId });
   },
 };

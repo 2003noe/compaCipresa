@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck, CircleHelp, RefreshCw } from 'lucide-react';
+import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck, CircleHelp } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const items = [
   ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
   ['/grand-livre', 'Grand livre', Book], ['/balance', 'Balance', Scale], ['/bilan', 'Bilan', FileText],
   ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet],
-  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2],
-  ['/sync-ventes', 'Synchro Ventes', RefreshCw],
-  ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
+  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
 ];
 
 export default function Sidebar() {

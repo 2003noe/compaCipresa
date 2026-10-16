@@ -5,4 +5,3 @@ export {
   ControleCloture, ReferentielControleCloture, LigneReleveBancaire,
 } from "./accounting";
 export { Profile, Role, UserRole, Notification, ParametresEntreprise } from "./accounts";
-export { Vente, SyncLog } from "./Vente";

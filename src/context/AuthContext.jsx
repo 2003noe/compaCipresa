@@ -159,6 +159,40 @@ export function AuthProvider({ children }) {
     return { error: null };
   }
 
+  async function createCompany(name) {
+    if (!roles.some((role) => role.code === "ADMIN")) return { error: { message: "Seul un administrateur peut créer une entreprise." } };
+    const { data: newCompanyId, error: createError } = await companiesService.provision(name.trim());
+    if (createError) return { error: createError };
+
+    const { data: memberships, error: membershipError } = await companiesService.listMemberships(session?.user?.id);
+    if (membershipError) return { error: membershipError };
+    const nextCompaniesById = new Map();
+    (memberships || []).forEach((membership) => {
+      if (!membership.entreprise) return;
+      const company = nextCompaniesById.get(membership.entreprise_id) || { ...membership.entreprise, roles: [] };
+      if (membership.role && !company.roles.some((role) => role.id === membership.role.id)) company.roles.push(membership.role);
+      nextCompaniesById.set(membership.entreprise_id, company);
+    });
+    const nextCompanies = [...nextCompaniesById.values()];
+    const membership = memberships?.filter((item) => item.entreprise_id === newCompanyId) || [];
+    const nextRoles = membership.map((item) => item.role).filter(Boolean);
+    const roleIds = nextRoles.map((role) => role.id);
+    const { data, error: permissionError } = roleIds.length
+      ? await supabase.from("role_permissions").select("role_id,permission:permissions(code,nom,description)").in("role_id", roleIds)
+      : { data: [], error: null };
+    if (permissionError) return { error: permissionError };
+    const grouped = {};
+    (data || []).forEach(({ role_id, permission }) => { if (permission?.code) (grouped[role_id] ||= []).push(permission); });
+
+    setCompanies(nextCompanies);
+    setSelectedEntrepriseId(newCompanyId);
+    setRoles(nextRoles);
+    setRolePermissions(grouped);
+    setPermissions([...new Set(Object.values(grouped).flat().map((permission) => permission.code))]);
+    setProfile((current) => current ? { ...current, active_entreprise_id: newCompanyId } : current);
+    return { error: null };
+  }
+
   async function signIn(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
@@ -249,6 +283,7 @@ export function AuthProvider({ children }) {
         selectedEntrepriseId,
         selectedEntreprise: companies.find((company) => company.id === selectedEntrepriseId) || null,
         switchEntreprise,
+        createCompany,
         accessError,
         accessLoading,
         loading,
