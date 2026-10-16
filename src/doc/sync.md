@@ -2,6 +2,8 @@
 
 Ce document décrit pas à pas la conception et la mise en œuvre d'un module complet de **synchronisation des ventes** entre une API externe (logiciel de caisse, CRM, ERP ou e-commerce) et notre application **Cipresa Accounting** (React + Supabase).
 
+> 💡 **Spécification de l'API Source** : Pour le contrat d'interface et la structure exacte des données JSON attendues côté API externe, consultez le document [api_ventes_spec.md](./api_ventes_spec.md).
+
 ---
 
 ## 1. Vue d'ensemble de l'architecture
