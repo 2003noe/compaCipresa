@@ -9,6 +9,7 @@ import {
   Building2,
   Plus,
   X,
+  RefreshCw,
 } from "lucide-react";
 import NotificationsPanel from "./NotificationsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -16,6 +17,7 @@ import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useTheme } from "../../context/ThemeContext";
 import { useExercice } from "../../context/ExerciceContext";
 import { useAuth } from "../../context/AuthContext";
+import { syncSalesPipeline } from "../../services/syncVentesService";
 
 export default function TopBar() {
   const location = useLocation();
@@ -34,6 +36,23 @@ export default function TopBar() {
   const [companyName, setCompanyName] = useState("");
   const [companyError, setCompanyError] = useState("");
   const [creatingCompany, setCreatingCompany] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+
+  async function handleSyncSales() {
+    if (syncing) return;
+    try {
+      setSyncing(true);
+      const res = await syncSalesPipeline();
+      window.dispatchEvent(new CustomEvent("cipresa-sales-synced", { detail: res }));
+      setSyncSuccess(true);
+      setTimeout(() => setSyncSuccess(false), 3000);
+    } catch (err) {
+      console.error("[TopBar] Erreur synchronisation :", err);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function handleCreateCompany(event) {
     event.preventDefault();
@@ -201,6 +220,27 @@ export default function TopBar() {
         </button>}
       </div>
       <div className="topbar-right">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={handleSyncSales}
+          disabled={syncing}
+          aria-label="Synchroniser les ventes"
+          title={
+            syncing
+              ? "Synchronisation en cours..."
+              : syncSuccess
+              ? "Synchronisation réussie !"
+              : "Synchroniser les ventes"
+          }
+        >
+          <RefreshCw
+            size={16}
+            className={`${syncing ? "animate-spin" : ""} ${
+              syncSuccess ? "text-emerald-500" : ""
+            }`}
+          />
+        </button>
         <button
           className="icon-button"
           type="button"

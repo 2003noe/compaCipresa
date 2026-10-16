@@ -67,6 +67,9 @@ export function useSyncVentes() {
 
   useEffect(() => {
     loadData();
+    const handleRemoteSync = () => loadData();
+    window.addEventListener("cipresa-sales-synced", handleRemoteSync);
+    return () => window.removeEventListener("cipresa-sales-synced", handleRemoteSync);
   }, [loadData]);
 
   // Déclencheur de synchronisation
