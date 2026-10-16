@@ -26,6 +26,7 @@ import Profile from "../pages/settings/Profile";
 import Settings from "../pages/settings/Settings";
 import Configuration from "../pages/settings/Configuration";
 import FAQ from "../pages/FAQ";
+import CompanyAnalytics from "../pages/admin/CompanyAnalytics";
 
 const inside = (Component, props) => (
   <ProtectedRoute>
@@ -56,6 +57,7 @@ export default function AppRoutes() {
       <Route path="/clotures/:id" element={inside(ClotureDetail)} />
       <Route path="/parametres" element={inside(Settings)} />
       <Route path="/configuration" element={inside(Configuration)} />
+      <Route path="/administration/entreprises" element={inside(CompanyAnalytics)} />
       <Route path="/faq" element={inside(FAQ)} />
       <Route path="/profil" element={inside(Profile)} />
       <Route path="/nouvelle-ecriture" element={inside(NewEntry)} />

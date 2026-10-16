@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { Building2, ShieldCheck, UsersRound } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -8,7 +8,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 const ROLE_ORDER = ['ADMIN', 'GERANT', 'COMPTABLE', 'CONSULTANT', 'MAGASINIER', 'AGENT_COMMERCIAL'];
 
 export default function Configuration() {
-  const { hasRole, companies, selectedEntrepriseId } = useAuth();
+  const { hasRole, companies, selectedEntrepriseId, selectedEntreprise } = useAuth();
   const isAdmin = hasRole('ADMIN');
 
   const [users, setUsers] = useState([]);
@@ -172,7 +172,7 @@ export default function Configuration() {
 
   if (!isAdmin) {
     return (
-      <div className="page-content">
+      <div className="page-content configuration-page">
         <div className="page-header"><div><h1 className="page-title">Configuration</h1></div></div>
         <div className="message error" role="alert">Cette page est réservée aux administrateurs.</div>
       </div>
@@ -180,20 +180,22 @@ export default function Configuration() {
   }
 
   return (
-    <div className="page-content">
-      <div className="page-header">
+    <div className="page-content configuration-page">
+      <div className="page-header configuration-hero">
         <div>
-          <h1 className="page-title">Configuration</h1>
-          <p className="page-subtitle">Gérez les utilisateurs et leurs rôles{loading ? ' · Chargement…' : ''}</p>
+          <span className="analytics-eyebrow">GESTION DE L’ÉQUIPE</span>
+          <h1 className="page-title"><UsersRound size={25} /> Configuration</h1>
+          <p className="page-subtitle">Gérez les accès, les entreprises et les rôles de votre équipe{loading ? ' · Chargement…' : ''}</p>
         </div>
+        <span className="configuration-company-pill"><Building2 size={15} />{selectedEntreprise?.nom || 'Entreprise active'}</span>
       </div>
 
       {error && <div className="message error" role="alert">{error}</div>}
       {notice && <div className="message success" role="status">{notice}</div>}
 
-      <Card>
-        <h2 className="bilan-side-title">Utilisateurs &amp; rôles</h2>
-        <div className="config-add-role" style={{ marginBottom: 16 }}>
+      <Card className="configuration-users-card">
+        <div className="configuration-card-heading"><div className="configuration-heading-icon"><UsersRound size={19} /></div><div><h2>Utilisateurs &amp; rôles</h2><p>Invitez un membre et attribuez-lui son rôle dans une entreprise.</p></div></div>
+        <div className="config-add-role config-member-form">
           <input className="input" type="email" placeholder="E-mail d’un utilisateur déjà inscrit" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
           <select className="input select" value={newMemberEntrepriseId} onChange={(e) => setNewMemberEntrepriseId(e.target.value)} disabled={adminCompanies.length === 0} aria-label="Entreprise à laquelle rattacher l’utilisateur">
             {adminCompanies.map((company) => <option key={company.id} value={company.id}>{company.nom}</option>)}
@@ -204,9 +206,9 @@ export default function Configuration() {
           </select>
           <Button size="sm" disabled={!newMemberEmail.trim() || !newMemberRole || !newMemberEntrepriseId || savingUserId === "new"} onClick={addExistingUser}>{savingUserId === "new" ? "Ajout…" : "Ajouter à l’entreprise"}</Button>
         </div>
-        <p className="page-subtitle">La personne doit déjà avoir créé son compte. L’entreprise choisie détermine où son compte et son rôle seront rattachés.</p>
-        <div className="table-wrap">
-          <table className="balance-table">
+        <p className="configuration-helper">La personne doit déjà avoir créé son compte. L’entreprise choisie détermine où son compte et son rôle seront rattachés.</p>
+        <div className="table-wrap configuration-table-wrap">
+          <table className="balance-table configuration-table">
             <thead><tr><th>Utilisateur</th><th>Contact</th><th>Rôles dans l’entreprise active</th><th>Autres entreprises et rôles</th><th>Ajouter un rôle ici</th><th>Statut</th></tr></thead>
             <tbody>
               {users.map((user) => {
@@ -270,8 +272,8 @@ export default function Configuration() {
         </div>
       </Card>
 
-      <Card>
-        <h2 className="bilan-side-title"><ShieldCheck size={15} style={{ verticalAlign: 'text-bottom', marginRight: 6 }} />Privilèges par rôle</h2>
+      <Card className="configuration-permissions-card">
+        <div className="configuration-card-heading"><div className="configuration-heading-icon permission-icon"><ShieldCheck size={19} /></div><div><h2>Privilèges par rôle</h2><p>Consultez les droits associés aux différents profils.</p></div></div>
         <div className="config-role-grid">
           {sortedRoles.map((role) => (
             <div className="config-role-card" key={role.id}>
