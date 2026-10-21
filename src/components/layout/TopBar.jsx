@@ -6,18 +6,12 @@ import {
   Moon,
   FileText,
   BookOpen,
-  Building2,
-  Plus,
-  X,
-  RefreshCw,
 } from "lucide-react";
 import NotificationsPanel from "./NotificationsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useTheme } from "../../context/ThemeContext";
 import { useExercice } from "../../context/ExerciceContext";
-import { useAuth } from "../../context/AuthContext";
-import { syncSalesPipeline } from "../../services/syncVentesService";
 
 export default function TopBar() {
   const location = useLocation();
@@ -31,41 +25,6 @@ export default function TopBar() {
   const debounceRef = useRef(null);
 
   const { exercices, selectedExerciceId, setSelectedExerciceId } = useExercice();
-  const { companies, selectedEntrepriseId, switchEntreprise, createCompany, hasRole } = useAuth();
-  const [companyFormOpen, setCompanyFormOpen] = useState(false);
-  const [companyName, setCompanyName] = useState("");
-  const [companyError, setCompanyError] = useState("");
-  const [creatingCompany, setCreatingCompany] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState(false);
-
-  async function handleSyncSales() {
-    if (syncing) return;
-    try {
-      setSyncing(true);
-      const res = await syncSalesPipeline();
-      window.dispatchEvent(new CustomEvent("cipresa-sales-synced", { detail: res }));
-      setSyncSuccess(true);
-      setTimeout(() => setSyncSuccess(false), 3000);
-    } catch (err) {
-      console.error("[TopBar] Erreur synchronisation :", err);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  async function handleCreateCompany(event) {
-    event.preventDefault();
-    const name = companyName.trim();
-    if (name.length < 2) { setCompanyError("Le nom doit contenir au moins 2 caractères."); return; }
-    setCreatingCompany(true);
-    setCompanyError("");
-    const { error } = await createCompany(name);
-    setCreatingCompany(false);
-    if (error) { setCompanyError(error.message || "La création de l’entreprise a échoué."); return; }
-    setCompanyName("");
-    setCompanyFormOpen(false);
-  }
 
   useEffect(() => {
     if (!supabaseConfigured) return undefined;
@@ -209,38 +168,8 @@ export default function TopBar() {
             ))}
           </select>
         </label>
-        {companies.length > 0 && <label className="topbar-exercice" title="Entreprise active pour toutes les pages">
-          <Building2 size={14} />
-          <select value={selectedEntrepriseId} onChange={(e) => switchEntreprise(e.target.value)} aria-label="Entreprise active">
-            {companies.map((company) => <option key={company.id} value={company.id}>{company.nom}</option>)}
-          </select>
-        </label>}
-        {hasRole("ADMIN") && <button type="button" className="topbar-company-create" onClick={() => { setCompanyError(""); setCompanyFormOpen(true); }}>
-          <Plus size={15} /><span>Nouvelle entreprise</span>
-        </button>}
       </div>
       <div className="topbar-right">
-        <button
-          className="icon-button"
-          type="button"
-          onClick={handleSyncSales}
-          disabled={syncing}
-          aria-label="Synchroniser les ventes"
-          title={
-            syncing
-              ? "Synchronisation en cours..."
-              : syncSuccess
-              ? "Synchronisation réussie !"
-              : "Synchroniser les ventes"
-          }
-        >
-          <RefreshCw
-            size={16}
-            className={`${syncing ? "animate-spin" : ""} ${
-              syncSuccess ? "text-emerald-500" : ""
-            }`}
-          />
-        </button>
         <button
           className="icon-button"
           type="button"
@@ -252,18 +181,6 @@ export default function TopBar() {
         </button>
         <NotificationsPanel />
       </div>
-      {companyFormOpen && <div className="company-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingCompany) setCompanyFormOpen(false); }}>
-        <section className="company-dialog" role="dialog" aria-modal="true" aria-labelledby="company-dialog-title">
-          <header><div><Building2 size={19} /><h2 id="company-dialog-title">Créer une entreprise</h2></div><button type="button" aria-label="Fermer" onClick={() => setCompanyFormOpen(false)} disabled={creatingCompany}><X size={18} /></button></header>
-          <p>Vous deviendrez administrateur de cette entreprise. Ses comptes, exercices et écritures seront séparés des autres entreprises.</p>
-          <form onSubmit={handleCreateCompany}>
-            <label htmlFor="new-company-name">Nom de l’entreprise</label>
-            <input id="new-company-name" autoFocus required minLength={2} maxLength={120} value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ex. CIPRESA SARL" />
-            {companyError && <p className="company-dialog-error" role="alert">{companyError}</p>}
-            <footer><button type="button" className="company-dialog-cancel" onClick={() => setCompanyFormOpen(false)} disabled={creatingCompany}>Annuler</button><button type="submit" disabled={creatingCompany || companyName.trim().length < 2}>{creatingCompany ? "Création…" : "Créer et ouvrir"}</button></footer>
-          </form>
-        </section>
-      </div>}
     </header>
   );
 }

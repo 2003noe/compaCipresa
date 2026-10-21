@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ children }) {
-  const { session, profile, roles, companies, loading, accessLoading, accessError, signOut } = useAuth();
+  const { session, profile, roles, loading, accessLoading, accessError, signOut } = useAuth();
 
   if (loading) {
     return (
@@ -33,8 +33,6 @@ export default function ProtectedRoute({ children }) {
       ? "Votre profil n'est pas accessible avec les policies Supabase actuelles."
       : profile.actif === false
         ? 'Votre compte est désactivé.'
-        : !companies.length
-          ? 'Votre compte attend son rattachement à une entreprise. Demandez à l’administrateur de vous ajouter dans Configuration, puis reconnectez-vous.'
         : "Aucun rôle n'est associé à votre compte. Contactez un administrateur.";
 
     return (

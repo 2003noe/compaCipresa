@@ -1,16 +1,14 @@
 // src/pages/accounting/JournalPage.jsx
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Edit2, Trash2, FileText, Download, Printer } from 'lucide-react';
+import { Edit2, Trash2, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
-import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
 const PAGE_SIZE = 25;       // lignes affichées par page (écritures validées)
@@ -88,8 +86,6 @@ export default function JournalPage() {
   const [rowsValidees, setRowsValidees] = useState([]);
   const [rowsBrouillons, setRowsBrouillons] = useState([]);
   const [pieceUrls, setPieceUrls] = useState({});
-  const [exportingPDF, setExportingPDF] = useState(false);
-  const [showPDFPreview, setShowPDFPreview] = useState(false);
   const requestedPaths = useRef(new Set());
 
   // Référentiels
@@ -147,7 +143,7 @@ export default function JournalPage() {
         for (let from = 0; from < MAX_ROWS; from += FETCH_BATCH) {
           let q = supabase
             .from('ecritures_comptables')
-            .select('id,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code),lignes_ecritures!ligne_ecriture_company_fk(debit,credit),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
+            .select('id,numero,date_ecriture,libelle,reference_piece,statut,journaux(code),lignes_ecritures(debit,credit),pieces_comptables(id,type,reference,fichier_url)')
             .order('date_ecriture', { ascending: order === 'asc' })
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);
@@ -299,37 +295,6 @@ export default function JournalPage() {
     setOrder('desc');
   };
 
-  // Export Excel
-  const handleExportXLSX = () => {
-    const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
-    const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
-    exportJournalExcel({
-      rows: filteredValidees,
-      totals: totalsValidees,
-      exercice: selectedExercice,
-      filename: `Journal_comptable_${suffix}`,
-    });
-  };
-
-  // Export / Impression PDF
-  const handleExportPDF = async () => {
-    setExportingPDF(true);
-    try {
-      const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
-      const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
-      await exportJournalPDF({
-        rows: filteredValidees,
-        totals: totalsValidees,
-        exercice: selectedExercice,
-        filename: `Journal_comptable_${suffix}`,
-      });
-    } catch (err) {
-      console.error('Erreur export PDF journal:', err);
-    } finally {
-      setExportingPDF(false);
-    }
-  };
-
   // Rendu des tableaux
   const renderHead = (withActions) => (
     <thead>
@@ -380,53 +345,12 @@ export default function JournalPage() {
 
   return (
     <div className="page-content">
-      <div className="page-header no-print">
+      <div className="page-header">
         <div>
           <h1 className="page-title">Journal comptable</h1>
           <p className="page-subtitle">Consultez et gérez les écritures comptables</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Button
-            variant="secondary"
-            icon={Printer}
-            onClick={() => setShowPDFPreview(true)}
-            disabled={filteredValidees.length === 0}
-            title="Prévisualiser et imprimer en PDF"
-          >
-            Imprimer (PDF)
-          </Button>
-          <Button
-            variant="primary"
-            icon={Download}
-            onClick={handleExportXLSX}
-            disabled={filteredValidees.length === 0}
-            title="Exporter les écritures validées en Excel"
-          >
-            Exporter Excel
-          </Button>
-          <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
-        </div>
-      </div>
-
-      {/* En-tête visible uniquement à l'impression */}
-      <div className="print-only" style={{ display: 'none', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '12px' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>JOURNAL COMPTABLE</h2>
-            <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>Système Comptable SYSCOHADA</p>
-          </div>
-          <div style={{ textAlign: 'right', fontSize: '12px' }}>
-            {selectedExercice && <p style={{ margin: 0 }}>Exercice : {selectedExercice.code || selectedExercice.annee}</p>}
-            {(dateFrom || dateTo) && (
-              <p style={{ margin: 0 }}>Période : {dateFrom || '…'} → {dateTo || '…'}</p>
-            )}
-            <p style={{ margin: 0 }}>Imprimé le : {new Date().toLocaleDateString('fr-FR')}</p>
-          </div>
-        </div>
-        <p style={{ fontSize: '12px', margin: '0 0 8px' }}>
-          {filteredValidees.length} écriture(s) validée(s) · Débit total : {money(totalsValidees.debit)} FCFA · Crédit total : {money(totalsValidees.credit)} FCFA
-          {equilibre ? ' · ✓ Équilibré' : ` · ⚠ Écart : ${money(Math.abs(totalsValidees.debit - totalsValidees.credit))} FCFA`}
-        </p>
+        <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
       </div>
 
       {notice && <div className="message success" role="status" style={{ marginBottom: '16px' }}>{notice}</div>}
@@ -482,26 +406,6 @@ export default function JournalPage() {
           <div>
             <h2 className="section-title">Écritures validées</h2>
             <p className="page-subtitle">{filteredValidees.length} écriture(s) comptabilisée(s)</p>
-          </div>
-          <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-            <Button
-              icon={Download}
-              variant="outline"
-              size="sm"
-              onClick={handleExportXLSX}
-              disabled={filteredValidees.length === 0}
-            >
-              Excel
-            </Button>
-            <Button
-              icon={Printer}
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPDFPreview(true)}
-              disabled={filteredValidees.length === 0}
-            >
-              PDF
-            </Button>
           </div>
         </div>
 
@@ -586,25 +490,6 @@ export default function JournalPage() {
             </div>
           )}
         </Card>
-      )}
-
-      {showPDFPreview && (
-        <PDFPreviewModal
-          isOpen={showPDFPreview}
-          onClose={() => setShowPDFPreview(false)}
-          title="Journal comptable"
-          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
-          filename={`Journal_comptable_${selectedExercice?.code || 'exercice'}`}
-          defaultOrientation="landscape"
-          renderDocument={(orientation) => (
-            <JournalPDFDocument
-              rows={filteredValidees}
-              totals={totalsValidees}
-              exercice={selectedExercice}
-              orientation={orientation}
-            />
-          )}
-        />
       )}
     </div>
   );

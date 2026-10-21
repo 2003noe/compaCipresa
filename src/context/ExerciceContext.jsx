@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { useAuth } from "./AuthContext";
-import { accountingService } from "../services/accounting";
 
 const ExerciceContext = createContext(undefined);
 const STORAGE_KEY = "cipresa-exercice";
@@ -15,19 +14,22 @@ const readStored = () => {
 };
 
 export function ExerciceProvider({ children }) {
-  const { session, selectedEntrepriseId } = useAuth();
+  const { session } = useAuth();
   const [exercices, setExercices] = useState([]);
   const [selectedExerciceId, setSelectedExerciceIdState] = useState(readStored);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!supabaseConfigured || !supabase || !session?.user || !selectedEntrepriseId) {
+    if (!supabaseConfigured || !supabase || !session?.user) {
       setExercices([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data } = await accountingService.listExercises();
+    const { data } = await supabase
+      .from("exercices_comptables")
+      .select("id,code,annee,date_debut,date_fin,statut")
+      .order("annee", { ascending: false });
     const list = data || [];
     setExercices(list);
     // Exercice mémorisé s'il existe encore, sinon exercice ouvert, sinon le plus récent
@@ -36,7 +38,7 @@ export function ExerciceProvider({ children }) {
       return (list.find((e) => e.statut === "OUVERT") || list[0])?.id || "";
     });
     setLoading(false);
-  }, [session?.user?.id, selectedEntrepriseId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();

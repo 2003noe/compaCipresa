@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
-import { exportToExcel, GenericTablePDF, PDFPreviewModal } from '../../lib/generateFile';
+import { exportToExcel, downloadPDF, GenericTablePDF } from '../../lib/generateFile';
 import ListPage from './ListPage';
 import { useExercice } from '../../context/ExerciceContext';
 
@@ -28,7 +28,7 @@ export default function ChartOfAccounts() {
   const [loading,   setLoading]   = useState(true);
   const [notice,    setNotice]    = useState('');
   const [query,     setQuery]     = useState('');
-  const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Filtres par colonne : { class: '', nature: '', status: '' }
   const [filters, setFilters] = useState({ class: '', nature: '', status: '' });
@@ -103,57 +103,55 @@ export default function ChartOfAccounts() {
       sheet:    'Plan comptable',
     });
 
-  /* Export PDF — prévisualisation via modale */
-  const openPDFPreview = () => setShowPDFPreview(true);
+  /* Export PDF — délégué à lib/generateFile/exportPDF */
+  const exportPDF = async () => {
+    setExporting(true);
+    try {
+      await downloadPDF({
+        filename: 'plan_comptable',
+        document: (
+          <GenericTablePDF
+            title="Plan Comptable"
+            columns={COLUMNS}
+            rows={filteredRows}
+            footerText={`${filteredRows.length} compte(s) — compaCipresa`}
+          />
+        ),
+      });
+    } catch (err) {
+      console.error('Erreur export PDF :', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
-    <>
-      <ListPage
-        title="Plan comptable"
-        subtitle={`Plan comptable de l'exercice ${selectedExercice?.code || ''}`}
-        primary="Nouveau compte"
-        primaryPath="/nouveau-compte"
-        columns={COLUMNS}
-        rows={filteredRows}
-        loading={loading}
-        notice={notice}
-        /* Recherche */
-        searchValue={query}
-        onSearchChange={setQuery}
-        /* Filtres */
-        filters={filters}
-        onFilterChange={(key, val) => setFilters(prev => ({ ...prev, [key]: val }))}
-        onFilterReset={resetFilters}
-        activeFilterCount={activeFilterCount}
-        filterOptions={{
-          class:  uniqueValues('class'),
-          nature: uniqueValues('nature'),
-          status: uniqueValues('status'),
-        }}
-        /* Export */
-        onExportExcel={exportExcel}
-        onExportPDF={openPDFPreview}
-      />
-
-      {showPDFPreview && (
-        <PDFPreviewModal
-          isOpen={showPDFPreview}
-          onClose={() => setShowPDFPreview(false)}
-          title="Plan comptable"
-          subtitle={`Exercice : ${selectedExercice?.code || ''}`}
-          filename={`Plan_Comptable_${selectedExercice?.code || 'exercice'}`}
-          defaultOrientation="landscape"
-          renderDocument={(orientation) => (
-            <GenericTablePDF
-              title="Plan Comptable"
-              columns={COLUMNS}
-              rows={filteredRows}
-              footerText={`${filteredRows.length} compte(s) — compaCipresa`}
-              orientation={orientation}
-            />
-          )}
-        />
-      )}
-    </>
+    <ListPage
+      title="Plan comptable"
+      subtitle={`Plan comptable de l'exercice ${selectedExercice?.code || ''}`}
+      primary="Nouveau compte"
+      primaryPath="/nouveau-compte"
+      columns={COLUMNS}
+      rows={filteredRows}
+      loading={loading}
+      notice={notice}
+      /* Recherche */
+      searchValue={query}
+      onSearchChange={setQuery}
+      /* Filtres */
+      filters={filters}
+      onFilterChange={(key, val) => setFilters(prev => ({ ...prev, [key]: val }))}
+      onFilterReset={resetFilters}
+      activeFilterCount={activeFilterCount}
+      filterOptions={{
+        class:  uniqueValues('class'),
+        nature: uniqueValues('nature'),
+        status: uniqueValues('status'),
+      }}
+      /* Export */
+      onExportExcel={exportExcel}
+      onExportPDF={exportPDF}
+      exporting={exporting}
+    />
   );
 }

@@ -3,7 +3,7 @@ import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import { Plus, Printer, Download, Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
+import { Plus, FileSpreadsheet, FileText, Loader2, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ListPage({
@@ -45,14 +45,14 @@ export default function ListPage({
           <p className="page-subtitle">{subtitle}</p>
         </div>
         <div className="flex gap-2">
-          {onExportPDF && (
-            <Button variant="secondary" icon={Printer} onClick={onExportPDF} disabled={exporting}>
-              Imprimer (PDF)
+          {onExportExcel && (
+            <Button variant="secondary" icon={FileSpreadsheet} onClick={onExportExcel} disabled={exporting}>
+              Excel
             </Button>
           )}
-          {onExportExcel && (
-            <Button variant="primary" icon={Download} onClick={onExportExcel} disabled={exporting}>
-              Exporter Excel
+          {onExportPDF && (
+            <Button variant="secondary" icon={exporting ? Loader2 : FileText} onClick={onExportPDF} disabled={exporting}>
+              {exporting ? 'Export…' : 'PDF'}
             </Button>
           )}
           {primary && <Button icon={Plus} onClick={go}>{primary}</Button>}

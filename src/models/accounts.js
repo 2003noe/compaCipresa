@@ -15,7 +15,6 @@ export class Profile extends BaseModel {
     ville: { type: "text" },
     photo_url: { type: "text" },
     actif: { type: "bool", default: true },
-    active_entreprise_id: { type: "uuid", readOnly: true },
     created_at: { type: "datetime", readOnly: true },
   };
   get nomComplet() { return [this.prenom, this.nom].filter(Boolean).join(" ") || "Utilisateur"; }
@@ -32,17 +31,16 @@ export class Role extends BaseModel {
   };
 }
 
-// Liaison d'un utilisateur, d'un rôle et d'une entreprise (clé composée).
+// Table de liaison utilisateur <-> rôle : clé composée (user_id, role_id), donc pas de primaryKey simple.
 export class UserRole extends BaseModel {
-  static table = "entreprise_utilisateurs";
+  static table = "user_roles";
   static primaryKey = null;
   static fields = {
-    entreprise_id: { type: "uuid", required: true },
     user_id: { type: "uuid", required: true },
     role_id: { type: "uuid", required: true },
   };
-  static assign(entreprise_id, user_id, role_id) { return this.create({ entreprise_id, user_id, role_id }); }
-  static revoke(entreprise_id, user_id, role_id) { return this.deleteWhere({ entreprise_id, user_id, role_id }); }
+  static assign(user_id, role_id) { return this.create({ user_id, role_id }); }
+  static revoke(user_id, role_id) { return this.deleteWhere({ user_id, role_id }); }
 }
 
 export class Notification extends BaseModel {
@@ -51,7 +49,6 @@ export class Notification extends BaseModel {
   static TYPES = ["TVA", "CLOTURE", "RAPPROCHEMENT", "ECRITURE", "SYSTEME", "UTILISATEUR"];
   static fields = {
     id,
-    entreprise_id: { type: "uuid", readOnly: true },
     user_id: { type: "uuid", required: true },
     type: { type: "text", choices: Notification.TYPES },
     titre: { type: "text" },
@@ -61,12 +58,12 @@ export class Notification extends BaseModel {
   };
 }
 
-// Une ligne de paramètres par entreprise; RLS limite la requête à l'entreprise active.
+// Une seule ligne, id fixe (la même que celle utilisée par l'onglet Paramètres > Entreprise).
 export class ParametresEntreprise extends BaseModel {
   static table = "parametres_entreprise";
+  static ID = "00000000-0000-0000-0000-000000000001";
   static fields = {
     id,
-    entreprise_id: { type: "uuid", readOnly: true },
     raison_sociale: { type: "text" },
     forme_juridique: { type: "text" },
     numero_rccm: { type: "text" },
@@ -80,9 +77,5 @@ export class ParametresEntreprise extends BaseModel {
     devise: { type: "text" },
     tva_defaut_taux: { type: "number" },
   };
-  static async current(entreprise_id) {
-    const { data, error } = await this.query().eq("entreprise_id", entreprise_id).maybeSingle();
-    if (error) this._fail(error, "lecture");
-    return data ? new this(data) : null;
-  }
+  static current() { return this.get(this.ID); }
 }

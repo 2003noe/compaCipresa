@@ -30,7 +30,7 @@ export default function ClotureDetail() {
     setNotice('');
     Promise.all([
       supabase.from('clotures_comptables').select('*').eq('id', id).eq('exercice_id', selectedExerciceId).maybeSingle(),
-      supabase.from('controles_cloture').select('*, referentiel_controles_cloture!controle_referentiel_company_fk(numero,controle,frequence,responsable_type,justificatif_attendu)').eq('cloture_id', id),
+      supabase.from('controles_cloture').select('*, referentiel_controles_cloture(numero,controle,frequence,responsable_type,justificatif_attendu)').eq('cloture_id', id),
     ]).then(([cRes, ctrlRes]) => {
       if (cRes.error || ctrlRes.error) { setNotice((cRes.error || ctrlRes.error).message); setLoading(false); return; }
       setCloture(cRes.data);

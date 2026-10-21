@@ -4,10 +4,11 @@ import Button from '../../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
 import { useAuth } from '../../../context/AuthContext';
 
+const ID = '00000000-0000-0000-0000-000000000001';
 const empty = { raison_sociale: '', forme_juridique: '', numero_rccm: '', numero_cc: '', regime_fiscal: '', secteur_activite: '', adresse_postale: '', telephone: '', email_contact: '', plan_comptable_referentiel: '', devise: '', tva_defaut_taux: '' };
 
 export default function EntrepriseTab() {
-  const { hasRole, selectedEntrepriseId, updateCompanyName } = useAuth();
+  const { hasRole } = useAuth();
   const peutModifier = hasRole('ADMIN');
   const [form, setForm] = useState(empty);
   const [loading, setLoading] = useState(true);
@@ -17,13 +18,12 @@ export default function EntrepriseTab() {
 
   useEffect(() => {
     if (!supabaseConfigured) { setLoading(false); return; }
-    if (!selectedEntrepriseId) { setLoading(false); return; }
-    supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle().then(({ data, error: err }) => {
+    supabase.from('parametres_entreprise').select('*').eq('id', ID).maybeSingle().then(({ data, error: err }) => {
       if (err) { setError(err.message); setLoading(false); return; }
       if (data) setForm({ ...empty, ...data, tva_defaut_taux: data.tva_defaut_taux ?? '' });
       setLoading(false);
     });
-  }, [selectedEntrepriseId]);
+  }, []);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -31,12 +31,7 @@ export default function EntrepriseTab() {
     setSaving(true); setError(''); setNotice('');
     const { error: err } = await supabase.from('parametres_entreprise').update({
       ...form, tva_defaut_taux: form.tva_defaut_taux === '' ? null : Number(form.tva_defaut_taux),
-    }).eq('entreprise_id', selectedEntrepriseId);
-    if (!err && form.raison_sociale?.trim()) {
-      const { error: companyError } = await supabase.from('entreprises').update({ nom: form.raison_sociale.trim() }).eq('id', selectedEntrepriseId);
-      if (companyError) { setSaving(false); setError(companyError.message); return; }
-      updateCompanyName(selectedEntrepriseId, form.raison_sociale.trim());
-    }
+    }).eq('id', ID);
     setSaving(false);
     if (err) { setError(err.message); return; }
     setNotice('Paramètres enregistrés.');

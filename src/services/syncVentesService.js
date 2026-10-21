@@ -2,8 +2,8 @@ import { supabase } from "../lib/supabaseClient";
 
 // Clés et URLs par défaut pour la synchronisation
 export const DEFAULT_SYNC_CONFIG = {
-  apiUrl: import.meta.env.VITE_SALES_API_URL || "https://api-ventes.cipresa.local/v1",
-  apiKey: import.meta.env.VITE_SALES_API_KEY || "cipresa_sync_key_demo_2026_default",
+  apiUrl: import.meta.env.VITE_SALES_API_URL,      //|| "https://api-ventes.cipresa.local/v1",
+  apiKey: import.meta.env.VITE_SALES_API_KEY , //|| "cipresa_sync_key_demo_2026_default",
   mockFallback: import.meta.env.VITE_SALES_API_MOCK_FALLBACK !== "false",
 };
 

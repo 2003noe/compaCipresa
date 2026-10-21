@@ -23,15 +23,7 @@ export default function Login() {
   useEffect(() => {
     const stateEmail = location.state?.registeredEmail || '';
     if (stateEmail) setEmail(stateEmail);
-    setMessage(location.state?.waitingForCompany
-      ? 'Compte créé. Demandez à l’administrateur de votre entreprise de vous ajouter dans Configuration, puis connectez-vous.'
-      : location.state?.registered
-        ? 'E-mail vérifié, compte créé. Vous pouvez maintenant vous connecter.'
-        : location.state?.loggedOut
-          ? 'Vous avez été déconnecté avec succès.'
-          : location.state?.passwordReset
-            ? 'Mot de passe modifié. Connectez-vous avec le nouveau.'
-            : '');
+    setMessage(location.state?.registered ? 'E-mail vérifié, compte créé. Vous pouvez maintenant vous connecter.' : location.state?.loggedOut ? 'Vous avez été déconnecté avec succès.' : location.state?.passwordReset ? 'Mot de passe modifié. Connectez-vous avec le nouveau.' : '');
     if (location.state) window.history.replaceState({}, document.title);
   }, [location.state]);
 

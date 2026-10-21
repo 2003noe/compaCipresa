@@ -10,7 +10,6 @@ export class Compte extends BaseModel {
   static NATURES = ["ACTIF", "PASSIF", "CHARGE", "PRODUIT", "TRESORERIE"];
   static fields = {
     id,
-    exercice_id: { type: "uuid", required: true },
     numero: { type: "text", required: true },
     libelle: { type: "text", required: true },
     classe: { type: "text", required: true },          // "Classe 4 - Comptes de tiers"
@@ -108,7 +107,7 @@ export class EcritureComptable extends BaseModel {
   }
 
   static recentes(limit = 8) {
-    return this.all({ select: "*, lignes_ecritures!ligne_ecriture_company_fk(debit,credit)", limit });
+    return this.all({ select: "*, lignes_ecritures(debit,credit)", limit });
   }
   get totalDebit() { return (this.lignes_ecritures || []).reduce((a, l) => a + Number(l.debit || 0), 0); }
   get totalCredit() { return (this.lignes_ecritures || []).reduce((a, l) => a + Number(l.credit || 0), 0); }

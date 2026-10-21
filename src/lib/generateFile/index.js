@@ -1,36 +1,11 @@
-// src/lib/generateFile/index.js
+/**
+ * @module generateFile
+ *
+ * Point d'entrée unique pour toutes les fonctions de génération de fichiers.
+ *
+ * Utilisation :
+ *   import { exportToExcel, downloadPDF, GenericTablePDF } from '../../lib/generateFile';
+ */
 
-export { CIPRESA_LOGO_MORE_BASE64, CIPRESA_LOGO_BASE64 } from './banner.js';
-
-export {
-  DEFAULT_FOOTER_TEXT,
-  exportToExcel,
-  exportJournalExcel,
-  exportBalanceExcel,
-  exportGrandLivreExcel,
-  exportBilanExcel,
-  exportTresorerieExcel,
-  exportLivreInventaireExcel,
-} from './exportExcel.js';
-
-export {
-  downloadPDF,
-  GenericTablePDF,
-  CipresaFooter,
-  CipresaBanner,
-  CipresaBannerHeader,
-  JournalPDFDocument,
-  BalancePDFDocument,
-  GrandLivrePDFDocument,
-  BilanPDFDocument,
-  TresoreriePDFDocument,
-  LivreInventairePDFDocument,
-  exportJournalPDF,
-  exportBalancePDF,
-  exportGrandLivrePDF,
-  exportBilanPDF,
-  exportTresoreriePDF,
-  exportLivreInventairePDF,
-} from './exportPDF.jsx';
-
-export { default as PDFPreviewModal } from './PDFPreviewModal.jsx';
+export { exportToExcel }          from './exportExcel.js';
+export { downloadPDF, GenericTablePDF } from './exportPDF.jsx';

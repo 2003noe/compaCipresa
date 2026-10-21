@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Wallet, FileText, Award, Scale, Printer, Download } from "lucide-react";
+import { TrendingUp, Wallet, FileText, Award, Scale } from "lucide-react";
 import Card from "../../components/ui/Card";
 import KpiCard from "../../components/accounting/KpiCard";
 import AccountingTable from "../../components/accounting/AccountingTable";
@@ -8,10 +8,7 @@ import AlertCard from "../../components/accounting/AlertCard";
 import ChartCard from "../../components/accounting/ChartCard";
 import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useExercice } from "../../context/ExerciceContext";
-import { useAuth } from "../../context/AuthContext";
 import { buildBilan } from "../../lib/bilan";
-import { exportToExcel, GenericTablePDF, PDFPreviewModal } from "../../lib/generateFile";
-import Button from "../../components/ui/Button";
 import {
   money,
   dateFr,
@@ -32,7 +29,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const { selectedExercice } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
   const [soldesBilan, setSoldesBilan] = useState(null);
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
@@ -44,65 +40,57 @@ export default function Dashboard() {
   const [releveNonRapproche, setReleveNonRapproche] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [userRoles, setUserRoles] = useState([]);
-  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   useEffect(() => {
-    if (!supabaseConfigured || !selectedExercice || !selectedEntrepriseId) {
-      if (!selectedExercice || !selectedEntrepriseId) { setLoading(false); return; }
+    if (!supabaseConfigured) {
       setNotice("Supabase n'est pas configuré.");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
     Promise.all([
       supabase
         .from("comptes_comptables")
         .select(
           "id,numero,libelle,nature,exercice_id,solde_ouverture_debit,solde_ouverture_credit",
-        ).eq("exercice_id", selectedExercice.id),
+        ),
       supabase
         .from("lignes_ecritures")
         .select(
-          "compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)",
-        ).eq("ecritures_comptables.exercice_id", selectedExercice.id),
+          "compte_id,debit,credit,ecritures_comptables(exercice_id,date_ecriture,statut)",
+        ),
       supabase
         .from("ecritures_comptables")
         .select(
-          "id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures!ligne_ecriture_company_fk(debit,credit)",
+          "id,numero,exercice_id,date_ecriture,libelle,reference_piece,statut,lignes_ecritures(debit,credit)",
         )
-        .eq("exercice_id", selectedExercice.id)
         .order("date_ecriture", { ascending: false })
         .limit(8),
       supabase
         .from("ecritures_comptables")
-        .select("id,exercice_id,date_ecriture,statut").eq("exercice_id", selectedExercice.id),
+        .select("id,exercice_id,date_ecriture,statut"),
       supabase
         .from("declarations_tva")
-        .select("id,exercice_id,periode_libelle,statut,date_echeance").eq("exercice_id", selectedExercice.id),
+        .select("id,exercice_id,periode_libelle,statut,date_echeance"),
       supabase
         .from("clotures_comptables")
-        .select("id,exercice_id,periode,statut").eq("exercice_id", selectedExercice.id),
+        .select("id,exercice_id,periode,statut"),
       supabase.from("controles_cloture").select("cloture_id,statut"),
       supabase
         .from("lignes_releve_bancaire")
-        .select("id,compte_id,rapproche,compte:comptes_comptables!releve_compte_company_fk!inner(exercice_id)")
-        .eq("compte.exercice_id", selectedExercice.id)
+        .select("id,compte_id,rapproche")
         .eq("rapproche", false),
-      supabase.from("entreprise_utilisateurs").select("user_id").eq("entreprise_id", selectedEntrepriseId),
-    ]).then(async (results) => {
+      supabase.from("profiles").select("id,nom,prenom,actif"),
+      supabase.from("user_roles").select("user_id"),
+    ]).then((results) => {
       const errs = results.filter((r) => r.error);
       if (errs.length) {
         setNotice(
           `Certaines données n'ont pas pu être chargées : ${errs[0].error.message}`,
         );
       }
-      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, members] =
+      const [ac, ln, rec, ecl, decl, clo, ctrl, releve, prof, roles] =
         results.map((r) => r.data || []);
-      const memberIds = [...new Set(members.map((m) => m.user_id))];
-      const { data: prof } = memberIds.length
-        ? await supabase.from("profiles").select("id,nom,prenom,actif").in("id", memberIds)
-        : { data: [] };
       setComptes(ac);
       setLignesTout(
         ln.filter((l) => l.ecritures_comptables?.statut === "VALIDEE"),
@@ -114,10 +102,10 @@ export default function Dashboard() {
       setControlesCloture(ctrl);
       setReleveNonRapproche(releve);
       setProfiles(prof);
-      setUserRoles(members);
+      setUserRoles(roles);
       setLoading(false);
     });
-  }, [selectedExercice, selectedEntrepriseId]);
+  }, []);
 
   const previousExercice = null;
 
@@ -487,29 +475,6 @@ export default function Dashboard() {
     [selectedRecentes],
   );
 
-  /* --- Données tabulaires pour export PDF/Excel --- */
-  const dashboardKpiRows = [
-    { indicateur: 'Trésorerie', valeur: `${money(soldeTresorerie)} FCFA`, variation: `${deltaTresorerieMois >= 0 ? '+' : ''}${money(deltaTresorerieMois)} FCFA ce mois` },
-    { indicateur: "Chiffre d'affaires", valeur: `${money(caN)} FCFA`, variation: caPct === null ? 'Pas de comparaison N-1' : `${caPct >= 0 ? '+' : ''}${caPct.toFixed(1)}% vs N-1` },
-    { indicateur: 'Résultat net', valeur: `${money(resultatNetN)} FCFA`, variation: resultatPct === null ? 'Pas de comparaison N-1' : `${resultatPct >= 0 ? '+' : ''}${resultatPct.toFixed(1)}% vs N-1` },
-    { indicateur: 'Bilan (total actif)', valeur: bilan ? `${money(Math.round(bilan.totals.actif))} FCFA` : '-', variation: !bilan ? 'Total actif' : bilanEquilibre ? 'Équilibré' : `Écart : ${money(Math.round(bilanEcart))} FCFA` },
-    { indicateur: 'Écritures', valeur: String(ecrituresLight.length), variation: `${ecrituresCeMois} ce mois-ci` },
-  ];
-  const dashboardColumns = [
-    { key: 'indicateur', label: 'Indicateur' },
-    { key: 'valeur', label: 'Valeur', align: 'right' },
-    { key: 'variation', label: 'Variation / Détail' },
-  ];
-
-  const handleDashboardExcel = () => {
-    exportToExcel({
-      rows: dashboardKpiRows,
-      columns: dashboardColumns,
-      filename: `Tableau_de_bord_${selectedExercice?.code || 'exercice'}`,
-      sheet: 'Tableau de bord',
-    });
-  };
-
   return (
     <div className="page-content ">
       <div className="page-header">
@@ -523,15 +488,7 @@ export default function Dashboard() {
             {loading ? " · Chargement…" : ""}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading}>
-            Imprimer (PDF)
-          </Button>
-          <Button variant="primary" icon={Download} onClick={handleDashboardExcel} disabled={loading}>
-            Exporter Excel
-          </Button>
-          <span className="dashboard-date">Dernière mise à jour : {todayFr()}</span>
-        </div>
+        <div className="dashboard-date">Dernière mise à jour : {todayFr()}</div>
       </div>
 
       {notice && (
@@ -656,26 +613,6 @@ export default function Dashboard() {
         <AccountingTable rows={recentRows} onSeeAll={() => nav("/journal")} />
         <AlertCard items={alerts} />
       </div>
-
-      {showPDFPreview && (
-        <PDFPreviewModal
-          isOpen={showPDFPreview}
-          onClose={() => setShowPDFPreview(false)}
-          title="Tableau de bord"
-          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
-          filename={`Tableau_de_bord_${selectedExercice?.code || 'exercice'}`}
-          defaultOrientation="portrait"
-          renderDocument={(orientation) => (
-            <GenericTablePDF
-              title="Tableau de bord — Indicateurs clés"
-              columns={dashboardColumns}
-              rows={dashboardKpiRows}
-              footerText={`Dernière mise à jour : ${todayFr()}`}
-              orientation={orientation}
-            />
-          )}
-        />
-      )}
     </div>
   );
 }
