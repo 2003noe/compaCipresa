@@ -1918,6 +1918,34 @@
     text-align: center !important
 }
 
+.report-account-link {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--color-primary-dark);
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.report-account-link:hover,
+.report-account-link:focus-visible {
+    text-decoration-color: currentColor;
+}
+
+.report-delta-positive {
+    color: #168653;
+    font-weight: 700;
+}
+
+.report-delta-negative {
+    color: #c33b36;
+    font-weight: 700;
+}
+
 .balance-class-row td {
     background: var(--color-surface-muted);
     font-weight: 700;

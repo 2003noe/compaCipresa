@@ -74,7 +74,7 @@ export function buildBilan(soldes) {
     }
     const c = classify(r);
     if (!c) return;
-    groups[c.group].set(r.numero, { numero: r.numero, libelle: r.libelle, value: c.value });
+    groups[c.group].set(r.numero, { compte_id: r.compte_id, numero: r.numero, libelle: r.libelle, value: c.value });
   });
 
   const total = (k) => [...groups[k].values()].reduce((acc, x) => acc + x.value, 0);
@@ -130,6 +130,7 @@ export function mergeGroup(bilanN, bilanN1, key) {
       const b = bilanN1 ? bilanN1.groups[key].get(numero) : null;
       return {
         numero,
+        compte_id: (a || b).compte_id,
         libelle: (a || b).libelle,
         val: a ? a.value : 0,
         val1: bilanN1 ? (b ? b.value : 0) : null,

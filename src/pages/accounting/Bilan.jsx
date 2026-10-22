@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, Download, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import Select from '../../components/ui/Select';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
@@ -16,6 +18,13 @@ const fmt = (v) => {
   return n < 0 ? `(${txt})` : txt;
 };
 const fmtN1 = (v) => (v === null || v === undefined ? '-' : fmt(v));
+const deltaValue = (current, previous) => Number(current || 0) - Number(previous || 0);
+const deltaLabel = (current, previous) => {
+  const delta = deltaValue(current, previous);
+  if (Math.abs(delta) < 1) return 'Équilibré';
+  const pct = Number(previous) ? ` · ${(delta / Math.abs(Number(previous)) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}%` : ' · nouveau';
+  return `${delta > 0 ? '+' : '−'}${fmt(Math.abs(delta))}${pct}`;
+};
 const frDate = (d) => (d ? new Date(d).toLocaleDateString('fr-FR') : '');
 
 // Informations légales affichées si elles existent dans parametres_entreprise
@@ -26,9 +35,12 @@ const COMPANY_FIELDS = [
 ];
 
 export default function Bilan() {
+  const navigate = useNavigate();
   const { exercices: exercises, selectedExerciceId: exerciceId } = useExercice();
   const { selectedEntrepriseId } = useAuth();
   const [soldesN, setSoldesN] = useState(null);
+  const [soldesN1, setSoldesN1] = useState(null);
+  const [comparisonExerciseId, setComparisonExerciseId] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [notice, setNotice] = useState('');
@@ -66,6 +78,23 @@ export default function Bilan() {
 
   const selected = useMemo(() => exercises.find((e) => e.id === exerciceId), [exercises, exerciceId]);
 
+  const comparisonExercises = useMemo(() => selected
+    ? exercises.filter((e) => e.id !== selected.id && e.date_fin < selected.date_debut)
+      .sort((a, b) => b.date_fin.localeCompare(a.date_fin))
+    : [], [exercises, selected]);
+  const defaultComparisonId = comparisonExercises[0]?.id || '';
+  const effectiveComparisonId = comparisonExercises.some((e) => e.id === comparisonExerciseId)
+    ? comparisonExerciseId
+    : defaultComparisonId;
+  const comparison = useMemo(
+    () => comparisonExercises.find((e) => e.id === effectiveComparisonId) || null,
+    [comparisonExercises, effectiveComparisonId],
+  );
+
+  useEffect(() => {
+    setComparisonExerciseId(defaultComparisonId);
+  }, [selected?.id, defaultComparisonId]);
+
   // 2. Soldes calculés côté base et bornés à l'exercice exact sélectionné.
   useEffect(() => {
     if (!supabaseConfigured || !selected) return undefined;
@@ -79,9 +108,9 @@ export default function Bilan() {
       p_date_debut: ex.date_debut,
     });
 
-    call(selected).then((n) => {
+    Promise.all([call(selected), comparison ? call(comparison) : Promise.resolve({ data: null, error: null })]).then(([n, n1]) => {
         if (!active) return;
-        const err = n.error;
+        const err = n.error || n1.error;
         if (err) {
           const missing = /soldes_comptes|PGRST202|42883/.test(`${err.code} ${err.message}`);
           setNotice(
@@ -90,18 +119,20 @@ export default function Bilan() {
               : `Impossible de charger le bilan : ${err.message}`,
           );
           setSoldesN(null);
+          setSoldesN1(null);
         } else {
           setSoldesN(n.data || []);
+          setSoldesN1(n1.data || null);
         }
         setLoadingData(false);
       });
 
     return () => { active = false; };
-  }, [selected]);
+  }, [selected, comparison]);
 
   const bilanN = useMemo(() => (soldesN ? buildBilan(soldesN) : null), [soldesN]);
-  const bilanN1 = null;
-  const showN1 = false;
+  const bilanN1 = useMemo(() => (soldesN1 ? buildBilan(soldesN1) : null), [soldesN1]);
+  const showN1 = Boolean(bilanN1);
 
   // 3. Lignes d'affichage ACTIF / PASSIF
   const { actifRows, passifRows } = useMemo(() => {
@@ -168,7 +199,7 @@ export default function Bilan() {
   }, [bilanN, bilanN1]);
 
   const maxRowsCount = Math.max(actifRows.length, passifRows.length);
-  const cols = showN1 ? 4 : 3;
+  const cols = showN1 ? 5 : 3;
   const ecart = bilanN ? Math.abs(bilanN.ecart) : 0;
   const equilibre = ecart < 1;
   const nonClasses = bilanN ? [...bilanN.groups.NC.values()] : [];
@@ -183,6 +214,7 @@ export default function Bilan() {
           <td></td>
           <td></td>
           {showN1 && <td></td>}
+          {showN1 && <td></td>}
         </>
       );
     }
@@ -195,15 +227,21 @@ export default function Bilan() {
           <td colSpan={2} className={`balance-subtotal-row${bl}`}>{cell.label}</td>
           <td className="text-right balance-subtotal-row">{fmt(cell.val)}</td>
           {showN1 && <td className="text-right balance-subtotal-row">{fmtN1(cell.val1)}</td>}
+          {showN1 && <td className="text-right balance-subtotal-row">{deltaLabel(cell.val, cell.val1)}</td>}
         </>
       );
     }
     return (
       <>
-        <td className={`account-cell${bl}`}>{cell.num}</td>
+        <td className={`account-cell${bl}`}>
+          {cell.compte_id ? (
+            <button type="button" className="report-account-link" title="Ouvrir le grand livre de ce compte" onClick={() => navigate(`/grand-livre?compte=${encodeURIComponent(cell.compte_id)}`)}>{cell.num}</button>
+          ) : cell.num}
+        </td>
         <td>{cell.label}</td>
         <td className="text-right">{fmt(cell.val)}</td>
         {showN1 && <td className="text-right">{fmtN1(cell.val1)}</td>}
+        {showN1 && <td className={`text-right ${deltaValue(cell.val, cell.val1) > 0 ? 'report-delta-positive' : deltaValue(cell.val, cell.val1) < 0 ? 'report-delta-negative' : ''}`}>{deltaLabel(cell.val, cell.val1)}</td>}
       </>
     );
   };
@@ -215,7 +253,9 @@ export default function Bilan() {
         actifRows,
         passifRows,
         bilan: bilanN,
+        bilanN1,
         exercice: selected,
+        exerciceN1: comparison,
       });
     } catch (err) {
       console.error('Erreur export PDF bilan:', err);
@@ -229,7 +269,9 @@ export default function Bilan() {
       actifRows,
       passifRows,
       bilan: bilanN,
+      bilanN1,
       exercice: selected,
+      exerciceN1: comparison,
     });
   };
 
@@ -242,6 +284,14 @@ export default function Bilan() {
             Tableau de situation patrimoniale à la clôture (SYSCOHADA){loading || loadingData ? ' · Chargement…' : ''}
           </p>
         </div>
+        <Select label="Comparer avec" value={effectiveComparisonId} onChange={(event) => setComparisonExerciseId(event.target.value)} disabled={!comparisonExercises.length}>
+          <option value="">{comparisonExercises.length ? 'Aucun exercice antérieur' : 'Aucun exercice antérieur disponible'}</option>
+          {comparisonExercises.map((exercise) => (
+            <option key={exercise.id} value={exercise.id}>
+              {exercise.code || exercise.annee} · {frDate(exercise.date_debut)} – {frDate(exercise.date_fin)}
+            </option>
+          ))}
+        </Select>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
             variant="secondary"
@@ -276,10 +326,16 @@ export default function Bilan() {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fef2f2', color: '#991b1b', padding: '10px 16px', borderRadius: '8px', border: '1px solid #fecaca', fontWeight: 600 }}>
                 <AlertTriangle size={18} />
-                <span>Écart Actif / Passif : {fmt(ecart)} FCFA. Le bilan n'est pas équilibré : vérifiez les soldes d'ouverture et les comptes non classés ci-dessous.</span>
+                <span>Écart Actif / Passif : {fmt(bilanN.ecart)} FCFA. Le bilan n'est pas équilibré : vérifiez les soldes d'ouverture et les comptes non classés ci-dessous.</span>
               </div>
             )}
           </div>
+
+          {comparison && (
+            <div className="message no-print" style={{ marginBottom: 12 }} role="status">
+              Comparaison avec l’exercice {comparison.code || comparison.annee}, arrêté au {frDate(comparison.date_fin)}.
+            </div>
+          )}
 
           {/* Comptes non classés */}
           {nonClasses.length > 0 && (
@@ -306,7 +362,7 @@ export default function Bilan() {
                     <p key={d} style={{ margin: '2px 0 0 0', fontSize: '11px' }}>{d}</p>
                   ))}
                   <p style={{ margin: '6px 0 0 0', fontSize: '16px', fontWeight: 'bold' }}>
-                    BILAN COMPTABLE{provisoire ? ' PROVISOIRE' : ''} AU {frDate(selected.date_fin)}
+                    BILAN COMPTABLE{provisoire ? ' PROVISOIRE' : ''} AU {frDate(selected.date_fin)}{comparison ? ` · Comparaison ${comparison.code || comparison.annee}` : ''}
                   </p>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '12px' }}>
@@ -333,10 +389,12 @@ export default function Bilan() {
                     <th>Libellé de l'Actif</th>
                     <th className="text-right" style={{ width: '110px' }}>Net (N)</th>
                     {showN1 && <th className="text-right" style={{ width: '110px' }}>Net (N-1)</th>}
+                    {showN1 && <th className="text-right">Écart / %</th>}
                     <th style={{ width: '70px' }} className="border-left">Compte</th>
                     <th>Libellé du Passif</th>
                     <th className="text-right" style={{ width: '110px' }}>Montant (N)</th>
                     {showN1 && <th className="text-right" style={{ width: '110px' }}>Montant (N-1)</th>}
+                    {showN1 && <th className="text-right">Écart / %</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -351,9 +409,11 @@ export default function Bilan() {
                     <td colSpan={2}>TOTAL ACTIF</td>
                     <td className="text-right">{fmt(bilanN.totals.actif)}</td>
                     {showN1 && <td className="text-right">{fmtN1(bilanN1?.totals.actif)}</td>}
+                    {showN1 && <td className="text-right">{deltaLabel(bilanN.totals.actif, bilanN1?.totals.actif)}</td>}
                     <td colSpan={2} className="border-left">TOTAL PASSIF</td>
                     <td className="text-right">{fmt(bilanN.totals.passif)}</td>
                     {showN1 && <td className="text-right">{fmtN1(bilanN1?.totals.passif)}</td>}
+                    {showN1 && <td className="text-right">{deltaLabel(bilanN.totals.passif, bilanN1?.totals.passif)}</td>}
                   </tr>
                 </tbody>
               </table>
@@ -402,7 +462,9 @@ export default function Bilan() {
               actifRows={actifRows}
               passifRows={passifRows}
               bilan={bilanN}
+              bilanN1={bilanN1}
               exercice={selected}
+              exerciceN1={comparison}
               orientation={orientation}
             />
           )}

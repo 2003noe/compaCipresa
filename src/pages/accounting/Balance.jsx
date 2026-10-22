@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { exportBalanceExcel, exportBalancePDF, BalancePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -16,6 +17,7 @@ const classNumber = (classe) => {
 };
 
 export default function Balance() {
+  const navigate = useNavigate();
   const { selectedExercice, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const { selectedEntrepriseId } = useAuth();
   const [accounts, setAccounts] = useState([]);
@@ -40,7 +42,11 @@ export default function Balance() {
     Promise.all([
       supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
       supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).order('numero'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin),
+      supabase.rpc('soldes_comptes_exercice', {
+        p_exercice_id: exerciceId,
+        p_date_debut: selectedExercice.date_debut,
+        p_date_fin: selectedExercice.date_fin,
+      }),
     ]).then(([paramRes, acRes, mvRes]) => {
       if (!active) return;
       if (paramRes.data?.raison_sociale || paramRes.data?.nom_entreprise) {
@@ -57,12 +63,13 @@ export default function Balance() {
       setAccounts(acRes.data || []);
 
       const grouped = {};
-      (mvRes.data || []).forEach((line) => {
-        if (line.ecritures_comptables?.statut !== 'VALIDEE') return;
-        const key = `${line.compte_id}__${exerciceId}`;
-        if (!grouped[key]) grouped[key] = { debit: 0, credit: 0 };
-        grouped[key].debit += Number(line.debit || 0);
-        grouped[key].credit += Number(line.credit || 0);
+      (mvRes.data || []).forEach((account) => {
+        grouped[`${account.compte_id}__${exerciceId}`] = {
+          openingNet: Number(account.ouverture || 0) + Number(account.anterieur || 0),
+          debit: Number(account.periode_debit || 0),
+          credit: Number(account.periode_credit || 0),
+          closingNet: Number(account.solde_fin || 0),
+        };
       });
       setMovementsByAccount(grouped);
       setLoading(false);
@@ -76,12 +83,12 @@ export default function Balance() {
     .filter((a) => classFilter === 'Toutes classes' || a.classe === classFilter)
     .map((a) => {
       const mvt = movementsByAccount[`${a.id}__${exerciceId}`] || { debit: 0, credit: 0 };
-      const openingNet = Number(a.solde_ouverture_debit || 0) - Number(a.solde_ouverture_credit || 0);
-      const closingNet = openingNet + mvt.debit - mvt.credit;
+      const openingNet = mvt.openingNet ?? (Number(a.solde_ouverture_debit || 0) - Number(a.solde_ouverture_credit || 0));
+      const closingNet = mvt.closingNet ?? openingNet + mvt.debit - mvt.credit;
       return {
         ...a,
-        openingDebit: a.solde_ouverture_debit,
-        openingCredit: a.solde_ouverture_credit,
+        openingDebit: Math.max(openingNet, 0),
+        openingCredit: Math.max(-openingNet, 0),
         mvtDebit: mvt.debit,
         mvtCredit: mvt.credit,
         closingDebit: closingNet >= 0 ? closingNet : 0,
@@ -93,10 +100,10 @@ export default function Balance() {
   const integrity = useMemo(() => {
     const totals = accounts.reduce((acc, account) => {
       const movement = movementsByAccount[`${account.id}__${exerciceId}`] || { debit: 0, credit: 0 };
-      const openingNet = Number(account.solde_ouverture_debit || 0) - Number(account.solde_ouverture_credit || 0);
-      const closingNet = openingNet + movement.debit - movement.credit;
-      acc.openingDebit += Number(account.solde_ouverture_debit || 0);
-      acc.openingCredit += Number(account.solde_ouverture_credit || 0);
+      const openingNet = movement.openingNet ?? (Number(account.solde_ouverture_debit || 0) - Number(account.solde_ouverture_credit || 0));
+      const closingNet = movement.closingNet ?? openingNet + movement.debit - movement.credit;
+      acc.openingDebit += Math.max(openingNet, 0);
+      acc.openingCredit += Math.max(-openingNet, 0);
       acc.movementDebit += movement.debit;
       acc.movementCredit += movement.credit;
       acc.closingDebit += Math.max(closingNet, 0);
@@ -129,6 +136,7 @@ export default function Balance() {
         groups,
         grandTotal,
         exercice: selectedExercice,
+        integrity,
       });
     } catch (err) {
       console.error('Erreur export PDF balance:', err);
@@ -142,6 +150,7 @@ export default function Balance() {
       groups,
       grandTotal,
       exercice: selectedExercice,
+      integrity,
     });
   };
 
@@ -225,7 +234,7 @@ export default function Balance() {
                     <tr className="balance-class-row" key={`h-${classe}`}><td colSpan={8}>{classe}</td></tr>
                     {list.map((r) => (
                       <tr key={r.id}>
-                        <td className="account-cell">{r.numero}</td>
+                        <td className="account-cell"><button type="button" className="report-account-link" title="Ouvrir le grand livre de ce compte" onClick={() => navigate(`/grand-livre?compte=${encodeURIComponent(r.id)}`)}>{r.numero}</button></td>
                         <td>{r.libelle}</td>
                         <td className="text-right">{dash(r.openingDebit)}</td>
                         <td className="text-right">{dash(r.openingCredit)}</td>
@@ -296,6 +305,7 @@ export default function Balance() {
               groups={groups}
               grandTotal={grandTotal}
               exercice={selectedExercice}
+              integrity={integrity}
               orientation={orientation}
             />
           )}

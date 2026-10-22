@@ -463,6 +463,7 @@ export function BalancePDFDocument({
   groups = [],
   grandTotal = {},
   exercice = null,
+  integrity = null,
   orientation = 'landscape',
   footerText = DEFAULT_FOOTER_TEXT,
 }) {
@@ -541,6 +542,14 @@ export function BalancePDFDocument({
             <Text style={[baseStyles.totalCellRight, { width: wNumCol, fontSize: fSize }]}>{fmtNum(grandTotal.closingCredit)}</Text>
           </View>
         </View>
+
+        {integrity && (
+          <View style={{ marginTop: 6, padding: '4 6', backgroundColor: integrity.openingBalanced && integrity.movementsBalanced && integrity.closingBalanced ? '#ecfdf5' : '#fef2f2', borderWidth: 0.5, borderColor: integrity.openingBalanced && integrity.movementsBalanced && integrity.closingBalanced ? '#10b981' : '#ef4444', borderRadius: 2 }}>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: integrity.openingBalanced && integrity.movementsBalanced && integrity.closingBalanced ? '#15803d' : '#b91c1c' }}>
+              Contrôles : à-nouveaux {integrity.openingBalanced ? 'équilibrés' : 'déséquilibrés'} · mouvements {integrity.movementsBalanced ? 'équilibrés' : 'déséquilibrés'} · clôture {integrity.closingBalanced ? 'équilibrée' : 'déséquilibrée'}
+            </Text>
+          </View>
+        )}
 
         <CipresaFooter footerText={footerText} />
       </Page>
@@ -651,10 +660,14 @@ export function BilanPDFDocument({
   passifRows = [],
   bilan = null,
   exercice = null,
+  bilanN1 = null,
+  exerciceN1 = null,
   orientation = 'landscape',
   footerText = DEFAULT_FOOTER_TEXT,
 }) {
   const exCode = exercice?.code || exercice?.annee || '';
+  const exN1Code = exerciceN1?.code || exerciceN1?.annee || '';
+  const showN1 = Boolean(exerciceN1 && bilanN1);
   const isPortrait = orientation === 'portrait';
   const fmt = (v) => {
     const n = Math.round(Number(v || 0));
@@ -663,10 +676,23 @@ export function BilanPDFDocument({
     return n < 0 ? `(${txt})` : txt;
   };
 
-  const renderSectionSide = (title, rows, totalVal) => (
+  const changeText = (current, previous) => {
+    const delta = Number(current || 0) - Number(previous || 0);
+    if (Math.abs(delta) < 1) return '—';
+    const pct = Number(previous) ? `${(delta / Math.abs(Number(previous)) * 100).toFixed(1)}%` : 'Nouveau';
+    return `${delta > 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('fr-FR')} (${pct})`;
+  };
+  const renderSectionSide = (title, rows, totalVal, totalVal1) => (
     <View style={{ flex: 1, paddingHorizontal: 4 }}>
       <View style={{ backgroundColor: '#166534', padding: '4 6', borderRadius: 2, marginBottom: 2 }}>
         <Text style={{ color: '#fff', fontFamily: 'Helvetica-Bold', fontSize: 8 }}>{title}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', backgroundColor: '#e9f4ec', padding: '3 4' }}>
+        <Text style={{ width: showN1 ? '15%' : '22%', fontSize: 6, fontFamily: 'Helvetica-Bold' }}>Compte</Text>
+        <Text style={{ flex: 1, fontSize: 6, fontFamily: 'Helvetica-Bold' }}>Intitulé</Text>
+        <Text style={{ width: showN1 ? '13%' : '18%', textAlign: 'right', fontSize: 6, fontFamily: 'Helvetica-Bold' }}>{exCode}</Text>
+        {showN1 && <Text style={{ width: '13%', textAlign: 'right', fontSize: 6, fontFamily: 'Helvetica-Bold' }}>{exN1Code}</Text>}
+        {showN1 && <Text style={{ width: '22%', textAlign: 'right', fontSize: 6, fontFamily: 'Helvetica-Bold' }}>Écart / %</Text>}
       </View>
       {rows.map((r, i) => {
         if (r.isSection) {
@@ -680,22 +706,28 @@ export function BilanPDFDocument({
           return (
             <View key={i} style={{ flexDirection: 'row', backgroundColor: '#f1f5f9', padding: '2.5 4', borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1' }}>
               <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold', fontSize: 7 }}>{r.label}</Text>
-              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7 }}>{fmt(r.val)}</Text>
+              <Text style={{ width: showN1 ? '13%' : '18%', textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 7 }}>{fmt(r.val)}</Text>
+              {showN1 && <Text style={{ width: '13%', textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 7 }}>{fmt(r.val1)}</Text>}
+              {showN1 && <Text style={{ width: '22%', textAlign: 'right', fontSize: 5.5 }}>{changeText(r.val, r.val1)}</Text>}
             </View>
           );
         }
         return (
           <View key={i} style={{ flexDirection: 'row', padding: '2 4', borderBottomWidth: 0.5, borderBottomColor: '#e2e8f0' }}>
-            <Text style={{ width: '22%', fontSize: 6.5, color: '#475569' }}>{r.num || ''}</Text>
+            <Text style={{ width: showN1 ? '15%' : '22%', fontSize: 6.5, color: '#475569' }}>{r.num || ''}</Text>
             <Text style={{ flex: 1, fontSize: 6.5 }}>{r.label}</Text>
-            <Text style={{ fontSize: 6.5, textAlign: 'right' }}>{fmt(r.val)}</Text>
+            <Text style={{ width: showN1 ? '13%' : '18%', fontSize: 6.5, textAlign: 'right' }}>{fmt(r.val)}</Text>
+            {showN1 && <Text style={{ width: '13%', fontSize: 6.5, textAlign: 'right' }}>{fmt(r.val1)}</Text>}
+            {showN1 && <Text style={{ width: '22%', fontSize: 5.5, textAlign: 'right' }}>{changeText(r.val, r.val1)}</Text>}
           </View>
         );
       })}
       {totalVal !== undefined && (
         <View style={{ flexDirection: 'row', backgroundColor: '#cbd5e1', padding: '4 4', marginTop: 4 }}>
           <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>TOTAL {title}</Text>
-          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>{fmt(totalVal)}</Text>
+          <Text style={{ width: showN1 ? '13%' : '18%', textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>{fmt(totalVal)}</Text>
+          {showN1 && <Text style={{ width: '13%', textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>{fmt(totalVal1)}</Text>}
+          {showN1 && <Text style={{ width: '22%', textAlign: 'right', fontSize: 5.5 }}>{changeText(totalVal, totalVal1)}</Text>}
         </View>
       )}
     </View>
@@ -706,12 +738,12 @@ export function BilanPDFDocument({
       <Page size="A4" orientation={orientation} style={baseStyles.page}>
         <CipresaBannerHeader
           title="BILAN COMPTABLE (SYSCOHADA)"
-          subtitle={`Exercice : ${exCode} — Situation patrimoniale`}
+          subtitle={`Exercice : ${exCode}${showN1 ? ` — Comparaison : ${exN1Code}` : ''} — Situation patrimoniale`}
         />
 
         <View style={{ flexDirection: isPortrait ? 'column' : 'row', marginTop: 4, gap: isPortrait ? 10 : 0 }}>
-          {renderSectionSide('ACTIF', actifRows, bilan?.totals?.totalActif)}
-          {renderSectionSide('PASSIF', passifRows, bilan?.totals?.totalPassif)}
+          {renderSectionSide('ACTIF', actifRows, bilan?.totals?.actif, bilanN1?.totals?.actif)}
+          {renderSectionSide('PASSIF', passifRows, bilan?.totals?.passif, bilanN1?.totals?.passif)}
         </View>
 
         {bilan && (

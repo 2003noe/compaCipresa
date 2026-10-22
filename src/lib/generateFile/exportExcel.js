@@ -214,7 +214,7 @@ export function exportJournalExcel({ rows = [], totals = {}, exercice = null, fi
 /**
  * Export Excel dédié à la Balance Générale des Comptes
  */
-export function exportBalanceExcel({ groups = [], grandTotal = {}, exercice = null, filename = 'Balance_Generale' }) {
+export function exportBalanceExcel({ groups = [], grandTotal = {}, exercice = null, integrity = null, filename = 'Balance_Generale' }) {
   const exCode = exercice?.code || exercice?.annee || 'Exercice';
   const dateStr = new Date().toLocaleDateString('fr-FR');
 
@@ -280,6 +280,14 @@ export function exportBalanceExcel({ groups = [], grandTotal = {}, exercice = nu
     Number(grandTotal?.closingDebit || 0),
     Number(grandTotal?.closingCredit || 0),
   ]);
+
+  if (integrity) {
+    aoa.push([]);
+    aoa.push(['CONTRÔLES DE COHÉRENCE', '', '', '', '', '', '', '', '']);
+    aoa.push(['À-nouveaux équilibrés', integrity.openingBalanced ? 'Oui' : 'Non', '', '', '', '', '', '', '']);
+    aoa.push(['Mouvements équilibrés', integrity.movementsBalanced ? 'Oui' : 'Non', '', '', '', '', '', '', '']);
+    aoa.push(['Soldes de clôture équilibrés', integrity.closingBalanced ? 'Oui' : 'Non', '', '', '', '', '', '', '']);
+  }
 
   aoa.push([]);
   aoa.push([DEFAULT_FOOTER_TEXT]);
@@ -377,7 +385,9 @@ export function exportBilanExcel({
   actifRows = [],
   passifRows = [],
   bilan = null,
+  bilanN1 = null,
   exercice = null,
+  exerciceN1 = null,
   filename = 'Bilan_Comptable',
 }) {
   const exCode = exercice?.code || exercice?.annee || '';
@@ -387,45 +397,51 @@ export function exportBilanExcel({
     [COMPANY_NAME],
     [COMPANY_SUBTITLE],
     ['BILAN COMPTABLE (SYSCOHADA)'],
-    [`Exercice : ${exCode} — Date : ${dateStr}`],
+    [`Exercice : ${exCode}${exerciceN1 ? ` · Comparaison : ${exerciceN1.code || exerciceN1.annee}` : ''} — Date : ${dateStr}`],
     [],
-    ['SECTION / ÉLÉMENT', 'N° Compte', 'Intitulé', 'Montant Net (FCFA)'],
+    ['SECTION / ÉLÉMENT', 'N° Compte', 'Intitulé', 'Montant N (FCFA)', ...(exerciceN1 ? [`Montant ${exerciceN1.code || exerciceN1.annee} (FCFA)`, 'Écart (FCFA)', 'Écart (%)'] : [])],
   ];
 
-  aoa.push(['--- ACTIF ---', '', '', '']);
+  const amountColumns = (row) => [Number(row.val || 0), ...(exerciceN1 ? [Number(row.val1 || 0), Number(row.val || 0) - Number(row.val1 || 0), Number(row.val1) ? `${((Number(row.val || 0) - Number(row.val1)) / Math.abs(Number(row.val1)) * 100).toFixed(1)}%` : (Number(row.val) ? 'Nouveau' : '—')] : [])];
+  const sectionRow = (label) => [label, '', '', ...Array(exerciceN1 ? 4 : 1).fill('')];
+
+  aoa.push(sectionRow('--- ACTIF ---'));
   actifRows.forEach((r) => {
     if (r.isSection) {
-      aoa.push([r.label, '', '', '']);
+      aoa.push(sectionRow(r.label));
     } else if (r.isSubtotal) {
-      aoa.push(['', '', r.label, Number(r.val || 0)]);
+      aoa.push(['', '', r.label, ...amountColumns(r)]);
     } else {
-      aoa.push(['', r.num || '', r.label || '', Number(r.val || 0)]);
+      aoa.push(['', r.num || '', r.label || '', ...amountColumns(r)]);
     }
   });
 
   if (bilan?.totals) {
-    aoa.push(['TOTAL ACTIF', '', '', Number(bilan.totals.totalActif || 0)]);
+    const totalRow = { val: bilan.totals.actif, val1: bilanN1?.totals?.actif };
+    aoa.push(['TOTAL ACTIF', '', '', ...amountColumns(totalRow)]);
   }
 
   aoa.push([]);
-  aoa.push(['--- PASSIF ---', '', '', '']);
+  aoa.push(sectionRow('--- PASSIF ---'));
   passifRows.forEach((r) => {
     if (r.isSection) {
-      aoa.push([r.label, '', '', '']);
+      aoa.push(sectionRow(r.label));
     } else if (r.isSubtotal) {
-      aoa.push(['', '', r.label, Number(r.val || 0)]);
+      aoa.push(['', '', r.label, ...amountColumns(r)]);
     } else {
-      aoa.push(['', r.num || '', r.label || '', Number(r.val || 0)]);
+      aoa.push(['', r.num || '', r.label || '', ...amountColumns(r)]);
     }
   });
 
   if (bilan?.totals) {
-    aoa.push(['TOTAL PASSIF', '', '', Number(bilan.totals.totalPassif || 0)]);
+    const totalRow = { val: bilan.totals.passif, val1: bilanN1?.totals?.passif };
+    aoa.push(['TOTAL PASSIF', '', '', ...amountColumns(totalRow)]);
     aoa.push([
       'CONTRÔLE ÉQUILIBRE',
       '',
       '',
       Math.abs(bilan.ecart || 0) < 1 ? 'Équilibré ✓' : `Écart : ${Number(bilan.ecart || 0)} FCFA`,
+      ...(exerciceN1 ? ['', '', ''] : []),
     ]);
   }
 
