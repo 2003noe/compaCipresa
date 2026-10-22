@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Leaf, Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, ShieldCheck, CircleHelp } from 'lucide-react';
+import { Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, CircleHelp } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const items = [
   ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
   ['/grand-livre', 'Grand livre', Book], ['/balance', 'Balance', Scale], ['/bilan', 'Bilan', FileText],
   ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet],
-  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings], ['/faq', 'Aide & FAQ', CircleHelp]
+  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2], ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
 ];
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
-  const { profile, roles, signOut, hasRole } = useAuth();
+  const { profile, roles, signOut, companies } = useAuth();
+  const canViewCompanyAnalytics = companies.some((company) => company.roles?.some((role) => role.code === 'ADMIN'));
 
   const userName = profile ? ([profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Utilisateur') : 'Utilisateur';
   const userRole = roles?.[0]?.nom || 'Rôle non défini';
@@ -47,9 +48,9 @@ export default function Sidebar() {
               <Icon size={16} /><span className="nav-label">{label}</span>{label === 'Tableau de bord' && <i />}
             </NavLink>
           ))}
-          {hasRole('ADMIN') && (
-            <NavLink to="/configuration" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <ShieldCheck size={16} /><span className="nav-label">Configuration</span>
+          {canViewCompanyAnalytics && (
+            <NavLink to="/administration/entreprises" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Building2 size={16} /><span className="nav-label">Vue entreprises</span>
             </NavLink>
           )}
         </nav>
@@ -58,6 +59,10 @@ export default function Sidebar() {
       <div className="user-menu" ref={menuRef}>
         {isOpen && (
           <div className="user-dropdown" role="menu">
+            <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={() => navigate('/faq')}>
+              <CircleHelp size={16} /><span className="nav-label">FAQ & Aide</span>
+            </NavLink>
+
             <button type="button" className="user-dropdown-item" onClick={() => navigate('/profil')}>
               <UserRound size={15} /> <span>Mon profil</span>
             </button>

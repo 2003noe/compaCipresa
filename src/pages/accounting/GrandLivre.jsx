@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Printer, Download } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
+import { exportGrandLivreExcel, exportGrandLivrePDF, GrandLivrePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const formatMoney = (val) => {
   if (val === null || val === undefined || val === '') return '';
@@ -54,6 +56,7 @@ export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const devise = 'FCFA';
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   
@@ -66,6 +69,8 @@ export default function GrandLivre() {
   
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [printDate] = useState(new Date());
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export default function GrandLivre() {
       return;
     }
     if (exercicesLoading) return;
-    if (!exerciceId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
+    if (!exerciceId || !selectedEntrepriseId) { setAccounts([]); setRawLines([]); setLoading(false); return; }
     setLoading(true);
     setAccounts([]);
     setRawLines([]);
@@ -83,13 +88,13 @@ export default function GrandLivre() {
     let active = true;
 
     Promise.all([
-      supabase.from('parametres_entreprise').select('*').limit(1).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').or(`exercice_id.eq.${exerciceId},exercice_id.is.null`).order('numero'),
-      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
+      supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux!ecriture_journal_company_fk(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
     ]).then(([paramRes, acRes, lineRes]) => {
       if (!active) return;
-      if (paramRes.data?.nom_entreprise) {
-        setCompanyName(paramRes.data.nom_entreprise.toUpperCase());
+      if (paramRes.data?.raison_sociale || paramRes.data?.nom_entreprise) {
+        setCompanyName((paramRes.data.raison_sociale || paramRes.data.nom_entreprise).toUpperCase());
       } else if (paramRes.data?.nom) {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
@@ -105,7 +110,7 @@ export default function GrandLivre() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exerciceId, selectedExercice, exercicesLoading]);
+  }, [exerciceId, selectedExercice, exercicesLoading, selectedEntrepriseId]);
 
   // La période suit l'exercice choisi dans la topbar
   useEffect(() => {
@@ -272,8 +277,29 @@ export default function GrandLivre() {
     };
   }, [accounts, rawLines, exerciceId, periodStart, periodEnd, selectedAccountId, selectedClasse, searchQuery]);
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      await exportGrandLivrePDF({
+        ledgerData,
+        exercice: selectedExercice,
+        periodStart,
+        periodEnd,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF grand livre:', err);
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    exportGrandLivreExcel({
+      ledgerData,
+      exercice: selectedExercice,
+      periodStart,
+      periodEnd,
+    });
   };
 
   return (
@@ -286,8 +312,21 @@ export default function GrandLivre() {
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
-          <Button icon={Printer} onClick={handlePrint}>
-            Imprimer le Grand-Livre
+          <Button
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || ledgerData.accounts.length === 0}
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
+            icon={Download}
+            onClick={handleExportExcel}
+            disabled={loading || ledgerData.accounts.length === 0}
+          >
+            Exporter Excel
           </Button>
         </div>
       </div>
@@ -675,6 +714,26 @@ export default function GrandLivre() {
           }
         }
       `}</style>
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Grand-livre des comptes"
+          subtitle={`Exercice : ${selectedExercice?.code || ''} — Période : ${periodStart || '—'} au ${periodEnd || '—'}`}
+          filename={`Grand_Livre_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <GrandLivrePDFDocument
+              ledgerData={ledgerData}
+              exercice={selectedExercice}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

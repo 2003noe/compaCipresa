@@ -8,6 +8,7 @@ import { ExerciceProvider } from "./context/ExerciceContext";
 import "./styles/tokens.css";
 import "./styles/globals.css";
 import "./styles/components.css";
+import "./styles/admin.css";
 import "./styles/otp.css";
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

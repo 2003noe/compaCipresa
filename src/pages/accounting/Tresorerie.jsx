@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Printer, Download } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { exportTresorerieExcel, exportTresoreriePDF, TresoreriePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const isCaisse = (numero) => (numero || '').startsWith('57');
@@ -14,6 +17,8 @@ export default function Tresorerie() {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
@@ -32,7 +37,7 @@ export default function Tresorerie() {
       const ids = (accs || []).map((a) => a.id);
       if (ids.length === 0) { setLoading(false); return; }
 
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,numero,libelle,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin).in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,numero,libelle,statut)').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice.date_fin).in('compte_id', ids).then(({ data: ln, error: lnErr }) => {
         if (!active) return;
         if (lnErr) { setNotice(`Impossible de charger les mouvements : ${lnErr.message}`); setLoading(false); return; }
         setLines((ln || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
@@ -90,12 +95,61 @@ export default function Tresorerie() {
 
   const maxFlow = Math.max(1, ...monthlyFlows.flatMap((b) => [b.entrees, b.sorties]));
 
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      await exportTresoreriePDF({
+        soldeBanque,
+        soldeCaisse,
+        disponibilites,
+        accounts: accountBalances,
+        movements,
+        monthlyFlows,
+        exercice: selectedExercice,
+      });
+    } catch (err) {
+      console.error('Erreur export PDF trésorerie:', err);
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    exportTresorerieExcel({
+      soldeBanque,
+      soldeCaisse,
+      disponibilites,
+      accounts: accountBalances,
+      movements,
+      monthlyFlows,
+      exercice: selectedExercice,
+    });
+  };
+
   return (
     <div className="page-content">
-      <div className="page-header">
+      <div className="page-header no-print">
         <div>
           <h1 className="page-title">Suivi de Trésorerie</h1>
           <p className="page-subtitle">Trésorerie de l'exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setShowPDFPreview(true)}
+            disabled={loading || accounts.length === 0}
+          >
+            Imprimer (PDF)
+          </Button>
+          <Button
+            variant="primary"
+            icon={Download}
+            onClick={handleExportExcel}
+            disabled={loading || accounts.length === 0}
+          >
+            Exporter Excel
+          </Button>
         </div>
       </div>
 
@@ -166,6 +220,29 @@ export default function Tresorerie() {
             </div>
           </Card>
         </>
+      )}
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Suivi de Trésorerie"
+          subtitle={`Exercice : ${selectedExercice?.code || ''}`}
+          filename={`Suivi_Tresorerie_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="portrait"
+          renderDocument={(orientation) => (
+            <TresoreriePDFDocument
+              soldeBanque={soldeBanque}
+              soldeCaisse={soldeCaisse}
+              disponibilites={disponibilites}
+              accounts={accountBalances}
+              movements={movements}
+              monthlyFlows={monthlyFlows}
+              exercice={selectedExercice}
+              orientation={orientation}
+            />
+          )}
+        />
       )}
     </div>
   );

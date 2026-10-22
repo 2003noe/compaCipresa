@@ -92,7 +92,7 @@ export default function JournalEntryForm() {
     let active = true;
     supabase
       .from('ecritures_comptables')
-      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,exercices_comptables(date_debut,date_fin,statut),lignes_ecritures(id,libelle,debit,credit,comptes_comptables(numero)),pieces_comptables(id,reference,type,fichier_url)')
+      .select('id,numero,date_ecriture,reference_piece,statut,exercice_id,journal_id,exercices_comptables!ecriture_exercice_company_fk(date_debut,date_fin,statut),lignes_ecritures!ligne_ecriture_company_fk(id,libelle,debit,credit,comptes_comptables!ligne_compte_company_fk(numero)),pieces_comptables!piece_ecriture_company_fk(id,reference,type,fichier_url)')
       .eq('id', editId)
       .single()
       .then(({ data, error: err }) => {

@@ -25,7 +25,7 @@ export default function CompteResultat() {
 
     Promise.all([
       supabase.from('comptes_comptables').select('id,numero,libelle,nature').eq('exercice_id', exerciceId),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
+      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
     ]).then(([ac, ln]) => {
       if (!active) return;
       if (ac.error || ln.error) {

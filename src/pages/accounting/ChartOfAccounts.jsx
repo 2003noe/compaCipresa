@@ -18,7 +18,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+<<<<<<< HEAD
 import { exportToExcel, downloadPDF, GenericTablePDF } from '../../lib/generateFile';
+=======
+import { exportToExcel, GenericTablePDF, PDFPreviewModal } from '../../lib/generateFile';
+import ListPage from './ListPage';
+>>>>>>> 468a317 (retouche pour accessibilite bloque frontend et ajout des migrations pour supabase)
 import { useExercice } from '../../context/ExerciceContext';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -56,6 +61,7 @@ const formatBalance = (row) => {
 export default function ChartOfAccounts() {
   const navigate = useNavigate();
   const { selectedExerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+<<<<<<< HEAD
 
   // Mode d'affichage : 'sectorial' (par thèmes, style document) ou 'list' (liste tabulaire)
   const [viewMode, setViewMode] = useState('sectorial');
@@ -68,6 +74,13 @@ export default function ChartOfAccounts() {
   const [notice, setNotice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
+=======
+  const [rows,      setRows]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [notice,    setNotice]    = useState('');
+  const [query,     setQuery]     = useState('');
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
+>>>>>>> 468a317 (retouche pour accessibilite bloque frontend et ajout des migrations pour supabase)
 
   // Filtres pour la vue Liste
   const [listFilters, setListFilters] = useState({ class: '', nature: '', status: '' });
@@ -185,6 +198,7 @@ export default function ChartOfAccounts() {
       }
     });
 
+<<<<<<< HEAD
     // Définir la structure des 6 sections thématiques comme dans le document
     // Section 1: Classe 1
     // Section 2: Classe 3
@@ -789,5 +803,59 @@ export default function ChartOfAccounts() {
         onSubAccountCreated={handleSubAccountCreated}
       />
     </div>
+=======
+  /* Export PDF — prévisualisation via modale */
+  const openPDFPreview = () => setShowPDFPreview(true);
+
+  return (
+    <>
+      <ListPage
+        title="Plan comptable"
+        subtitle={`Plan comptable de l'exercice ${selectedExercice?.code || ''}`}
+        primary="Nouveau compte"
+        primaryPath="/nouveau-compte"
+        columns={COLUMNS}
+        rows={filteredRows}
+        loading={loading}
+        notice={notice}
+        /* Recherche */
+        searchValue={query}
+        onSearchChange={setQuery}
+        /* Filtres */
+        filters={filters}
+        onFilterChange={(key, val) => setFilters(prev => ({ ...prev, [key]: val }))}
+        onFilterReset={resetFilters}
+        activeFilterCount={activeFilterCount}
+        filterOptions={{
+          class:  uniqueValues('class'),
+          nature: uniqueValues('nature'),
+          status: uniqueValues('status'),
+        }}
+        /* Export */
+        onExportExcel={exportExcel}
+        onExportPDF={openPDFPreview}
+      />
+
+      {showPDFPreview && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Plan comptable"
+          subtitle={`Exercice : ${selectedExercice?.code || ''}`}
+          filename={`Plan_Comptable_${selectedExercice?.code || 'exercice'}`}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <GenericTablePDF
+              title="Plan Comptable"
+              columns={COLUMNS}
+              rows={filteredRows}
+              footerText={`${filteredRows.length} compte(s) — compaCipresa`}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
+    </>
+>>>>>>> 468a317 (retouche pour accessibilite bloque frontend et ajout des migrations pour supabase)
   );
 }
