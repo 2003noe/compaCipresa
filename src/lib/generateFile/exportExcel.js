@@ -1,5 +1,5 @@
 // src/lib/generateFile/exportExcel.js
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 export const DEFAULT_FOOTER_TEXT = "généré part l'application de comptabilité de CIpressa consulting";
 const COMPANY_NAME = 'CIPRESA CONSULTING SARL';
@@ -69,6 +69,96 @@ export function exportToExcel({
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheet);
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+/** Export du plan comptable en deux colonnes de tableaux, comme la page écran. */
+export function exportChartOfAccountsExcel({ groups = [], filename = 'Plan_Comptable', title = 'PLAN COMPTABLE GÉNÉRAL & SECTORIEL', subtitle = '' }) {
+  const left = groups.filter((group) => group.column === 'left');
+  const right = groups.filter((group) => group.column === 'right');
+  const aoa = [
+    [COMPANY_NAME],
+    [COMPANY_SUBTITLE],
+    [title],
+    [subtitle],
+    [`Exporté le ${new Date().toLocaleDateString('fr-FR')}`],
+    [],
+  ];
+  const merges = [0, 1, 2, 3, 4].map((r) => ({ s: { r, c: 0 }, e: { r, c: 10 } }));
+  const styles = {
+    banner: { font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 14 }, fill: { fgColor: { rgb: 'FF174B38' } }, alignment: { vertical: 'center' } },
+    subtitle: { font: { italic: true, color: { rgb: 'FF557064' }, sz: 10 } },
+    title: { font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 12 }, fill: { fgColor: { rgb: 'FF24664E' } }, alignment: { vertical: 'center' } },
+    header: { font: { bold: true, color: { rgb: 'FF315643' }, sz: 9 }, fill: { fgColor: { rgb: 'FFE9F4EC' } }, alignment: { vertical: 'center' }, border: { bottom: { style: 'thin', color: { rgb: 'FFD6E5DC' } } } },
+    metric: { font: { bold: true, color: { rgb: 'FF26372E' }, sz: 9 }, fill: { fgColor: { rgb: 'FFF0F7F2' } }, alignment: { horizontal: 'right', vertical: 'center' } },
+    body: { font: { color: { rgb: 'FF26372E' }, sz: 9 }, border: { bottom: { style: 'hair', color: { rgb: 'FFE7ECE8' } } }, alignment: { vertical: 'center' } },
+    bodyAlt: { font: { color: { rgb: 'FF26372E' }, sz: 9 }, fill: { fgColor: { rgb: 'FFF8FAF8' } }, border: { bottom: { style: 'hair', color: { rgb: 'FFE7ECE8' } } }, alignment: { vertical: 'center' } },
+    positive: { font: { bold: true, color: { rgb: 'FF168653' }, sz: 9 }, alignment: { horizontal: 'right', vertical: 'center' } },
+    negative: { font: { bold: true, color: { rgb: 'FFC33B36' }, sz: 9 }, alignment: { horizontal: 'right', vertical: 'center' } },
+    balanced: { font: { color: { rgb: 'FF748278' }, sz: 8 }, alignment: { horizontal: 'right', vertical: 'center' } },
+  };
+  const differenceText = (value) => Number(value || 0) === 0
+    ? '— Équilibré'
+    : `${Number(value) > 0 ? '↗ +' : '↘ −'}${Math.abs(Number(value)).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`;
+  const differenceStyle = (value) => Number(value) > 0 ? styles.positive : Number(value) < 0 ? styles.negative : styles.balanced;
+  const cellAt = (ws, row, col) => ws[XLSX.utils.encode_cell({ r: row, c: col })];
+
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const leftGroup = left[index];
+    const rightGroup = right[index];
+    const titleRow = aoa.length;
+    aoa.push([leftGroup?.title || '', '', '', '', '', '', rightGroup?.title || '', '', '', '', '']);
+    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 4 } });
+    merges.push({ s: { r: titleRow, c: 6 }, e: { r: titleRow, c: 10 } });
+    const totalCells = (group) => group
+      ? ['', 'TOTAL CLASSE', Number(group.totalDebit || 0), Number(group.totalCredit || 0), differenceText(group.difference)]
+      : ['', '', '', '', ''];
+    aoa.push([...totalCells(leftGroup), ...totalCells(rightGroup)]);
+    aoa.push(['Compte', 'Intitulé du compte', 'Débit', 'Crédit', 'Différence', '', 'Compte', 'Intitulé du compte', 'Débit', 'Crédit', 'Différence']);
+    const count = Math.max(leftGroup?.rows?.length || 0, rightGroup?.rows?.length || 0);
+    for (let rowIndex = 0; rowIndex < count; rowIndex += 1) {
+      const accountCells = (account) => account
+        ? [account.numero || '', [account.libelle || '', account.notes || ''].filter(Boolean).join('\n'), Number(account.debit || 0), Number(account.credit || 0), differenceText(account.difference)]
+        : ['', '', '', '', ''];
+      aoa.push([...accountCells(leftGroup?.rows?.[rowIndex]), '', ...accountCells(rightGroup?.rows?.[rowIndex])]);
+    }
+    aoa.push(Array(11).fill(''));
+  }
+
+  aoa.push([DEFAULT_FOOTER_TEXT]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 3 }, { wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
+  ws['!merges'] = merges;
+  for (let col = 0; col <= 10; col += 1) {
+    const cell = cellAt(ws, 0, col); if (cell) cell.s = styles.banner;
+    const sub = cellAt(ws, 1, col); if (sub) sub.s = styles.subtitle;
+    const heading = cellAt(ws, 2, col); if (heading) heading.s = styles.title;
+  }
+  for (let row = 6; row < aoa.length; row += 1) {
+    const isClassTitle = String(aoa[row][0] || '').startsWith('Classe') || String(aoa[row][6] || '').startsWith('Classe');
+    const isHeader = aoa[row][0] === 'Compte' || aoa[row][6] === 'Compte';
+    const isMetric = aoa[row][1] === 'TOTAL CLASSE' || aoa[row][7] === 'TOTAL CLASSE';
+    if (isClassTitle) {
+      [0, 6].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) cell.s = styles.title; });
+      continue;
+    }
+    if (isHeader) {
+      [0, 1, 2, 3, 4, 6, 7, 8, 9, 10].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) cell.s = styles.header; });
+      continue;
+    }
+    if (isMetric) {
+      [0, 1, 2, 3, 4, 6, 7, 8, 9, 10].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) cell.s = styles.metric; });
+      [4, 10].forEach((col) => { const group = col === 4 ? left.find((item) => item?.title === aoa[row - 1]?.[0]) : right.find((item) => item?.title === aoa[row - 1]?.[6]); const cell = cellAt(ws, row, col); if (cell && group) cell.s = differenceStyle(group.difference); });
+      continue;
+    }
+    if (row >= aoa.length - 2) continue;
+    const accountRow = row % 2 ? styles.bodyAlt : styles.body;
+    [0, 1, 2, 3, 6, 7, 8, 9].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) cell.s = accountRow; });
+    [2, 3, 8, 9].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) { cell.z = '#,##0;[Red](#,##0);-'; cell.s = { ...accountRow, alignment: { horizontal: 'right', vertical: 'center' } }; } });
+    [4, 10].forEach((col) => { const cell = cellAt(ws, row, col); if (cell) { const txt = String(cell.v || ''); cell.s = txt.startsWith('↗') ? styles.positive : txt.startsWith('↘') ? styles.negative : styles.balanced; } });
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Plan comptable');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 

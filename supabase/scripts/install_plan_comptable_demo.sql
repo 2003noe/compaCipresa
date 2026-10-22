@@ -1,5 +1,5 @@
--- SCRIPT SQL EDITOR : permissions CRUD du plan + données de démonstration agricoles.
--- Exécuter le fichier complet une seule fois dans Supabase SQL Editor.
+-- SCRIPT COMPLET À COLLER DANS SUPABASE SQL EDITOR
+-- Permissions du plan comptable et comptes de démonstration agricole.
 
 -- Permissions granulaire et protection backend des modifications du plan comptable.
 -- ADMIN est autorise par has_active_entreprise_permission(). GERANT recoit les
@@ -257,11 +257,8 @@ WHERE NOT EXISTS (
 -- le trigger qui réécrit ce rattachement est suspendu pendant les INSERT.
 ALTER TABLE public.comptes_comptables DISABLE TRIGGER stamp_entreprise_id;
 
-INSERT INTO public.comptes_comptables (
-  entreprise_id, exercice_id, numero, libelle, classe, nature, actif,
-  compte_parent_id, devise, lettrable, reconciliable, notes,
-  solde_ouverture_debit, solde_ouverture_credit
-)
+INSERT INTO public.comptes_comptables (entreprise_id, exercice_id, numero, libelle, classe, nature, notes)
+
 SELECT
   ent.id,
   ex.id,
@@ -269,14 +266,7 @@ SELECT
   s.libelle,
   s.classe,
   s.categorie::public.compte_nature,
-  true,
-  NULL,
-  'XAF',
-  s.numero IN ('401','411'),
-  s.categorie = 'TRESORERIE',
-  s.notes,
-  0,
-  0
+  s.notes
 FROM public.entreprises ent
 JOIN public.exercices_comptables ex
   ON ex.entreprise_id = ent.id AND ex.statut::text = 'OUVERT'

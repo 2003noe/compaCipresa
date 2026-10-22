@@ -1,5 +1,5 @@
 import React from 'react';
-import { pdf, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import { pdf, Document, Page, Text, View, Image, StyleSheet, Svg, Path } from '@react-pdf/renderer';
 import { CIPRESA_LOGO_MORE_BASE64 } from './banner.js';
 
 export const DEFAULT_FOOTER_TEXT = "généré part l'application de comptabilité de CIpressa consulting";
@@ -296,6 +296,98 @@ export function GenericTablePDF({
           )}
         </View>
 
+        <CipresaFooter footerText={footerText} />
+      </Page>
+    </Document>
+  );
+}
+
+/* Document du plan comptable : tableaux classés en deux colonnes. */
+export function ChartOfAccountsPDF({
+  groups = [],
+  title = 'Plan comptable général & sectoriel',
+  subtitle = '',
+  footerText = DEFAULT_FOOTER_TEXT,
+  orientation = 'landscape',
+  size = 'A4',
+}) {
+  const left = groups.filter((group) => group.column === 'left');
+  const right = groups.filter((group) => group.column === 'right');
+  const columns = [left, right];
+  const styles = StyleSheet.create({
+    columns: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    column: { flex: 1, gap: 10 },
+    card: { borderWidth: 0.6, borderColor: '#d6e5dc', borderRadius: 4, overflow: 'hidden' },
+    cardTitle: { paddingVertical: 5, paddingHorizontal: 6, backgroundColor: '#24664e', color: '#ffffff', fontSize: 7.4, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' },
+    classTotals: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 5, backgroundColor: '#f0f7f2', borderBottomWidth: 0.4, borderBottomColor: '#d6e5dc' },
+    totalLabel: { fontSize: 5.5, color: '#748278' },
+    totalValue: { marginTop: 1.5, fontSize: 6.2, fontFamily: 'Helvetica-Bold', color: '#26372e', textAlign: 'right' },
+    tableHead: { flexDirection: 'row', backgroundColor: '#e9f4ec', paddingVertical: 4, paddingHorizontal: 4 },
+    headNumber: { width: '14%', fontSize: 6.1, fontFamily: 'Helvetica-Bold', color: '#315643' },
+    headLabel: { width: '42%', fontSize: 6.1, fontFamily: 'Helvetica-Bold', color: '#315643' },
+    headNumeric: { width: '14%', fontSize: 5.8, fontFamily: 'Helvetica-Bold', color: '#315643', textAlign: 'right' },
+    headDifference: { width: '16%', fontSize: 5.6, fontFamily: 'Helvetica-Bold', color: '#315643', textAlign: 'right' },
+    row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3.5, paddingHorizontal: 4, borderBottomWidth: 0.35, borderBottomColor: '#e7ece8' },
+    rowAlt: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3.5, paddingHorizontal: 4, borderBottomWidth: 0.35, borderBottomColor: '#e7ece8', backgroundColor: '#f8faf8' },
+    number: { width: '14%', fontSize: 6.1, fontFamily: 'Helvetica-Bold', color: '#315643' },
+    label: { width: '42%', fontSize: 6.1, lineHeight: 1.2, color: '#26372e' },
+    numeric: { width: '14%', fontSize: 5.8, color: '#26372e', textAlign: 'right' },
+    difference: { width: '16%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
+    differenceText: { fontSize: 5.8, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+    balanced: { width: '16%', fontSize: 5.4, color: '#748278', textAlign: 'right' },
+    note: { marginTop: 1.5, fontSize: 4.8, lineHeight: 1.15, color: '#748278', fontFamily: 'Helvetica-Oblique' },
+    empty: { padding: 6, fontSize: 6.3, color: '#748278', fontFamily: 'Helvetica-Oblique' },
+  });
+  // Helvetica standard does not contain the narrow no-break space used by
+  // fr-FR locale formatting; replace it with an ordinary space in the PDF.
+  const money = (value) => Math.round(Number(value || 0)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const Arrow = ({ value }) => {
+    const color = Number(value) > 0 ? '#168653' : '#c33b36';
+    const path = Number(value) > 0 ? 'M6 10V2 M2.5 5.5L6 2l3.5 3.5' : 'M6 2v8 M2.5 6.5L6 10l3.5-3.5';
+    return <Svg width={7} height={9} viewBox="0 0 12 12"><Path d={path} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
+  };
+
+  return (
+    <Document>
+      <Page size={size} orientation={orientation} style={baseStyles.page}>
+        <CipresaBannerHeader title={title} subtitle={subtitle} />
+        <View style={styles.columns}>
+          {columns.map((column, columnIndex) => (
+            <View key={columnIndex} style={styles.column}>
+              {column.map((group) => (
+                <View key={group.key} style={styles.card} wrap={false}>
+                  <Text style={styles.cardTitle}>{group.title}</Text>
+                  <View style={styles.classTotals}>
+                    <View><Text style={styles.totalLabel}>DÉBIT CLASSE</Text><Text style={styles.totalValue}>{money(group.totalDebit)}</Text></View>
+                    <View><Text style={styles.totalLabel}>CRÉDIT CLASSE</Text><Text style={styles.totalValue}>{money(group.totalCredit)}</Text></View>
+                    <View><Text style={[styles.totalLabel, { textAlign: 'right' }]}>DIFFÉRENCE</Text><View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>{Number(group.difference) !== 0 && <Arrow value={group.difference} />}<Text style={[styles.totalValue, { color: Number(group.difference) > 0 ? '#168653' : Number(group.difference) < 0 ? '#c33b36' : '#748278' }]}>{Number(group.difference) === 0 ? 'Équilibré' : `${Number(group.difference) > 0 ? '+' : '−'}${money(Math.abs(group.difference))}`}</Text></View></View>
+                  </View>
+                  <View style={styles.tableHead}>
+                    <Text style={styles.headNumber}>Compte</Text>
+                    <Text style={styles.headLabel}>Intitulé du compte</Text>
+                    <Text style={styles.headNumeric}>Débit</Text>
+                    <Text style={styles.headNumeric}>Crédit</Text>
+                    <Text style={styles.headDifference}>Différence</Text>
+                  </View>
+                  {group.rows.length ? group.rows.map((account, index) => (
+                    <View key={account.id || account.numero} style={index % 2 ? styles.rowAlt : styles.row}>
+                      <Text style={styles.number}>{account.numero}</Text>
+                      <View style={{ width: '42%' }}>
+                        <Text style={styles.label}>{account.libelle || 'Compte sans libellé'}</Text>
+                        {account.notes ? <Text style={styles.note}>{account.notes}</Text> : null}
+                      </View>
+                      <Text style={styles.numeric}>{money(account.debit)}</Text>
+                      <Text style={styles.numeric}>{money(account.credit)}</Text>
+                      {Number(account.difference) === 0
+                        ? <Text style={styles.balanced}>Équilibré</Text>
+                        : <View style={styles.difference}><Arrow value={account.difference} /><Text style={[styles.differenceText, { color: Number(account.difference) > 0 ? '#168653' : '#c33b36' }]}>{Number(account.difference) > 0 ? '+' : '−'}{money(Math.abs(account.difference))}</Text></View>}
+                    </View>
+                  )) : <Text style={styles.empty}>Aucun compte dans cette classe.</Text>}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
         <CipresaFooter footerText={footerText} />
       </Page>
     </Document>

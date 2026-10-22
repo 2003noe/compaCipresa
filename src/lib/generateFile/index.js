@@ -5,6 +5,7 @@ export { CIPRESA_LOGO_MORE_BASE64, CIPRESA_LOGO_BASE64 } from './banner.js';
 export {
   DEFAULT_FOOTER_TEXT,
   exportToExcel,
+  exportChartOfAccountsExcel,
   exportJournalExcel,
   exportBalanceExcel,
   exportGrandLivreExcel,
@@ -16,6 +17,7 @@ export {
 export {
   downloadPDF,
   GenericTablePDF,
+  ChartOfAccountsPDF,
   CipresaFooter,
   CipresaBanner,
   CipresaBannerHeader,

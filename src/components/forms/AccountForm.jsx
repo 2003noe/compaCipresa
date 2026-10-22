@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -83,6 +83,8 @@ const emptyForm = () => ({
 
 export default function AccountForm() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const parentCode = searchParams.get('parentCode') || '';
   const { selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
   const { can, hasRole, roles = [] } = useAuth();
   const canCreateAccount = hasRole('ADMIN') || can('COMPTA_CREATE') || roles.some((role) => ['GERANT', 'COMPTABLE'].includes(role.code));
@@ -92,6 +94,7 @@ export default function AccountForm() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [numberHint, setNumberHint] = useState('');
 
   useEffect(() => setFormExerciceId(selectedExerciceId), [selectedExerciceId]);
   const formExercice = exercices.find((exercice) => exercice.id === formExerciceId) || null;
@@ -118,7 +121,41 @@ export default function AccountForm() {
       });
   }, []);
 
+  useEffect(() => {
+    if (!parentCode || !parentOptions.length) return;
+    const parent = [...parentOptions]
+      .filter((item) => parentCode.startsWith(item.num_compte))
+      .sort((a, b) => b.num_compte.length - a.num_compte.length)[0];
+    if (!parent) return;
+    const classe = detectClasse(parent.num_compte, parent.classe) || ACCOUNT_CLASSES[0];
+    const nature = detectNature(parent.num_compte, parent.categorie) || 'ACTIF';
+    setForm((current) => ({ ...current, parentId: parent.id, code: parent.num_compte, classe, nature }));
+  }, [parentCode, parentOptions]);
+
   const selectedParent = parentOptions.find((p) => p.id === form.parentId) || null;
+
+  // Propose le prochain numéro libre sous la référence OHADA choisie.
+  useEffect(() => {
+    if (!selectedParent || !formExerciceId) { setNumberHint(''); return undefined; }
+    let active = true;
+    supabase.from('comptes_comptables').select('numero').eq('exercice_id', formExerciceId).then(({ data, error: numberError }) => {
+      if (!active) return;
+      if (numberError) { setNumberHint('Le numéro sera vérifié à l’enregistrement.'); return; }
+      const prefix = selectedParent.num_compte;
+      const used = (data || []).map((row) => String(row.numero || '')).filter((number) => number.startsWith(prefix));
+      const suffixes = used.map((number) => number.slice(prefix.length)).filter((suffix) => /^\d+$/.test(suffix));
+      const width = Math.max(2, ...suffixes.map((suffix) => suffix.length));
+      let sequence = Math.max(0, ...suffixes.map(Number)) + 1;
+      let nextNumber = `${prefix}${String(sequence).padStart(width, '0')}`;
+      while (used.includes(nextNumber)) {
+        sequence += 1;
+        nextNumber = `${prefix}${String(sequence).padStart(width, '0')}`;
+      }
+      setForm((current) => ({ ...current, code: current.code === prefix || !current.code.startsWith(prefix) ? nextNumber : current.code }));
+      setNumberHint(`Prochain numéro libre proposé : ${nextNumber}. Vous pouvez encore le modifier.`);
+    });
+    return () => { active = false; };
+  }, [selectedParent?.id, formExerciceId]);
 
   // Gestion du changement de compte parent
   const handleParentChange = (event) => {
@@ -222,6 +259,11 @@ export default function AccountForm() {
       return;
     }
 
+    const { data: duplicateAccount, error: duplicateError } = await supabase.from('comptes_comptables')
+      .select('id').eq('exercice_id', formExerciceId).eq('numero', form.code.trim()).maybeSingle();
+    if (duplicateError) { setSaving(false); setError(`Impossible de vérifier le numéro du compte : ${duplicateError.message}`); return; }
+    if (duplicateAccount) { setSaving(false); setError(`Le numéro ${form.code.trim()} existe déjà dans cet exercice. Choisissez le numéro proposé ou saisissez-en un autre.`); return; }
+
     const { error: insertError } = await supabase.from('comptes_comptables').insert({
       numero: form.code.trim(),
       libelle: form.label.trim(),
@@ -281,6 +323,7 @@ export default function AccountForm() {
               value={form.code}
               onChange={handleCodeChange}
             />
+            {numberHint && <p className="account-number-hint">{numberHint}</p>}
             <Input label="Libellé du compte" placeholder="Ex: Client - Coopérative Gagnoa" required value={form.label} onChange={update('label')} />
             <Select label="Classe de compte" value={form.classe} onChange={update('classe')}>
               {ACCOUNT_CLASSES.map((c) => <option key={c}>{c}</option>)}

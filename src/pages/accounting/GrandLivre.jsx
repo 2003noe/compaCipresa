@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Printer, Download } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
@@ -53,6 +54,9 @@ const classNumber = (classeStr) => {
 };
 
 export default function GrandLivre() {
+  const [searchParams] = useSearchParams();
+  const requestedAccountId = searchParams.get('compte') || '';
+  const appliedRequestedAccount = useRef(false);
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const devise = 'FCFA';
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
@@ -123,6 +127,12 @@ export default function GrandLivre() {
     setSelectedAccountId('ALL');
     setSelectedClasse('ALL');
   }, [exerciceId]);
+
+  useEffect(() => {
+    if (appliedRequestedAccount.current || !requestedAccountId || !accounts.length) return;
+    if (accounts.some((account) => account.id === requestedAccountId)) setSelectedAccountId(requestedAccountId);
+    appliedRequestedAccount.current = true;
+  }, [accounts, requestedAccountId]);
 
   const hasUnassignedOpeningBalance = useMemo(
     () => accounts.some((account) => !account.exercice_id
