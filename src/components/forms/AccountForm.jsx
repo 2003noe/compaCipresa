@@ -7,6 +7,7 @@ import Toggle from '../ui/Toggle';
 import Button from '../ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import ExerciceSelect from './ExerciceSelect';
 
 const ACCOUNT_CLASSES = [
@@ -83,6 +84,8 @@ const emptyForm = () => ({
 export default function AccountForm() {
   const nav = useNavigate();
   const { selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
+  const { can, hasRole, roles = [] } = useAuth();
+  const canCreateAccount = hasRole('ADMIN') || can('COMPTA_CREATE') || roles.some((role) => ['GERANT', 'COMPTABLE'].includes(role.code));
   const [formExerciceId, setFormExerciceId] = useState(selectedExerciceId);
   const [form, setForm] = useState(emptyForm());
   const [parentOptions, setParentOptions] = useState([]);
@@ -187,6 +190,11 @@ export default function AccountForm() {
   const save = async (createAnother = false) => {
     setError('');
     setNotice('');
+
+    if (!canCreateAccount) {
+      setError('Votre rôle ne permet pas de créer des comptes. Contactez un administrateur de l’entreprise.');
+      return;
+    }
 
     if (!form.code.trim() || !form.label.trim()) {
       setError('Le numéro et le libellé du compte sont obligatoires.');
@@ -317,8 +325,8 @@ export default function AccountForm() {
         {notice && <div className="message success" role="status">{notice}</div>}
 
         <div className="form-actions left-actions">
-          <Button disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer le compte'}</Button>
-          <Button variant="secondary" disabled={saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(true)}>Enregistrer et créer un autre</Button>
+          <Button disabled={!canCreateAccount || saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(false)}>{saving ? 'Enregistrement…' : 'Enregistrer le compte'}</Button>
+          <Button variant="secondary" disabled={!canCreateAccount || saving || formExercice?.statut !== 'OUVERT'} onClick={() => save(true)}>Enregistrer et créer un autre</Button>
           <button className="text-button" type="button" onClick={() => nav('/plan-comptable')}>Annuler</button>
         </div>
       </Card>
