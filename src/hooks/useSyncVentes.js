@@ -4,6 +4,7 @@ import {
   syncSalesPipeline,
   getSyncConfig,
   saveSyncConfig as persistSyncConfig,
+  testApiConnection,
 } from "../services/syncVentesService";
 
 export function useSyncVentes() {
@@ -12,6 +13,7 @@ export function useSyncVentes() {
   const [lastLog, setLastLog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [error, setError] = useState(null);
   const [config, setConfigState] = useState(getSyncConfig());
 
@@ -46,7 +48,6 @@ export function useSyncVentes() {
       ]);
 
       if (ventesRes.error) {
-        // Si la table n'existe pas encore ou erreur
         console.warn("[useSyncVentes] Erreur lecture ventes :", ventesRes.error.message);
       } else {
         setVentes(ventesRes.data || []);
@@ -72,7 +73,17 @@ export function useSyncVentes() {
     return () => window.removeEventListener("cipresa-sales-synced", handleRemoteSync);
   }, [loadData]);
 
-  // Déclencheur de synchronisation
+  // Test de connectivité avec l'API
+  const checkConnection = async () => {
+    try {
+      setTestingConnection(true);
+      return await testApiConnection();
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  // Déclencheur de synchronisation réel (aucune simulation)
   const triggerSync = async (params = {}) => {
     try {
       setSyncing(true);
@@ -94,10 +105,12 @@ export function useSyncVentes() {
     lastLog,
     loading,
     syncing,
+    testingConnection,
     error,
     config,
     updateConfig,
     triggerSync,
+    checkConnection,
     refresh: loadData,
   };
 }

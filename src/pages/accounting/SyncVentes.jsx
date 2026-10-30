@@ -12,11 +12,10 @@ import {
   X,
   FileText,
   Eye,
-  Calendar,
-  Layers,
   Save,
-  HelpCircle,
   Database,
+  Radio,
+  ExternalLink,
 } from "lucide-react";
 import { useSyncVentes } from "../../hooks/useSyncVentes";
 
@@ -29,10 +28,12 @@ export default function SyncVentes() {
     lastLog,
     loading,
     syncing,
+    testingConnection,
     error,
     config,
     updateConfig,
     triggerSync,
+    checkConnection,
   } = useSyncVentes();
 
   // Filtres
@@ -47,36 +48,49 @@ export default function SyncVentes() {
 
   // Formulaire de configuration
   const [formConfig, setFormConfig] = useState({
-    apiUrl: config.apiUrl,
-    apiKey: config.apiKey,
-    mockFallback: config.mockFallback,
+    apiUrl: config.apiUrl || "",
+    apiKey: config.apiKey || "",
   });
 
   const [notification, setNotification] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState(null);
 
   const showToast = (message, type = "success") => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4500);
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const handleSaveConfig = (e) => {
     e.preventDefault();
     updateConfig(formConfig);
     setIsConfigOpen(false);
-    showToast("Paramètres de l'API de synchronisation mis à jour.");
+    setConnectionStatus(null);
+    showToast("Paramètres de l'API de synchronisation enregistrés.");
   };
 
-  const handleLaunchSync = async (forceMock = false) => {
+  const handleTestConnection = async () => {
     try {
-      const res = await triggerSync({ forceMock });
-      if (res.isMock) {
-        showToast(
-          `Synchronisation terminée : ${res.count} vente(s) simulée(s) et enregistrée(s) en base (attente API).`,
-          "success"
-        );
+      const res = await checkConnection();
+      setConnectionStatus(res);
+      if (res.connected) {
+        showToast(res.message, "success");
       } else {
-        showToast(`Synchronisation réussie : ${res.count} vente(s) importée(s) depuis l'API.`, "success");
+        showToast(res.message, "error");
       }
+    } catch (err) {
+      const msg = `Erreur lors du test de connexion : ${err.message}`;
+      setConnectionStatus({ connected: false, message: msg });
+      showToast(msg, "error");
+    }
+  };
+
+  const handleLaunchSync = async () => {
+    try {
+      const res = await triggerSync();
+      showToast(
+        res.message || `${res.count} vente(s) importée(s) avec succès depuis l'API.`,
+        "success"
+      );
     } catch (err) {
       showToast(`Échec de la synchronisation : ${err.message}`, "error");
     }
@@ -138,7 +152,7 @@ export default function SyncVentes() {
             Synchronisation des Ventes
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Passerelle automatisée entre l'application de vente (caisse / e-commerce) et la base comptable.
+            Passerelle automatisée entre l'application de vente externe et la comptabilité.
           </p>
         </div>
 
@@ -146,7 +160,10 @@ export default function SyncVentes() {
           <button
             type="button"
             onClick={() => {
-              setFormConfig(config);
+              setFormConfig({
+                apiUrl: config.apiUrl || "",
+                apiKey: config.apiKey || "",
+              });
               setIsConfigOpen(true);
             }}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition"
@@ -166,37 +183,71 @@ export default function SyncVentes() {
 
           <button
             type="button"
-            onClick={() => handleLaunchSync(false)}
-            disabled={syncing}
+            onClick={handleLaunchSync}
+            disabled={syncing || testingConnection}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 rounded-lg shadow-sm transition"
           >
             <RefreshCw size={16} className={syncing ? "animate-spin" : ""} />
-            <span>{syncing ? "Synchronisation..." : "Synchroniser maintenant"}</span>
+            <span>{syncing ? "Synchronisation en cours..." : "Synchroniser maintenant"}</span>
           </button>
         </div>
       </div>
 
-      {/* Bannière d'état en attente de l'API externe */}
-      <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Bannière d'état de l'API externe (en attente / configurée) */}
+      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3">
-          <Database className="text-blue-600 mt-0.5 flex-shrink-0" size={18} />
+          <Database className="text-slate-600 mt-0.5 flex-shrink-0" size={18} />
           <div>
-            <p className="text-sm font-medium text-blue-900">
-              Module en attente de l'API externe &bull; Clés et mode simulation configurés
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-800">
+                Statut de la passerelle API
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                  connectionStatus?.connected
+                    ? "bg-emerald-100 text-emerald-800"
+                    : config.apiUrl
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-slate-200 text-slate-700"
+                }`}
+              >
+                <Radio size={10} className={connectionStatus?.connected ? "text-emerald-600 animate-pulse" : ""} />
+                {connectionStatus?.connected
+                  ? "Connecté à l'API"
+                  : config.apiUrl
+                  ? "En attente d'une API valide"
+                  : "Non configuré"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {config.apiUrl ? (
+                <>
+                  URL cible : <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">{config.apiUrl}</code>
+                </>
+              ) : (
+                "Aucune URL d'API configurée. Renseignez l'adresse de votre API externe dans les paramètres."
+              )}
             </p>
-            <p className="text-xs text-blue-700 mt-0.5">
-              URL active : <code className="font-mono bg-blue-100 px-1 py-0.5 rounded">{config.apiUrl}</code> &bull; Clé par défaut : <code className="font-mono bg-blue-100 px-1 py-0.5 rounded">{config.apiKey.slice(0, 15)}...</code>
-            </p>
+            {connectionStatus && (
+              <p
+                className={`text-xs mt-1.5 ${
+                  connectionStatus.connected ? "text-emerald-700" : "text-amber-700"
+                }`}
+              >
+                {connectionStatus.message}
+              </p>
+            )}
           </div>
         </div>
 
         <button
           type="button"
-          onClick={() => handleLaunchSync(true)}
-          disabled={syncing}
-          className="self-start sm:self-auto text-xs font-semibold px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition shadow-xs"
+          onClick={handleTestConnection}
+          disabled={testingConnection || syncing}
+          className="self-start sm:self-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg transition shadow-xs disabled:opacity-50"
         >
-          Tester avec un lot simulé
+          <Radio size={13} className={testingConnection ? "animate-pulse text-blue-600" : ""} />
+          <span>{testingConnection ? "Vérification..." : "Tester la connexion API"}</span>
         </button>
       </div>
 
@@ -224,14 +275,14 @@ export default function SyncVentes() {
             </div>
           </div>
           <p className="text-xl font-bold text-gray-900">{ventes.length}</p>
-          <p className="text-xs text-gray-500 mt-1">Factures et tickets en base</p>
+          <p className="text-xs text-gray-500 mt-1">Factures et tickets réels en base</p>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-gray-200/80 shadow-xs">
           <div className="flex items-center justify-between text-gray-500 mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">À Comptabiliser</span>
             <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
-              <Layers size={18} />
+              <FileText size={18} />
             </div>
           </div>
           <p className="text-xl font-bold text-amber-600">{totals.countAttente}</p>
@@ -246,10 +297,14 @@ export default function SyncVentes() {
             </div>
           </div>
           <p className="text-sm font-semibold text-gray-900">
-            {lastLog?.finished_at ? new Date(lastLog.finished_at).toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit' }) : "Aucune synchro"}
+            {lastLog?.finished_at
+              ? new Date(lastLog.finished_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+              : "Aucune synchro"}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {lastLog ? `${lastLog.statut} (${lastLog.total_insere || 0} traitées)` : "En attente de premier lancement"}
+            {lastLog
+              ? `${lastLog.statut} (${lastLog.total_insere || 0} traitées)`
+              : "En attente de premier appel"}
           </p>
         </div>
       </div>
@@ -377,9 +432,9 @@ export default function SyncVentes() {
                 <tr>
                   <td colSpan="9" className="p-10 text-center">
                     <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-600 font-medium text-sm">Aucune vente correspondante</p>
-                    <p className="text-gray-400 text-xs mt-1">
-                      Lancez une synchronisation ou modifiez vos critères de recherche.
+                    <p className="text-gray-700 font-medium text-sm">Aucune vente enregistrée</p>
+                    <p className="text-gray-400 text-xs mt-1 max-w-md mx-auto">
+                      Le module est configuré en attente d'une API de vente externe valide. Dès que l'API sera connectée, les ventes y apparaîtront sans simulation.
                     </p>
                   </td>
                 </tr>
@@ -437,7 +492,7 @@ export default function SyncVentes() {
                         type="button"
                         onClick={() => setSelectedVente(vente)}
                         className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition"
-                        title="Voir les détails bruts de la vente"
+                        title="Voir les détails de la vente"
                       >
                         <Eye size={15} />
                       </button>
@@ -473,14 +528,13 @@ export default function SyncVentes() {
                 </label>
                 <input
                   type="text"
-                  required
                   value={formConfig.apiUrl}
                   onChange={(e) => setFormConfig({ ...formConfig, apiUrl: e.target.value })}
                   placeholder="https://api.votre-entreprise.com/v1"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
-                  Endpoint appelé : <code className="font-mono">{formConfig.apiUrl}/ventes</code>
+                  Endpoint appelé : <code className="font-mono">{formConfig.apiUrl ? `${formConfig.apiUrl.replace(/\/$/, '')}/ventes` : "/api/v1/ventes"}</code>
                 </p>
               </div>
 
@@ -490,28 +544,10 @@ export default function SyncVentes() {
                 </label>
                 <input
                   type="password"
-                  required
                   value={formConfig.apiKey}
                   onChange={(e) => setFormConfig({ ...formConfig, apiKey: e.target.value })}
-                  placeholder="cipresa_sync_key_..."
+                  placeholder="Laisser vide si non requis ou renseigner la clé"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-gray-800">Mode simulation de repli</p>
-                  <p className="text-[11px] text-gray-500">
-                    Si l'API distante est inaccessible, générer des données de test conformes.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={formConfig.mockFallback}
-                  onChange={(e) =>
-                    setFormConfig({ ...formConfig, mockFallback: e.target.checked })
-                  }
-                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 />
               </div>
 

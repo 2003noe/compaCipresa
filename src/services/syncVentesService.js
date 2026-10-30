@@ -1,22 +1,25 @@
 import { supabase } from "../lib/supabaseClient";
 
-// Clés et URLs par défaut pour la synchronisation
+// Configuration de synchronisation
 export const DEFAULT_SYNC_CONFIG = {
-  apiUrl: import.meta.env.VITE_SALES_API_URL,      //|| "https://api-ventes.cipresa.local/v1",
-  apiKey: import.meta.env.VITE_SALES_API_KEY , //|| "cipresa_sync_key_demo_2026_default",
-  mockFallback: import.meta.env.VITE_SALES_API_MOCK_FALLBACK !== "false",
+  apiUrl: import.meta.env.VITE_SALES_API_URL || "",
+  apiKey: import.meta.env.VITE_SALES_API_KEY || "",
 };
 
 const STORAGE_KEY = "cipresa_sync_sales_config";
 
 /**
- * Récupère la configuration actuelle (Stockée en localStorage ou valeurs par défaut)
+ * Récupère la configuration actuelle (Stockée en localStorage ou variables d'environnement)
  */
 export function getSyncConfig() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return { ...DEFAULT_SYNC_CONFIG, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      return {
+        apiUrl: parsed.apiUrl ?? DEFAULT_SYNC_CONFIG.apiUrl,
+        apiKey: parsed.apiKey ?? DEFAULT_SYNC_CONFIG.apiKey,
+      };
     }
   } catch (e) {
     console.warn("Impossible de lire la configuration de synchro locale:", e);
@@ -25,7 +28,7 @@ export function getSyncConfig() {
 }
 
 /**
- * Sauvegarde la configuration personnalisée (ex: nouvelle URL ou clé d'API)
+ * Sauvegarde la configuration personnalisée (URL ou clé d'API)
  */
 export function saveSyncConfig(config) {
   try {
@@ -36,88 +39,83 @@ export function saveSyncConfig(config) {
 }
 
 /**
- * Générateur de données fictives de vente réalistes (conforme à api_ventes_spec.md)
- * Utilisé en attente de la disponibilité de l'API externe réelle.
+ * Teste la connectivité avec l'API externe configurée sans insérer de données
  */
-export function generateMockSales(count = 5) {
-  const clients = [
-    { nom: "SOCIETE COMMERCIALE DU SUD", code: "C411002", nif: "M051812345678Z" },
-    { nom: "ETS FOTSO & FRERES SARL", code: "C411005", nif: "M081900192834A" },
-    { nom: "PHARMACIE CENTRALE DE DOUALA", code: "C411010", nif: "M021798347102B" },
-    { nom: "AFRICA DISTRIB LOGISTIQUE", code: "C411018", nif: "M112048593847C" },
-    { nom: "CABINET AUDIT & CONSEILS", code: "C411025", nif: "M041692837492D" },
-    { nom: "Client Comptoir / Vente directe", code: "C411001", nif: null },
-  ];
+export async function testApiConnection() {
+  const config = getSyncConfig();
+  const rawUrl = (config.apiUrl || "").trim();
 
-  const modes = ["ESPECES", "VIREMENT", "MOBILE_MONEY", "CHEQUE"];
-  const now = new Date();
-
-  const mockSales = [];
-
-  for (let i = 0; i < count; i++) {
-    const client = clients[i % clients.length];
-    const mode = modes[i % modes.length];
-    const seq = Math.floor(1000 + Math.random() * 9000);
-    const saleId = `VTE-SIM-${now.getFullYear()}-${seq}`;
-    const invoiceNum = `FAC-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${seq}`;
-
-    // Montant HT entre 25 000 et 850 000 XAF
-    const baseHt = Math.round((25000 + Math.random() * 800000) / 500) * 500;
-    const tauxTva = 19.25;
-    const tva = Math.round((baseHt * tauxTva) / 100);
-    const ttc = baseHt + tva;
-
-    // Date aléatoire sur les 7 derniers jours
-    const dateVente = new Date(now.getTime() - Math.floor(Math.random() * 7 * 86400000));
-
-    mockSales.push({
-      id: saleId,
-      reference_facture: invoiceNum,
-      date_vente: dateVente.toISOString(),
-      statut: "PAYEE",
-      type_operation: "VENTE",
-      client: {
-        id: `CLI-${seq}`,
-        code: client.code,
-        nom: client.nom,
-        nif: client.nif,
-      },
-      finances: {
-        devise: "XAF",
-        montant_ht: baseHt,
-        taux_tva: tauxTva,
-        montant_tva: tva,
-        montant_ttc: ttc,
-      },
-      reglement: {
-        mode_paiement: mode,
-        statut_paiement: "TOTALEMENT_PAYE",
-        date_reglement: dateVente.toISOString(),
-      },
-      magasin_ou_caisse: {
-        id: "CAISSE-01",
-        nom: "Caisse Principale Siège",
-      },
-      lignes: [
-        {
-          designation: "Marchandises diverses (Lots conformes)",
-          quantite: 1,
-          prix_unitaire_ht: baseHt,
-          montant_ht: baseHt,
-          taux_tva: tauxTva,
-          montant_tva: tva,
-          montant_ttc: ttc,
-          compte_vente_suggere: "701100",
-        },
-      ],
-    });
+  if (!rawUrl) {
+    return {
+      connected: false,
+      configured: false,
+      message: "Aucune URL d'API configurée. Le module est en attente d'une API externe valide.",
+    };
   }
 
-  return mockSales;
+  try {
+    const baseUrl = rawUrl.replace(/\/$/, "");
+    const url = new URL(`${baseUrl}/ventes`);
+    url.searchParams.append("limit", "1");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (config.apiKey) {
+      headers["Authorization"] = `Bearer ${config.apiKey}`;
+      headers["X-API-KEY"] = config.apiKey;
+    }
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      return {
+        connected: true,
+        configured: true,
+        status: response.status,
+        message: "Connexion établie avec succès avec l'API externe.",
+      };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        connected: false,
+        configured: true,
+        status: response.status,
+        message: `L'API est joignable mais a refusé les identifiants (${response.status} Non autorisé). Vérifiez la clé API.`,
+      };
+    }
+
+    return {
+      connected: false,
+      configured: true,
+      status: response.status,
+      message: `L'API a répondu avec le statut HTTP ${response.status} (${response.statusText}).`,
+    };
+  } catch (err) {
+    const isTimeout = err.name === "AbortError";
+    return {
+      connected: false,
+      configured: true,
+      message: isTimeout
+        ? "Délai de connexion dépassé (l'adresse de l'API ne répond pas)."
+        : `Impossible de contacter le serveur distant : ${err.message}`,
+    };
+  }
 }
 
 /**
- * Mappe un objet vente (issu de l'API externe ou du générateur) vers le format table Supabase
+ * Mappe un objet vente issu de l'API externe vers le format de la table Supabase
  */
 export function mapExternalSaleToLocal(item) {
   const finances = item.finances || {};
@@ -129,7 +127,7 @@ export function mapExternalSaleToLocal(item) {
   const ttc = Number(finances.montant_ttc ?? item.montant_ttc ?? item.total_ttc ?? (ht + tva));
 
   return {
-    external_id: String(item.id || item.sale_id),
+    external_id: String(item.id || item.sale_id || item.reference_facture),
     reference_facture: item.reference_facture || item.invoice_number || `FAC-${item.id}`,
     client_nom: client.nom || item.client_nom || "Client Divers",
     client_identifiant: client.code || client.id || item.client_identifiant || null,
@@ -145,31 +143,39 @@ export function mapExternalSaleToLocal(item) {
 }
 
 /**
- * Effectue la requête HTTP vers l'API externe avec repli automatique vers le simulateur si indisponible
+ * Récupère les ventes réelles depuis l'API distante (aucun faux enregistrement)
  */
-export async function fetchExternalSales({ dateDebut, dateFin, forceMock = false } = {}) {
+export async function fetchExternalSales({ dateDebut, dateFin } = {}) {
   const config = getSyncConfig();
+  const rawUrl = (config.apiUrl || "").trim();
 
-  if (forceMock) {
-    return { isMock: true, items: generateMockSales(6) };
+  if (!rawUrl) {
+    throw new Error(
+      "L'URL de l'API de vente n'est pas encore configurée. Veuillez renseigner une API valide dans les paramètres."
+    );
+  }
+
+  const baseUrl = rawUrl.replace(/\/$/, "");
+  const url = new URL(`${baseUrl}/ventes`);
+  if (dateDebut) url.searchParams.append("date_from", dateDebut);
+  if (dateFin) url.searchParams.append("date_to", dateFin);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (config.apiKey) {
+    headers["Authorization"] = `Bearer ${config.apiKey}`;
+    headers["X-API-KEY"] = config.apiKey;
   }
 
   try {
-    const url = new URL(`${config.apiUrl.replace(/\/$/, "")}/ventes`);
-    if (dateDebut) url.searchParams.append("date_from", dateDebut);
-    if (dateFin) url.searchParams.append("date_to", dateFin);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
-
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "X-API-KEY": config.apiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers,
       signal: controller.signal,
     });
 
@@ -181,30 +187,34 @@ export async function fetchExternalSales({ dateDebut, dateFin, forceMock = false
 
     const json = await response.json();
     const items = Array.isArray(json) ? json : (json.data || []);
-    return { isMock: false, items };
+    return items;
   } catch (err) {
-    // Si le mode mockFallback est activé (attente de l'API réelle), on simule
-    if (config.mockFallback) {
-      console.warn(
-        `[SyncVentes] L'API (${config.apiUrl}) n'est pas encore accessible (${err.message}). Utilisation des données de simulation.`
-      );
-      return { isMock: true, items: generateMockSales(6) };
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error("Délai d'attente de l'API de vente dépassé (timeout 10s).");
     }
-    throw err;
+    throw new Error(`Échec de communication avec l'API : ${err.message}`);
   }
 }
 
 /**
- * Pipeline complet d'exécution de la synchronisation :
- * 1. Log en base (sync_logs)
- * 2. Appel API / simulation
- * 3. Normalisation
- * 4. Upsert dans la table `ventes`
- * 5. Clôture du log de synchro
+ * Pipeline de synchronisation réel :
+ * 1. Vérification configuration
+ * 2. Log de démarrage dans sync_logs
+ * 3. Appel de l'API externe (sans simulation)
+ * 4. Upsert des ventes authentiques en base Supabase
+ * 5. Clôture du log
  */
-export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false } = {}) {
+export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
   if (!supabase) {
     throw new Error("Supabase n'est pas configuré. Vérifiez vos variables d'environnement.");
+  }
+
+  const config = getSyncConfig();
+  if (!config.apiUrl) {
+    throw new Error(
+      "Aucune API externe configurée. Veuillez renseigner l'URL et la clé d'API dans les paramètres."
+    );
   }
 
   // A. Création du log de début
@@ -213,7 +223,7 @@ export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false 
     .insert([
       {
         statut: "EN_COURS",
-        source: forceMock ? "VENTES_API_SIMULATION" : "VENTES_API",
+        source: "VENTES_API",
         started_at: new Date().toISOString(),
       },
     ])
@@ -221,15 +231,14 @@ export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false 
     .single();
 
   if (logErr) {
-    console.error("Impossible de créer le log de synchronisation :", logErr);
-    // On continue même si la table sync_logs n'est pas encore migrée
+    console.warn("Table sync_logs non disponible ou erreur d'insertion:", logErr.message);
   }
 
   const logId = logEntry?.id;
 
   try {
-    // B. Récupération des données
-    const { isMock, items } = await fetchExternalSales({ dateDebut, dateFin, forceMock });
+    // B. Appel réel de l'API externe (sans simulation)
+    const items = await fetchExternalSales({ dateDebut, dateFin });
 
     if (!items || items.length === 0) {
       if (logId) {
@@ -238,17 +247,22 @@ export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false 
           .update({
             statut: "SUCCES",
             total_recupere: 0,
+            total_insere: 0,
             finished_at: new Date().toISOString(),
           })
           .eq("id", logId);
       }
-      return { success: true, count: 0, isMock, message: "Aucune vente à synchroniser." };
+      return {
+        success: true,
+        count: 0,
+        message: "L'API externe a répondu avec succès : aucune nouvelle vente à importer.",
+      };
     }
 
-    // C. Transformation des données
+    // C. Transformation et normalisation
     const localRecords = items.map(mapExternalSaleToLocal);
 
-    // D. Upsert dans la table `ventes` (évite les doublons via external_id)
+    // D. Upsert dans la table `ventes`
     const { data: upsertedData, error: upsertErr } = await supabase
       .from("ventes")
       .upsert(localRecords, {
@@ -262,7 +276,7 @@ export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false 
 
     const insertedCount = upsertedData?.length || localRecords.length;
 
-    // E. Clôture avec succès du log
+    // E. Clôture avec succès
     if (logId) {
       await supabase
         .from("sync_logs")
@@ -278,12 +292,11 @@ export async function syncSalesPipeline({ dateDebut, dateFin, forceMock = false 
     return {
       success: true,
       count: insertedCount,
-      isMock,
       logId,
-      message: `${insertedCount} vente(s) synchronisée(s) avec succès.`,
+      message: `${insertedCount} vente(s) synchronisée(s) depuis l'API.`,
     };
   } catch (error) {
-    // F. Enregistrement de l'erreur dans le log
+    // F. Log d'erreur
     if (logId) {
       await supabase
         .from("sync_logs")
