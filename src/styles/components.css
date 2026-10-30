@@ -1981,7 +1981,10 @@
     font-weight: 700;
     margin: 0 0 12px;
     padding-bottom: 8px;
-    border-bottom: 2px solid var(--color-border)
+    border-bottom: 2px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .bilan-side-title.actif {
@@ -1995,6 +1998,166 @@
 @media(max-width:1100px) {
     .bilan-columns {
         grid-template-columns: 1fr
+    }
+}
+
+/* --- Styles dédiés Bilan comptable et responsive --- */
+.bilan-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.bilan-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 4px;
+}
+
+.bilan-kpis .card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bilan-kpis .card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.bilan-kpis strong {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+}
+
+.bilan-kpis small {
+    color: var(--color-subtle);
+    font-size: 11px;
+}
+
+.bilan-kpi-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    width: fit-content;
+}
+
+.bilan-kpi-badge.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.bilan-kpi-badge.danger {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.bilan-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.bilan-toolbar-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+    width: 100%;
+}
+
+.bilan-table-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.bilan-single-table {
+    width: 100%;
+    min-width: 540px;
+}
+
+.bilan-empty-state {
+    padding: 44px 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--color-muted);
+}
+
+.bilan-loading-state {
+    padding: 44px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.bilan-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: bilan-spin 0.8s linear infinite;
+}
+
+@keyframes bilan-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media(max-width: 1150px) {
+    .bilan-kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media(max-width: 900px) {
+    .bilan-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media(max-width: 640px) {
+    .bilan-kpis {
+        grid-template-columns: 1fr;
+    }
+    .bilan-page .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+    }
+    .bilan-page .page-header > div:last-child {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+    .bilan-page .page-header > div:last-child button {
+        flex: 1;
+        justify-content: center;
+    }
+    .bilan-single-table {
+        min-width: 480px;
     }
 }
 
