@@ -19,3 +19,5 @@ export const accountingService = {
     });
   },
 };
+
+export { accountController } from "./accountController";

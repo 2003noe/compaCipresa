@@ -5,6 +5,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { exportChartOfAccountsExcel, ChartOfAccountsPDF, PDFPreviewModal } from '../../lib/generateFile';
+import { accountController } from '../../services/accounting/accountController';
 import './chartOfAccounts.css';
 
 const CLASS_INFO = {
@@ -84,7 +85,11 @@ export default function ChartOfAccounts() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState('');
+  const [accountToDelete, setAccountToDelete] = useState(null);
+  const [deleteCheckLoading, setDeleteCheckLoading] = useState(false);
+  const [deleteCheckResult, setDeleteCheckResult] = useState(null);
+  const [deleteActionLoading, setDeleteActionLoading] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [balances, setBalances] = useState({});
   const [expandedClasses, setExpandedClasses] = useState(() => new Set());
@@ -106,7 +111,8 @@ export default function ChartOfAccounts() {
   const canRead = isAdmin || can('COMPTA_READ') || can('COMPTA_CREATE') || can('COMPTA_ACCOUNT_EDIT') || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'COMPTABLE', 'CONSULTANT'].includes(r.code));
   const canCreate = isAdmin || can('COMPTA_CREATE') || roles.some((r) => ['GERANT', 'COMPTABLE'].includes(r.code));
   const canEditBasic = isAdmin || can('COMPTA_ACCOUNT_EDIT');
-  const canEditSensitive = isAdmin || can('COMPTA_ACCOUNT_ADMIN');
+  const canEditSensitive = isAdmin || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'ADMIN'].includes(r.code));
+  const canDelete = isAdmin || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'COMPTABLE', 'ADMIN'].includes(r.code));
   const money = (value) => Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 });
 
   const loadAccounts = useCallback(async () => {
@@ -237,17 +243,60 @@ export default function ChartOfAccounts() {
   const exportTitle = 'PLAN COMPTABLE GÉNÉRAL & SECTORIEL';
   const exportSubtitle = `Système comptable OHADA · Adapté aux activités agricoles · Exercice ${selectedExercice?.code || selectedExercice?.annee || ''}`;
 
-  const deleteAccount = async (account) => {
-    const confirmed = window.confirm(`Supprimer le compte ${account.numero} — ${account.libelle} ?\n\nUn compte utilisé dans une écriture ne peut pas être supprimé. Il faudra alors le désactiver.`);
-    if (!confirmed) return;
-    setDeletingId(account.id);
+  const openDeleteModal = async (account) => {
     setError('');
-    const { error: deleteError } = await supabase.from('comptes_comptables').delete().eq('id', account.id).eq('exercice_id', selectedExerciceId);
-    setDeletingId('');
-    if (deleteError) {
-      setError(`Suppression refusée : ${deleteError.message}`);
+    setAccountToDelete(account);
+    setDeleteCheckLoading(true);
+    setDeleteCheckResult(null);
+    const result = await accountController.checkCanDelete(account);
+    setDeleteCheckResult(result);
+    setDeleteCheckLoading(false);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteActionLoading) return;
+    setAccountToDelete(null);
+    setDeleteCheckResult(null);
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (!accountToDelete) return;
+    setDeleteActionLoading(true);
+    setError('');
+    const result = await accountController.deleteAccount(accountToDelete);
+    setDeleteActionLoading(false);
+    if (!result.success) {
+      setError(result.error);
+      if (result.canDeactivate) {
+        setDeleteCheckResult((prev) => ({
+          ...prev,
+          canDelete: false,
+          reason: result.error,
+        }));
+      }
       return;
     }
+    setDeleteSuccessMessage(result.message);
+    setAccountToDelete(null);
+    setDeleteCheckResult(null);
+    setTimeout(() => setDeleteSuccessMessage(''), 5000);
+    await loadAccounts();
+  };
+
+  const handleDeactivateAccount = async () => {
+    if (!accountToDelete) return;
+    setDeleteActionLoading(true);
+    setError('');
+    const result = await accountController.deactivateAccount(accountToDelete);
+    setDeleteActionLoading(false);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+    setDeleteSuccessMessage(result.message);
+    setAccountToDelete(null);
+    setDeleteCheckResult(null);
+    setTimeout(() => setDeleteSuccessMessage(''), 5000);
     await loadAccounts();
   };
 
@@ -339,6 +388,13 @@ export default function ChartOfAccounts() {
           {canCreate && <button type="button" className="chart-add-button" onClick={() => navigate('/nouveau-compte')}><Plus size={16} /> Nouveau compte</button>}
         </div>
       </header>
+
+      {deleteSuccessMessage && (
+        <div className="chart-toast-success" role="status">
+          <CheckCircle2 size={16} />
+          <span>{deleteSuccessMessage}</span>
+        </div>
+      )}
 
       <div className="chart-toolbar">
         <label className="chart-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un numéro, un intitulé…" /></label>
@@ -453,7 +509,17 @@ export default function ChartOfAccounts() {
                               <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
                               {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
                               {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
-                              {canEditSensitive && <button type="button" className="chart-delete-button" disabled={deletingId === account.id} onClick={() => deleteAccount(account)} aria-label={`Supprimer le compte ${account.numero}`} title="Supprimer">{deletingId === account.id ? '…' : <Trash2 size={14} />}</button>}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  className="chart-delete-button"
+                                  onClick={() => openDeleteModal(account)}
+                                  aria-label={`Supprimer le compte ${account.numero}`}
+                                  title="Supprimer le compte"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </span>
                           </td>
                         </tr>
@@ -495,6 +561,115 @@ export default function ChartOfAccounts() {
               {canEditSensitive && <p className="chart-sensitive-hint">Les changements du numéro, de la classe, de la nature et des soldes sont réservés aux privilèges élevés.</p>}
               <footer><button className="chart-cancel-button" type="button" onClick={closeEditor} disabled={saving}>Annuler</button><button className="chart-save-button" type="submit" disabled={saving || (!canEditBasic && !canEditSensitive)}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button></footer>
             </form>
+          </section>
+        </div>
+      )}
+
+      {/* Modale de confirmation et vérification d'intégrité de suppression */}
+      {accountToDelete && (
+        <div
+          className="chart-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeDeleteModal();
+          }}
+        >
+          <section
+            className="chart-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chart-delete-title"
+          >
+            <header>
+              <h2 id="chart-delete-title" className="chart-delete-modal-title">
+                <AlertTriangle size={20} />
+                Supprimer le compte
+              </h2>
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={deleteActionLoading}
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="chart-delete-modal-body">
+              <div className="chart-delete-target-card">
+                <span className="target-num">{accountToDelete.numero}</span>
+                <span className="target-label">{accountToDelete.libelle}</span>
+                <span className="target-class">{accountToDelete.classe} · Nature : {accountToDelete.nature}</span>
+              </div>
+
+              {deleteCheckLoading ? (
+                <div className="chart-delete-status-box checking">
+                  <Clock3 size={18} className="animate-spin" />
+                  <span>Vérification des écritures et dépendances en cours…</span>
+                </div>
+              ) : deleteCheckResult?.canDelete ? (
+                <div className="chart-delete-status-box allowed">
+                  <CheckCircle2 size={18} />
+                  <div>
+                    <strong>Suppression autorisée</strong>
+                    <p style={{ margin: '4px 0 0', fontSize: '11px' }}>
+                      Aucune écriture comptable n'est rattachée à ce compte. Cette action est irréversible.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="chart-delete-status-box blocked">
+                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong>Suppression impossible</strong>
+                    <p style={{ margin: '4px 0 0', fontSize: '11px' }}>
+                      {deleteCheckResult?.reason || "Ce compte ne peut pas être supprimé car il est référencé dans les données comptables."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="message error" role="alert" style={{ margin: 0 }}>
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <footer className="chart-delete-modal-footer">
+              <button
+                type="button"
+                className="chart-cancel-button"
+                onClick={closeDeleteModal}
+                disabled={deleteActionLoading}
+              >
+                Annuler
+              </button>
+
+              {!deleteCheckLoading && !deleteCheckResult?.canDelete && accountToDelete.actif && (
+                <button
+                  type="button"
+                  className="chart-btn-deactivate"
+                  onClick={handleDeactivateAccount}
+                  disabled={deleteActionLoading}
+                  title="Désactive le compte pour empêcher de nouvelles écritures"
+                >
+                  {deleteActionLoading ? 'Désactivation…' : 'Désactiver le compte à la place'}
+                </button>
+              )}
+
+              {!deleteCheckLoading && deleteCheckResult?.canDelete && (
+                <button
+                  type="button"
+                  className="chart-btn-confirm-delete"
+                  onClick={confirmDeleteAccount}
+                  disabled={deleteActionLoading}
+                >
+                  <Trash2 size={14} />
+                  {deleteActionLoading ? 'Suppression…' : 'Confirmer la suppression'}
+                </button>
+              )}
+            </footer>
           </section>
         </div>
       )}
