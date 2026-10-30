@@ -161,7 +161,7 @@ export default function Balance() {
           <h1 className="page-title">Balance générale des comptes</h1>
           <p className="page-subtitle">Vue synthétique des soldes des comptes{loading ? ' · Chargement…' : ''}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="page-header-actions">
           <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading || rows.length === 0}>
             Imprimer (PDF)
           </Button>

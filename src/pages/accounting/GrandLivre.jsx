@@ -320,7 +320,7 @@ export default function GrandLivre() {
           <h1 className="page-title">Grand-livre des comptes</h1>
           <p className="page-subtitle">Format réglementaire SYSCOHADA / Sage 100 Comptabilité</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="page-header-actions">
           <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
           <Button
             variant="secondary"
@@ -415,7 +415,8 @@ export default function GrandLivre() {
         </div>
 
         {/* Main Document Table */}
-        <table className="sage-gl-table">
+        <div className="sage-gl-table-wrap">
+          <table className="sage-gl-table">
           <thead>
             <tr>
               <th className="col-date">Date</th>
@@ -492,6 +493,7 @@ export default function GrandLivre() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Embedded CSS for Exact Sage 100 Pixel-Perfect Styling & Print Layout */}
@@ -573,14 +575,20 @@ export default function GrandLivre() {
           border-top: 1px solid var(--color-border, #f1f5f9);
         }
 
+        .sage-gl-table-wrap {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          border-radius: 8px;
+        }
+
         .sage-gl-table {
           width: 100%;
+          min-width: 840px;
           table-layout: fixed;
           border-collapse: collapse;
           font-size: 13px;
           border: 1px solid var(--color-border, #cbd5e1);
-          border-radius: 8px;
-          overflow: hidden;
         }
 
         .sage-gl-table th, .sage-gl-table td {
@@ -662,6 +670,37 @@ export default function GrandLivre() {
           text-align: right;
           padding-right: 20px !important;
           font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+          .sage-gl-document {
+            padding: 10px;
+          }
+          .sage-gl-header-row.top-row {
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+            text-align: center;
+          }
+          .sage-gl-header-row .company-name,
+          .sage-gl-header-row .document-title-center,
+          .sage-gl-header-row .period-info {
+            width: 100% !important;
+            text-align: center !important;
+          }
+          .sage-gl-header-row.sub-row {
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+            text-align: center;
+          }
+          .sage-gl-header-row {
+            padding: 8px 10px;
+          }
+          .sage-gl-table th, .sage-gl-table td {
+            padding: 6px 4px;
+            font-size: 11px;
+          }
         }
 
         @media print {

@@ -341,12 +341,21 @@
 }
 
 .dashboard-middle {
-    margin-top: 16px
+    margin-top: 16px;
 }
 
 .dashboard-bottom {
     grid-template-columns: 1.7fr 1fr;
-    margin-top: 16px
+    margin-top: 16px;
+}
+
+@media(max-width: 1024px) {
+    .dashboard-middle {
+        grid-template-columns: 1fr !important;
+    }
+    .dashboard-bottom {
+        grid-template-columns: 1fr !important;
+    }
 }
 
 .chart-card {
@@ -476,8 +485,30 @@
     color: var(--color-text)
 }
 
+@media(max-width: 768px) {
+    .donut-wrap {
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+    .donut {
+        width: 160px;
+        height: 160px;
+    }
+    .donut:before {
+        width: 96px;
+        height: 96px;
+    }
+    .legend {
+        width: 100%;
+        gap: 10px;
+    }
+}
+
 .table-wrap {
-    overflow: auto
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
 }
 
 .table-wrap table {
@@ -1944,8 +1975,37 @@
     }
 }
 
+@media(max-width: 768px) {
+    .ledger-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .ledger-toolbar .field,
+    .ledger-toolbar > * {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
+.balance-table {
+    min-width: 760px;
+}
+
 .balance-table th {
     white-space: nowrap
+}
+
+@media(max-width: 768px) {
+    .balance-table th,
+    .balance-table td {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+    .balance-class-row td {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
 }
 
 .balance-table .text-center {
@@ -2199,7 +2259,18 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    margin-bottom: 16px
+    margin-bottom: 16px;
+}
+
+@media(max-width: 768px) {
+    .cr-kpis {
+        grid-template-columns: 1fr;
+    }
+    .bilan-side-title {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
 }
 
 .cr-kpis .card {
@@ -2255,7 +2326,8 @@
     justify-content: space-between;
     gap: 14px;
     height: 180px;
-    padding: 0 8px
+    padding: 0 8px;
+    min-width: 0;
 }
 
 .flow-bar-group {
@@ -2318,6 +2390,31 @@
 
 .flow-legend .dot.sortie {
     background: #ef4444
+}
+
+@media(max-width: 768px) {
+    .flow-chart {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 0 4px 8px;
+    }
+    .flow-bar-group {
+        flex: 0 0 38px;
+        min-width: 38px;
+    }
+    .flow-bars {
+        gap: 3px;
+    }
+    .flow-bar {
+        width: 10px;
+    }
+    .flow-legend {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
 }
 
 .tresor-account-list {

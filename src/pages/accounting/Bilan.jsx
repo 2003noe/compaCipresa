@@ -400,7 +400,7 @@ export default function Bilan() {
             {isPageBusy ? ' · Chargement…' : ''}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="page-header-actions">
           <Button
             variant="secondary"
             icon={Printer}

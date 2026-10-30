@@ -523,7 +523,7 @@ export default function Dashboard() {
             {loading ? " · Chargement…" : ""}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="dashboard-header-actions">
           <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading}>
             Imprimer (PDF)
           </Button>
