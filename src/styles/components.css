@@ -31,7 +31,15 @@
     flex-direction: column;
     justify-content: space-between;
     color: #fff;
-    min-height: 100vh
+    min-height: 100vh;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.sidebar::-webkit-scrollbar {
+    display: none;
+    width: 0;
 }
 
 .brand {
