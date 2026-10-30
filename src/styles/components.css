@@ -1258,7 +1258,9 @@
     }
 
     .auth-main {
-        min-height: 100vh
+        min-height: 100vh;
+        padding: 24px 16px;
+        overflow-y: auto;
     }
 
     .auth-card {
@@ -1272,12 +1274,36 @@
 }
 
 @media(max-width:560px) {
+    .auth-main {
+        padding: 16px 8px;
+    }
+
     .auth-card {
-        padding: 24px 20px
+        padding: 24px 16px;
+        width: 100%;
     }
 
     .auth-card h1 {
-        font-size: 24px
+        font-size: 22px
+    }
+
+    .auth-subtitle {
+        font-size: 12px;
+        margin-bottom: 18px;
+    }
+
+    .auth-row {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .auth-submit {
+        height: 42px !important;
+    }
+
+    .terms-label {
+        font-size: 10px;
     }
 }
 

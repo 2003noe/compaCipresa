@@ -27,10 +27,6 @@ function MarketingPanel() {
         <p>La solution ERP puissante et intuitive conçue spécifiquement pour la rigueur des exigences d'audits et de reporting OHADA.</p>
       </div>
       <div className="auth-marketing-footer">
-        <div className="auth-metrics">
-          <div><strong>100%</strong><span>Conforme SYSCOHADA</span></div>
-          <div><strong>&lt; 1s</strong><span>Temps de validation</span></div>
-        </div>
         <p>© 2025 CIPRESA Consulting SARL — Tous droits réservés.</p>
       </div>
     </aside>
