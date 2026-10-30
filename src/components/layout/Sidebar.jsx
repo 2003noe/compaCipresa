@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, CircleHelp, RefreshCw } from 'lucide-react';
+import { Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, CircleHelp, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const items = [
@@ -12,8 +12,8 @@ const items = [
   ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
 ];
 
-export default function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function Sidebar({ isOpen, onClose }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
   const { profile, roles, signOut, companies } = useAuth();
@@ -24,34 +24,49 @@ export default function Sidebar() {
 
   useEffect(() => {
     const closeOnOutsideClick = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) setIsOpen(false);
+      if (menuRef.current && !menuRef.current.contains(event.target)) setMenuOpen(false);
     };
     document.addEventListener('mousedown', closeOnOutsideClick);
     return () => document.removeEventListener('mousedown', closeOnOutsideClick);
   }, []);
 
   const handleLogout = async () => {
-    setIsOpen(false);
+    setMenuOpen(false);
     await signOut();
     navigate('/connexion', { replace: true, state: { loggedOut: true } });
   };
 
+  // Ferme la sidebar mobile lors d'un clic sur un lien
+  const handleNavClick = () => {
+    if (onClose) onClose();
+  };
+
   return (
-    <aside className="sidebar" style={{ height:'100vh', position:'fixed'}}>
+    <aside className={`sidebar${isOpen ? ' sidebar-mobile-open' : ''}`} style={{ height: '100vh', position: 'fixed' }}>
+      {/* Bouton de fermeture mobile */}
+      <button
+        type="button"
+        className="sidebar-close-btn"
+        onClick={onClose}
+        aria-label="Fermer le menu"
+      >
+        <X size={18} />
+      </button>
+
       <div>
         <div className="brand">
-          <img src="/images/logo.png" alt="Logo" className="brand-image"  style={{ width: '2rem', height: '2rem', objectFit: 'cover' }}/>
+          <img src="/images/logo.png" alt="Logo" className="brand-image" style={{ width: '2rem', height: '2rem', objectFit: 'cover' }} />
           <div className="brand-text"><strong>CIPRESA</strong><small>Consulting SARL</small></div>
         </div>
         <div className="sidebar-divider" />
         <nav>
           {items.map(([to, label, Icon]) => (
-            <NavLink key={to} to={to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink key={to} to={to} onClick={handleNavClick} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Icon size={16} /><span className="nav-label">{label}</span>{label === 'Tableau de bord' && <i />}
             </NavLink>
           ))}
           {canViewCompanyAnalytics && (
-            <NavLink to="/administration/entreprises" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink to="/administration/entreprises" onClick={handleNavClick} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Building2 size={16} /><span className="nav-label">Vue entreprises</span>
             </NavLink>
           )}
@@ -59,13 +74,13 @@ export default function Sidebar() {
       </div>
 
       <div className="user-menu" ref={menuRef}>
-        {isOpen && (
+        {menuOpen && (
           <div className="user-dropdown" role="menu">
-            <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={() => navigate('/faq')}>
-              <CircleHelp size={16} /><span className="nav-label">FAQ & Aide</span>
+            <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={() => { navigate('/faq'); handleNavClick(); }}>
+              <CircleHelp size={16} /><span className="nav-label">FAQ &amp; Aide</span>
             </NavLink>
 
-            <button type="button" className="user-dropdown-item" onClick={() => navigate('/profil')}>
+            <button type="button" className="user-dropdown-item" onClick={() => { navigate('/profil'); handleNavClick(); }}>
               <UserRound size={15} /> <span>Mon profil</span>
             </button>
             <button type="button" className="user-dropdown-item logout" onClick={handleLogout}>
@@ -73,7 +88,7 @@ export default function Sidebar() {
             </button>
           </div>
         )}
-        <button type="button" className="user-footer user-footer-button" onClick={() => setIsOpen((open) => !open)} aria-expanded={isOpen}>
+        <button type="button" className="user-footer user-footer-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>
           {profile?.photo_url ? <img src={profile.photo_url} alt={userName} className="avatar" style={{ objectFit: 'cover' }} /> : <div className="avatar">{userName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>}
           <div className="user-meta"><strong>{userName}</strong><small>{userRole}</small></div>
         </button>

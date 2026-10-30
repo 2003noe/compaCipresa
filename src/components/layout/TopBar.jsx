@@ -10,6 +10,7 @@ import {
   Plus,
   X,
   RefreshCw,
+  Menu,
 } from "lucide-react";
 import NotificationsPanel from "./NotificationsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -19,7 +20,7 @@ import { useExercice } from "../../context/ExerciceContext";
 import { useAuth } from "../../context/AuthContext";
 import { syncSalesPipeline } from "../../services/syncVentesService";
 
-export default function TopBar() {
+export default function TopBar({ onMenuOpen }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -125,6 +126,15 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        {/* Bouton hamburger — visible uniquement sur mobile */}
+        <button
+          type="button"
+          className="topbar-menu-btn"
+          onClick={onMenuOpen}
+          aria-label="Ouvrir le menu"
+        >
+          <Menu size={20} />
+        </button>
         <div className="topbar-search" ref={searchRef}>
           <Search size={16} />
           <input
