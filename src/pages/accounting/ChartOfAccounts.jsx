@@ -362,20 +362,104 @@ export default function ChartOfAccounts() {
           <div className="chart-column" key={column}>
             {groups.filter((group) => group.column === column).map((group) => (
               <section className="chart-class-card" key={group.key}>
-                <div className="chart-class-summary"><div><span className="chart-class-count">{group.rows.length} compte{group.rows.length > 1 ? 's' : ''}</span><h2>{group.title}</h2></div><div className="chart-class-totals"><span><small>Débit</small><strong>{money(group.totalDebit)}</strong></span><span><small>Crédit</small><strong>{money(group.totalCredit)}</strong></span><span><small>Différence</small><DifferenceValue value={group.difference} money={money} /></span></div><button type="button" className="chart-expand-button" onClick={() => toggleClass(group.key)} aria-expanded={expandedClasses.has(group.key)}>{expandedClasses.has(group.key) ? <>Réduire <ChevronUp size={15} /></> : <>Voir plus <ChevronDown size={15} /></>}</button></div>
+                <div className="chart-class-summary">
+                  <div>
+                    <span className="chart-class-count">{group.rows.length} compte{group.rows.length > 1 ? 's' : ''}</span>
+                    <h2>{group.title}</h2>
+                  </div>
+                  <div className="chart-class-totals">
+                    {(() => {
+                      const net = group.totalDebit - group.totalCredit;
+                      const isDebit = net > 0;
+                      const isCredit = net < 0;
+                      return (
+                        <span className="chart-class-total-item">
+                          <small>Solde total</small>
+                          <strong>
+                            {net === 0 ? (
+                              <span className="header-total-badge is-zero">0 FCFA · Équilibré</span>
+                            ) : (
+                              <span className={`header-total-badge ${isDebit ? 'is-debit' : 'is-credit'}`}>
+                                {isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA ({isDebit ? 'Débit' : 'Crédit'})
+                              </span>
+                            )}
+                          </strong>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <button
+                    type="button"
+                    className="chart-expand-icon-button"
+                    onClick={() => toggleClass(group.key)}
+                    aria-expanded={expandedClasses.has(group.key)}
+                    title={expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
+                    aria-label={expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
+                  >
+                    {expandedClasses.has(group.key) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    <span className="chart-expand-tooltip">
+                      {expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
+                    </span>
+                  </button>
+                </div>
                 {expandedClasses.has(group.key) && <>
                 <table>
-                  <thead><tr><th>Compte</th><th>Intitulé du compte</th><th className="numeric">Débit</th><th className="numeric">Crédit</th><th className="numeric">Différence</th><th aria-label="Actions" /></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Compte</th>
+                      <th>Intitulé du compte</th>
+                      <th className="numeric">Montant</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
                   <tbody>
-                    {group.rows.map((account) => (
-                      <tr key={account.id} className={!account.actif ? 'chart-account-inactive' : ''}>
-                        <td className="chart-account-number">{account.numero}</td>
-                        <td><span className="chart-account-label">{classTitle(account)}</span><small className="chart-nature-line"><span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>{balances[account.id]?.solde_fin ? <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>{Number(balances[account.id].solde_fin) > 0 ? 'Solde débiteur' : 'Solde créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}</span> : null}</small>{account.notes && <small className="chart-account-note">{account.notes}</small>}</td>
-                        <td className="numeric">{money(balances[account.id]?.periode_debit)}</td><td className="numeric">{money(balances[account.id]?.periode_credit)}</td><td className="numeric"><DifferenceValue value={Number(balances[account.id]?.periode_debit || 0) - Number(balances[account.id]?.periode_credit || 0)} money={money} /></td>
-                        <td className="chart-account-action"><span><button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>{canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}{(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}{canEditSensitive && <button type="button" className="chart-delete-button" disabled={deletingId === account.id} onClick={() => deleteAccount(account)} aria-label={`Supprimer le compte ${account.numero}`} title="Supprimer">{deletingId === account.id ? '…' : <Trash2 size={14} />}</button>}</span></td>
-                      </tr>
-                    ))}
-                    {!group.rows.length && <tr><td colSpan={(canEditBasic || canEditSensitive || canCreate) ? 6 : 5} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
+                    {group.rows.map((account) => {
+                      const debit = Number(balances[account.id]?.periode_debit || 0);
+                      const credit = Number(balances[account.id]?.periode_credit || 0);
+                      const net = debit - credit;
+                      const isDebit = net > 0;
+                      const isCredit = net < 0;
+                      return (
+                        <tr key={account.id} className={!account.actif ? 'chart-account-inactive' : ''}>
+                          <td className="chart-account-number">{account.numero}</td>
+                          <td>
+                            <span className="chart-account-label">{classTitle(account)}</span>
+                            <small className="chart-nature-line">
+                              <span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>
+                              {balances[account.id]?.solde_fin ? (
+                                <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>
+                                  {Number(balances[account.id].solde_fin) > 0 ? 'Solde débiteur' : 'Solde créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}
+                                </span>
+                              ) : null}
+                            </small>
+                            {account.notes && <small className="chart-account-note">{account.notes}</small>}
+                          </td>
+                          <td className="numeric chart-account-amount-cell">
+                            {net === 0 ? (
+                              <span className="chart-amount is-zero">—</span>
+                            ) : (
+                              <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}>
+                                <strong className="amount-number">
+                                  {isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA
+                                </strong>
+                                <span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>
+                                  {isDebit ? 'Débit' : 'Crédit'}
+                                </span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="chart-account-action">
+                            <span>
+                              <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
+                              {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
+                              {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
+                              {canEditSensitive && <button type="button" className="chart-delete-button" disabled={deletingId === account.id} onClick={() => deleteAccount(account)} aria-label={`Supprimer le compte ${account.numero}`} title="Supprimer">{deletingId === account.id ? '…' : <Trash2 size={14} />}</button>}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!group.rows.length && <tr><td colSpan={4} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
                   </tbody>
                 </table>
                 {previousExercise && <div className="chart-class-comparison"><span className="comparison-title">Évolution vs {previousExercise.code || previousExercise.annee}</span><span>Débit <TrendDelta value={group.totalDebit - group.previousDebit} money={money} /></span><span>Crédit <TrendDelta value={group.totalCredit - group.previousCredit} money={money} /></span><span>Solde net <TrendDelta value={group.endingBalance - group.previousBalance} money={money} /></span></div>}
