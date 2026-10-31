@@ -136,7 +136,7 @@ export default function AccountForm() {
 
   // Propose le prochain numéro libre sous la référence OHADA choisie.
   useEffect(() => {
-    if (!selectedParent || !formExerciceId) { setNumberHint(''); return undefined; }
+    if (!selectedParent) { setNumberHint(''); return undefined; }
     let active = true;
     supabase.from('comptes_comptables').select('numero').then(({ data, error: numberError }) => {
       if (!active) return;
@@ -155,7 +155,7 @@ export default function AccountForm() {
       setNumberHint(`Prochain numéro libre proposé : ${nextNumber}. Vous pouvez encore le modifier.`);
     });
     return () => { active = false; };
-  }, [selectedParent?.id, formExerciceId]);
+  }, [selectedParent?.id]);
 
   // Gestion du changement de compte parent
   const handleParentChange = (event) => {
@@ -235,14 +235,6 @@ export default function AccountForm() {
 
     if (!form.code.trim() || !form.label.trim()) {
       setError('Le numéro et le libellé du compte sont obligatoires.');
-      return;
-    }
-    if (!formExerciceId || exercicesLoading) {
-      setError('Sélectionnez un exercice comptable avant de créer un compte.');
-      return;
-    }
-    if (formExercice?.statut !== 'OUVERT') {
-      setError('Impossible de créer un compte dans un exercice clôturé. Sélectionnez un exercice ouvert.');
       return;
     }
 

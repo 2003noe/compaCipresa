@@ -55,7 +55,6 @@ export default function JournalEntryForm() {
 
   useEffect(() => {
     if (!supabaseConfigured) return;
-    if (exercicesLoading || !exercise?.id) return;
     setJournals([]);
     setAccountOptions([]);
     let active = true;
@@ -68,7 +67,7 @@ export default function JournalEntryForm() {
       setAccountOptions(ac.data || []);
     });
     return () => { active = false; };
-  }, [exercicesLoading, exercise?.id]);
+  }, []);
 
   useEffect(() => {
     if (!isEdit) setExercise(selectedExercice);
