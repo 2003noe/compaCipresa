@@ -130,12 +130,68 @@ export default function Bilan() {
     setLoadingData(true);
     setNotice('');
 
-    const call = (ex) =>
-      supabase.rpc('soldes_comptes_exercice', {
+    const fetchSoldesFallback = async (ex) => {
+      try {
+        const [accRes, linesRes] = await Promise.all([
+          supabase.from('comptes_comptables').select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
+          supabase.from('lignes_ecritures')
+            .select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)')
+            .eq('ecritures_comptables.exercice_id', ex.id)
+            .lte('ecritures_comptables.date_ecriture', ex.date_fin)
+            .eq('ecritures_comptables.statut', 'VALIDEE'),
+        ]);
+        if (accRes.error) return { data: null, error: accRes.error };
+
+        const d0 = ex.date_debut || '0001-01-01';
+        const mouv = {};
+        (linesRes.data || []).forEach((l) => {
+          if (!mouv[l.compte_id]) mouv[l.compte_id] = { ant: 0, pdeb: 0, pcre: 0 };
+          const d = Number(l.debit || 0);
+          const c = Number(l.credit || 0);
+          const dt = l.ecritures_comptables?.date_ecriture;
+          if (dt && dt < d0) {
+            mouv[l.compte_id].ant += (d - c);
+          } else {
+            mouv[l.compte_id].pdeb += d;
+            mouv[l.compte_id].pcre += c;
+          }
+        });
+
+        const list = (accRes.data || []).map((acc) => {
+          const ouv = Number(acc.solde_ouverture_debit || 0) - Number(acc.solde_ouverture_credit || 0);
+          const m = mouv[acc.id] || { ant: 0, pdeb: 0, pcre: 0 };
+          const solde_fin = ouv + m.ant + m.pdeb - m.pcre;
+          return {
+            compte_id: acc.id,
+            numero: acc.numero,
+            libelle: acc.libelle,
+            classe: acc.classe,
+            nature: acc.nature,
+            ouverture: ouv,
+            anterieur: m.ant,
+            periode_debit: m.pdeb,
+            periode_credit: m.pcre,
+            solde_fin,
+          };
+        }).filter((k) => k.ouverture !== 0 || k.anterieur !== 0 || k.periode_debit !== 0 || k.periode_credit !== 0);
+
+        return { data: list, error: null };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    };
+
+    const call = async (ex) => {
+      const res = await supabase.rpc('soldes_comptes_exercice', {
         p_exercice_id: ex.id,
         p_date_fin: ex.date_fin,
         p_date_debut: ex.date_debut,
       });
+      if (res.error && /exercice_id/i.test(res.error.message)) {
+        return fetchSoldesFallback(ex);
+      }
+      return res;
+    };
 
     Promise.all([call(selected), comparison ? call(comparison) : Promise.resolve({ data: null, error: null })]).then(
       ([n, n1]) => {

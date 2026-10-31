@@ -93,7 +93,7 @@ export default function GrandLivre() {
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,exercice_id,solde_ouverture_debit,solde_ouverture_credit,devise').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit,devise').order('numero'),
       supabase.from('lignes_ecritures').select('id,compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(id,date_ecriture,numero,statut,libelle,exercice_id,journaux!ecriture_journal_company_fk(code))').eq('ecritures_comptables.exercice_id', exerciceId).gte('ecritures_comptables.date_ecriture', selectedExercice?.date_debut).lte('ecritures_comptables.date_ecriture', selectedExercice?.date_fin),
     ]).then(([paramRes, acRes, lineRes]) => {
       if (!active) return;
@@ -135,9 +135,8 @@ export default function GrandLivre() {
   }, [accounts, requestedAccountId]);
 
   const hasUnassignedOpeningBalance = useMemo(
-    () => accounts.some((account) => !account.exercice_id
-      && (Number(account.solde_ouverture_debit || 0) !== 0 || Number(account.solde_ouverture_credit || 0) !== 0)),
-    [accounts],
+    () => false,
+    [],
   );
 
   const classesList = useMemo(() => {
@@ -150,10 +149,8 @@ export default function GrandLivre() {
     const accMap = {};
 
     accounts.forEach((acc) => {
-      // Legacy/shared accounts have no exercise-specific opening balance.
-      const openingBelongsToExercise = acc.exercice_id === exerciceId;
-      const initDebit = openingBelongsToExercise ? Number(acc.solde_ouverture_debit || 0) : 0;
-      const initCredit = openingBelongsToExercise ? Number(acc.solde_ouverture_credit || 0) : 0;
+      const initDebit = Number(acc.solde_ouverture_debit || 0);
+      const initCredit = Number(acc.solde_ouverture_credit || 0);
 
       accMap[acc.id] = {
         account: acc,

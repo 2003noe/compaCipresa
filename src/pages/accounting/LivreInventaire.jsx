@@ -70,7 +70,6 @@ export default function LivreInventaire() {
       supabase
         .from('comptes_comptables')
         .select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit,devise')
-        .eq('exercice_id', exerciceId)
         .order('numero'),
       supabase
         .from('lignes_ecritures')

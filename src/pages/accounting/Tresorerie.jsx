@@ -30,7 +30,7 @@ export default function Tresorerie() {
     setNotice('');
     let active = true;
 
-    supabase.from('comptes_comptables').select('id,numero,libelle,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).eq('nature', 'TRESORERIE').order('numero').then(({ data: accs, error: accErr }) => {
+    supabase.from('comptes_comptables').select('id,numero,libelle,solde_ouverture_debit,solde_ouverture_credit').eq('nature', 'TRESORERIE').order('numero').then(({ data: accs, error: accErr }) => {
       if (!active) return;
       if (accErr) { setNotice(`Impossible de charger les comptes de trésorerie : ${accErr.message}`); setLoading(false); return; }
       setAccounts(accs || []);

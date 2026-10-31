@@ -138,7 +138,7 @@ export default function AccountForm() {
   useEffect(() => {
     if (!selectedParent || !formExerciceId) { setNumberHint(''); return undefined; }
     let active = true;
-    supabase.from('comptes_comptables').select('numero').eq('exercice_id', formExerciceId).then(({ data, error: numberError }) => {
+    supabase.from('comptes_comptables').select('numero').then(({ data, error: numberError }) => {
       if (!active) return;
       if (numberError) { setNumberHint('Le numéro sera vérifié à l’enregistrement.'); return; }
       const prefix = selectedParent.num_compte;
@@ -260,9 +260,9 @@ export default function AccountForm() {
     }
 
     const { data: duplicateAccount, error: duplicateError } = await supabase.from('comptes_comptables')
-      .select('id').eq('exercice_id', formExerciceId).eq('numero', form.code.trim()).maybeSingle();
+      .select('id').eq('numero', form.code.trim()).maybeSingle();
     if (duplicateError) { setSaving(false); setError(`Impossible de vérifier le numéro du compte : ${duplicateError.message}`); return; }
-    if (duplicateAccount) { setSaving(false); setError(`Le numéro ${form.code.trim()} existe déjà dans cet exercice. Choisissez le numéro proposé ou saisissez-en un autre.`); return; }
+    if (duplicateAccount) { setSaving(false); setError(`Le numéro ${form.code.trim()} existe déjà. Choisissez le numéro proposé ou saisissez-en un autre.`); return; }
 
     const { error: insertError } = await supabase.from('comptes_comptables').insert({
       numero: form.code.trim(),
@@ -277,7 +277,6 @@ export default function AccountForm() {
       notes: form.notes.trim() || null,
       solde_ouverture_debit: Number(form.soldeDebit) || 0,
       solde_ouverture_credit: Number(form.soldeCredit) || 0,
-      exercice_id: formExerciceId,
     });
 
     setSaving(false);

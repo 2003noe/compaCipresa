@@ -41,13 +41,13 @@ export default function Balance() {
 
     Promise.all([
       supabase.from('parametres_entreprise').select('*').eq('entreprise_id', selectedEntrepriseId).maybeSingle(),
-      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').eq('exercice_id', exerciceId).order('numero'),
+      supabase.from('comptes_comptables').select('id,numero,libelle,classe,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
       supabase.rpc('soldes_comptes_exercice', {
         p_exercice_id: exerciceId,
         p_date_debut: selectedExercice.date_debut,
         p_date_fin: selectedExercice.date_fin,
       }),
-    ]).then(([paramRes, acRes, mvRes]) => {
+    ]).then(async ([paramRes, acRes, mvRes]) => {
       if (!active) return;
       if (paramRes.data?.raison_sociale || paramRes.data?.nom_entreprise) {
         setCompanyName((paramRes.data.raison_sociale || paramRes.data.nom_entreprise).toUpperCase());
@@ -55,12 +55,51 @@ export default function Balance() {
         setCompanyName(paramRes.data.nom.toUpperCase());
       }
 
-      if (acRes.error || mvRes.error) {
-        setNotice(`Impossible de charger la balance : ${(acRes.error || mvRes.error).message}`);
+      if (acRes.error) {
+        setNotice(`Impossible de charger la balance : ${acRes.error.message}`);
         setLoading(false);
         return;
       }
       setAccounts(acRes.data || []);
+
+      if (mvRes.error) {
+        if (/exercice_id/i.test(mvRes.error.message)) {
+          // Fallback direct sur lignes_ecritures si soldes_comptes_exercice en base fait référence à c.exercice_id
+          try {
+            const { data: linesData, error: linesErr } = await supabase.from('lignes_ecritures')
+              .select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)')
+              .eq('ecritures_comptables.exercice_id', exerciceId)
+              .eq('ecritures_comptables.statut', 'VALIDEE');
+            if (linesErr) throw linesErr;
+
+            const grouped = {};
+            (acRes.data || []).forEach((acc) => {
+              const ouv = Number(acc.solde_ouverture_debit || 0) - Number(acc.solde_ouverture_credit || 0);
+              grouped[`${acc.id}__${exerciceId}`] = {
+                openingNet: ouv,
+                debit: 0,
+                credit: 0,
+                closingNet: ouv,
+              };
+            });
+            (linesData || []).forEach((l) => {
+              const entry = grouped[`${l.compte_id}__${exerciceId}`];
+              if (!entry) return;
+              const d = Number(l.debit || 0);
+              const c = Number(l.credit || 0);
+              entry.debit += d;
+              entry.credit += c;
+              entry.closingNet += (d - c);
+            });
+            setMovementsByAccount(grouped);
+            setLoading(false);
+            return;
+          } catch (_) {}
+        }
+        setNotice(`Impossible de charger la balance : ${mvRes.error.message}`);
+        setLoading(false);
+        return;
+      }
 
       const grouped = {};
       (mvRes.data || []).forEach((account) => {

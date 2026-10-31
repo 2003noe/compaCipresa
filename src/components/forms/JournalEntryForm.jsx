@@ -61,7 +61,7 @@ export default function JournalEntryForm() {
     let active = true;
     Promise.all([
       supabase.from('journaux').select('id,code,libelle').order('code'),
-      supabase.from('comptes_comptables').select('numero,libelle').eq('exercice_id', exercise.id).order('numero'),
+      supabase.from('comptes_comptables').select('numero,libelle').order('numero'),
     ]).then(([jr, ac]) => {
       if (!active) return;
       setJournals(jr.data || []);
@@ -201,7 +201,7 @@ export default function JournalEntryForm() {
 
     // 1. Résoudre les comptes avant toute écriture en base
     const numeros = [...new Set(lines.map((l) => l.account.trim()))];
-    const accountRows = await supabase.from('comptes_comptables').select('id,numero').eq('exercice_id', exercise.id).in('numero', numeros);
+    const accountRows = await supabase.from('comptes_comptables').select('id,numero').in('numero', numeros);
     if (accountRows.error) { setSaving(false); setError(accountRows.error.message); return; }
 
     const accountMap = Object.fromEntries((accountRows.data || []).map((a) => [a.numero, a.id]));

@@ -29,7 +29,7 @@ export default function NewAsset() {
 
   useEffect(() => {
     if (!supabaseConfigured || exercicesLoading || !formExerciceId) { setAccounts([]); return; }
-    supabase.from('comptes_comptables').select('id,numero,libelle').eq('exercice_id', formExerciceId).ilike('classe', 'Classe 2%').order('numero').then(({ data }) => setAccounts(data || []));
+    supabase.from('comptes_comptables').select('id,numero,libelle').ilike('classe', 'Classe 2%').order('numero').then(({ data }) => setAccounts(data || []));
   }, [formExerciceId, exercicesLoading]);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));

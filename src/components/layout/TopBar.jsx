@@ -87,7 +87,6 @@ export default function TopBar({ onMenuOpen }) {
         supabase
           .from("comptes_comptables")
           .select("id,numero,libelle")
-          .eq("exercice_id", selectedExerciceId)
           .or(`numero.ilike.${term},libelle.ilike.${term}`)
           .limit(5),
         supabase

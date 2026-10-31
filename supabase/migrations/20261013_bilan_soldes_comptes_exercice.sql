@@ -53,7 +53,6 @@ AS $function$
       coalesce(m.pcre, 0) AS periode_credit
     FROM public.comptes_comptables c
     LEFT JOIN mouv m ON m.cid = c.id
-    WHERE c.exercice_id = p_exercice_id
   )
   SELECT
     k.compte_id,

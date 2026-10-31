@@ -127,7 +127,7 @@ export default function ChartOfAccounts() {
     const [accountResult, parentResult, balanceResult, previousBalanceResult] = await Promise.all([
       supabase.from('comptes_comptables')
         .select('id,numero,libelle,classe,nature,actif,compte_parent_id,devise,lettrable,reconciliable,notes,solde_ouverture_debit,solde_ouverture_credit')
-        .eq('exercice_id', selectedExerciceId).order('numero'),
+        .order('numero'),
       supabase.from('default_compt').select('id,num_compte,libelle').order('num_compte'),
       selectedExercice?.date_fin ? supabase.rpc('soldes_comptes_exercice', {
         p_exercice_id: selectedExerciceId,
@@ -144,10 +144,55 @@ export default function ChartOfAccounts() {
     else setAccounts(accountResult.data || []);
     if (parentResult.error) setError((current) => current || `Impossible de charger le référentiel OHADA : ${parentResult.error.message}`);
     else setParents(parentResult.data || []);
-    if (balanceResult.error) setError((current) => current || `Impossible de calculer les soldes du plan : ${balanceResult.error.message}`);
-    else setBalances(Object.fromEntries((balanceResult.data || []).map((row) => [row.compte_id, row])));
-    if (previousBalanceResult.error) setError((current) => current || `Comparaison N-1 indisponible : ${previousBalanceResult.error.message}`);
-    else setPreviousBalances(Object.fromEntries((previousBalanceResult.data || []).map((row) => [row.numero, row])));
+    
+    if (balanceResult.error) {
+      if (/exercice_id/i.test(balanceResult.error.message) && selectedExerciceId) {
+        // Fallback local si la fonction SQL soldes_comptes_exercice a encore l'ancien WHERE c.exercice_id
+        try {
+          const { data: linesData } = await supabase.from('lignes_ecritures')
+            .select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)')
+            .eq('ecritures_comptables.exercice_id', selectedExerciceId)
+            .eq('ecritures_comptables.statut', 'VALIDEE');
+          const calcBalances = {};
+          (accountResult.data || []).forEach((acc) => {
+            const ouv = Number(acc.solde_ouverture_debit || 0) - Number(acc.solde_ouverture_credit || 0);
+            calcBalances[acc.id] = {
+              compte_id: acc.id,
+              numero: acc.numero,
+              libelle: acc.libelle,
+              ouverture: ouv,
+              anterieur: 0,
+              periode_debit: 0,
+              periode_credit: 0,
+              solde_fin: ouv,
+            };
+          });
+          (linesData || []).forEach((l) => {
+            if (!calcBalances[l.compte_id]) return;
+            const d = Number(l.debit || 0);
+            const c = Number(l.credit || 0);
+            calcBalances[l.compte_id].periode_debit += d;
+            calcBalances[l.compte_id].periode_credit += c;
+            calcBalances[l.compte_id].solde_fin += (d - c);
+          });
+          setBalances(calcBalances);
+        } catch (_) {
+          setError((current) => current || `Impossible de calculer les soldes du plan : ${balanceResult.error.message}`);
+        }
+      } else {
+        setError((current) => current || `Impossible de calculer les soldes du plan : ${balanceResult.error.message}`);
+      }
+    } else {
+      setBalances(Object.fromEntries((balanceResult.data || []).map((row) => [row.compte_id, row])));
+    }
+
+    if (previousBalanceResult.error) {
+      if (!/exercice_id/i.test(previousBalanceResult.error.message)) {
+        setError((current) => current || `Comparaison N-1 indisponible : ${previousBalanceResult.error.message}`);
+      }
+    } else {
+      setPreviousBalances(Object.fromEntries((previousBalanceResult.data || []).map((row) => [row.numero, row])));
+    }
     setPreviousExercise(previousCandidate);
     setLoading(false);
   }, [canRead, exercicesLoading, selectedExerciceId, selectedExercice, previousCandidate]);
@@ -361,7 +406,7 @@ export default function ChartOfAccounts() {
       patch.solde_ouverture_debit = Number(form.solde_ouverture_debit) || 0;
       patch.solde_ouverture_credit = Number(form.solde_ouverture_credit) || 0;
     }
-    const { error: updateError } = await supabase.from('comptes_comptables').update(patch).eq('id', editing.id).eq('exercice_id', selectedExerciceId);
+    const { error: updateError } = await supabase.from('comptes_comptables').update(patch).eq('id', editing.id);
     setSaving(false);
     if (updateError) {
       setError(updateError.message);

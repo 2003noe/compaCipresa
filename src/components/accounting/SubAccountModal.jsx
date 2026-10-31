@@ -111,7 +111,6 @@ export default function SubAccountModal({
         reconciliable,
         solde_ouverture_debit: Number(soldeDebit) || 0,
         solde_ouverture_credit: Number(soldeCredit) || 0,
-        exercice_id: selectedExercice.id,
       };
 
       const { data, error: insertError } = await supabase

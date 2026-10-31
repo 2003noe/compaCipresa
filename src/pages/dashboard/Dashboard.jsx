@@ -59,8 +59,8 @@ export default function Dashboard() {
       supabase
         .from("comptes_comptables")
         .select(
-          "id,numero,libelle,nature,exercice_id,solde_ouverture_debit,solde_ouverture_credit",
-        ).eq("exercice_id", selectedExercice.id),
+          "id,numero,libelle,nature,solde_ouverture_debit,solde_ouverture_credit",
+        ),
       supabase
         .from("lignes_ecritures")
         .select(
@@ -86,8 +86,7 @@ export default function Dashboard() {
       supabase.from("controles_cloture").select("cloture_id,statut"),
       supabase
         .from("lignes_releve_bancaire")
-        .select("id,compte_id,rapproche,compte:comptes_comptables!releve_compte_company_fk!inner(exercice_id)")
-        .eq("compte.exercice_id", selectedExercice.id)
+        .select("id,compte_id,rapproche,compte:comptes_comptables!releve_compte_company_fk!inner(id,numero)")
         .eq("rapproche", false),
       supabase.from("entreprise_utilisateurs").select("user_id").eq("entreprise_id", selectedEntrepriseId),
     ]).then(async (results) => {
@@ -192,8 +191,8 @@ export default function Dashboard() {
   );
 
   const comptesExercice = useMemo(
-    () => comptes.filter((c) => selectedExercice && c.exercice_id === selectedExercice.id),
-    [comptes, selectedExercice],
+    () => comptes.filter(Boolean),
+    [comptes],
   );
   const releveExercice = useMemo(
     () => releveNonRapproche.filter((r) => comptesExercice.some((c) => c.id === r.compte_id)),
