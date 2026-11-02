@@ -308,7 +308,7 @@ export default function AccountForm() {
           </Select>
           <div className="grid grid-2">
             <Input
-              label="Numéro de compte"
+              label="Numéro de sous compte"
               placeholder={selectedParent ? `Ex: ${selectedParent.num_compte}01` : 'Ex: 411001'}
               required
               value={form.code}
@@ -334,17 +334,11 @@ export default function AccountForm() {
         </div>
 
         <div className="form-section precise-section">
-          <h2>Configuration &amp; Propriétés</h2>
           <div className="grid grid-2">
             <Select label="Devise" value={form.devise} onChange={update('devise')}>
               {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
             </Select>
           </div>
-          <div className="toggle-pair">
-            <Toggle label="Lettrable" description="Permet d'associer des débits et des crédits" checked={form.lettrable} onChange={(v) => setForm((f) => ({ ...f, lettrable: v }))} />
-            <Toggle label="Réconciliable" description="Soumis au rapprochement de trésorerie" checked={form.reconciliable} onChange={(v) => setForm((f) => ({ ...f, reconciliable: v }))} />
-          </div>
-          <Input label="Notes / Description" placeholder="Ajoutez des détails internes sur l'affectation ou l'usage réglementaire de ce compte..." value={form.notes} onChange={update('notes')} />
         </div>
 
         <div className="form-section precise-section opening-section">

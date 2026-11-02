@@ -93,6 +93,7 @@ export default function ChartOfAccounts() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [balances, setBalances] = useState({});
   const [expandedClasses, setExpandedClasses] = useState(() => new Set());
+  const [expandedRows, setExpandedRows] = useState(() => new Set());
   const [previousBalances, setPreviousBalances] = useState({});
   const [previousExercise, setPreviousExercise] = useState(null);
   const [detailAccountId, setDetailAccountId] = useState('');
@@ -352,10 +353,39 @@ export default function ChartOfAccounts() {
   };
 
   const change = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const PREVIEW_COUNT = 5;
+
   const toggleClass = (key) => setExpandedClasses((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
+  });
+
+  const toggleRows = (key) => setExpandedRows((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  // Trie les comptes : d'abord ceux avec un solde non nul, puis avec des mouvements,
+  // puis les autres. Les comptes inactifs sans activité passent en dernier.
+  const sortedRows = (rows) => [...rows].sort((a, b) => {
+    const balA = balances[a.id] || {};
+    const balB = balances[b.id] || {};
+    const soldeA = Math.abs(Number(balA.solde_fin || 0));
+    const soldeB = Math.abs(Number(balB.solde_fin || 0));
+    const mvtA = Number(balA.periode_debit || 0) + Number(balA.periode_credit || 0);
+    const mvtB = Number(balB.periode_debit || 0) + Number(balB.periode_credit || 0);
+    // Priorité 1 : solde non nul
+    if (soldeA > 0 && soldeB === 0) return -1;
+    if (soldeB > 0 && soldeA === 0) return 1;
+    // Priorité 2 : avec mouvements
+    if (mvtA > 0 && mvtB === 0) return -1;
+    if (mvtB > 0 && mvtA === 0) return 1;
+    // Priorité 3 : comptes actifs avant inactifs
+    if (a.actif && !b.actif) return -1;
+    if (!a.actif && b.actif) return 1;
+    return a.numero.localeCompare(b.numero);
   });
   const detailAccount = accounts.find((account) => account.id === detailAccountId) || null;
   const detailBalance = detailAccount ? balances[detailAccount.id] || {} : {};
@@ -503,78 +533,102 @@ export default function ChartOfAccounts() {
                     </span>
                   </button>
                 </div>
-                {expandedClasses.has(group.key) && <>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Compte</th>
-                      <th>Intitulé du compte</th>
-                      <th className="numeric">Montant</th>
-                      <th aria-label="Actions" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.rows.map((account) => {
-                      const debit = Number(balances[account.id]?.periode_debit || 0);
-                      const credit = Number(balances[account.id]?.periode_credit || 0);
-                      const net = debit - credit;
-                      const isDebit = net > 0;
-                      const isCredit = net < 0;
-                      return (
-                        <tr key={account.id} className={!account.actif ? 'chart-account-inactive' : ''}>
-                          <td className="chart-account-number">{account.numero}</td>
-                          <td>
-                            <span className="chart-account-label">{classTitle(account)}</span>
-                            <small className="chart-nature-line">
-                              <span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>
-                              {balances[account.id]?.solde_fin ? (
-                                <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>
-                                  {Number(balances[account.id].solde_fin) > 0 ? 'Solde débiteur' : 'Solde créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}
-                                </span>
-                              ) : null}
-                            </small>
-                            {account.notes && <small className="chart-account-note">{account.notes}</small>}
-                          </td>
-                          <td className="numeric chart-account-amount-cell">
-                            {net === 0 ? (
-                              <span className="chart-amount is-zero">—</span>
-                            ) : (
-                              <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}>
-                                <strong className="amount-number">
-                                  {isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA
-                                </strong>
-                                <span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>
-                                  {isDebit ? 'Débit' : 'Crédit'}
-                                </span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="chart-account-action">
-                            <span>
-                              <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
-                              {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
-                              {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  className="chart-delete-button"
-                                  onClick={() => openDeleteModal(account)}
-                                  aria-label={`Supprimer le compte ${account.numero}`}
-                                  title="Supprimer le compte"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </span>
-                          </td>
+                {expandedClasses.has(group.key) && (() => {
+                  const sorted = sortedRows(group.rows);
+                  const showMore = expandedRows.has(group.key);
+                  const visible = showMore ? sorted : sorted.slice(0, PREVIEW_COUNT);
+                  const hasMore = sorted.length > PREVIEW_COUNT;
+                  return (
+                    <>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Compte</th>
+                          <th>Intitulé du compte</th>
+                          <th className="numeric">Montant</th>
+                          <th aria-label="Actions" />
                         </tr>
-                      );
-                    })}
-                    {!group.rows.length && <tr><td colSpan={4} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
-                  </tbody>
-                </table>
-                {previousExercise && <div className="chart-class-comparison"><span className="comparison-title">Évolution vs {previousExercise.code || previousExercise.annee}</span><span>Débit <TrendDelta value={group.totalDebit - group.previousDebit} money={money} /></span><span>Crédit <TrendDelta value={group.totalCredit - group.previousCredit} money={money} /></span><span>Solde net <TrendDelta value={group.endingBalance - group.previousBalance} money={money} /></span></div>}
-                </>}
+                      </thead>
+                      <tbody>
+                        {visible.map((account) => {
+                          const debit = Number(balances[account.id]?.periode_debit || 0);
+                          const credit = Number(balances[account.id]?.periode_credit || 0);
+                          const net = debit - credit;
+                          const isDebit = net > 0;
+                          const isCredit = net < 0;
+                          return (
+                            <tr key={account.id} className={!account.actif ? 'chart-account-inactive' : ''}>
+                              <td className="chart-account-number">{account.numero}</td>
+                              <td>
+                                <span className="chart-account-label">{classTitle(account)}</span>
+                                <small className="chart-nature-line">
+                                  <span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>
+                                  {balances[account.id]?.solde_fin ? (
+                                    <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>
+                                      {Number(balances[account.id].solde_fin) > 0 ? 'Solde débiteur' : 'Solde créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}
+                                    </span>
+                                  ) : null}
+                                </small>
+                                {account.notes && <small className="chart-account-note">{account.notes}</small>}
+                              </td>
+                              <td className="numeric chart-account-amount-cell">
+                                {net === 0 ? (
+                                  <span className="chart-amount is-zero">—</span>
+                                ) : (
+                                  <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}>
+                                    <strong className="amount-number">
+                                      {isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA
+                                    </strong>
+                                    <span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>
+                                      {isDebit ? 'Débit' : 'Crédit'}
+                                    </span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="chart-account-action">
+                                <span>
+                                  <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
+                                  {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
+                                  {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
+                                  {canDelete && (
+                                    <button
+                                      type="button"
+                                      className="chart-delete-button"
+                                      onClick={() => openDeleteModal(account)}
+                                      aria-label={`Supprimer le compte ${account.numero}`}
+                                      title="Supprimer le compte"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {!group.rows.length && <tr><td colSpan={4} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
+                      </tbody>
+                    </table>
+
+                    {hasMore && (
+                      <button
+                        type="button"
+                        className="chart-show-more-button"
+                        onClick={() => toggleRows(group.key)}
+                        aria-expanded={showMore}
+                      >
+                        {showMore ? (
+                          <><ChevronUp size={14} /> Réduire ({sorted.length - PREVIEW_COUNT} masqués)</>
+                        ) : (
+                          <><ChevronDown size={14} /> Voir les {sorted.length - PREVIEW_COUNT} autres comptes</>
+                        )}
+                      </button>
+                    )}
+
+                    {previousExercise && <div className="chart-class-comparison"><span className="comparison-title">Évolution vs {previousExercise.code || previousExercise.annee}</span><span>Débit <TrendDelta value={group.totalDebit - group.previousDebit} money={money} /></span><span>Crédit <TrendDelta value={group.totalCredit - group.previousCredit} money={money} /></span><span>Solde net <TrendDelta value={group.endingBalance - group.previousBalance} money={money} /></span></div>}
+                    </>
+                  );
+                })()}
               </section>
             ))}
           </div>
