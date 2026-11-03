@@ -133,7 +133,11 @@ export default function Balance() {
         closingDebit: closingNet >= 0 ? closingNet : 0,
         closingCredit: closingNet < 0 ? Math.abs(closingNet) : 0,
       };
-    }), [accounts, movementsByAccount, exerciceId, classFilter]);
+    })
+    // N'afficher que les comptes ayant au moins une valeur non nulle
+    .filter((r) => r.openingDebit !== 0 || r.openingCredit !== 0 || r.mvtDebit !== 0 || r.mvtCredit !== 0 || r.closingDebit !== 0 || r.closingCredit !== 0),
+  [accounts, movementsByAccount, exerciceId, classFilter]);
+
 
   // Contrôles de cohérence globaux, indépendants du filtre de classe affiché.
   const integrity = useMemo(() => {
