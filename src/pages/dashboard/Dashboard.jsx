@@ -27,12 +27,14 @@ const todayFr = () =>
     year: "numeric",
   });
 
-export default function Dashboard() {
+function AccountingDashboard() {
   const nav = useNavigate();
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const { selectedExercice } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
+  const { selectedEntrepriseId, hasRole, can } = useAuth();
+  const isAdmin = hasRole('ADMIN');
+  const canExport = can('COMPTA_EXPORT');
   const [soldesBilan, setSoldesBilan] = useState(null);
   const [comptes, setComptes] = useState([]);
   const [lignesTout, setLignesTout] = useState([]);
@@ -88,7 +90,7 @@ export default function Dashboard() {
         .from("lignes_releve_bancaire")
         .select("id,compte_id,rapproche,compte:comptes_comptables!releve_compte_company_fk!inner(id,numero)")
         .eq("rapproche", false),
-      supabase.from("entreprise_utilisateurs").select("user_id").eq("entreprise_id", selectedEntrepriseId),
+      isAdmin ? supabase.from("entreprise_utilisateurs").select("user_id").eq("entreprise_id", selectedEntrepriseId) : Promise.resolve({ data: [], error: null }),
     ]).then(async (results) => {
       const errs = results.filter((r) => r.error);
       if (errs.length) {
@@ -99,7 +101,7 @@ export default function Dashboard() {
       const [ac, ln, rec, ecl, decl, clo, ctrl, releve, members] =
         results.map((r) => r.data || []);
       const memberIds = [...new Set(members.map((m) => m.user_id))];
-      const { data: prof } = memberIds.length
+      const { data: prof } = isAdmin && memberIds.length
         ? await supabase.from("profiles").select("id,nom,prenom,actif").in("id", memberIds)
         : { data: [] };
       setComptes(ac);
@@ -116,7 +118,7 @@ export default function Dashboard() {
       setUserRoles(members);
       setLoading(false);
     });
-  }, [selectedExercice, selectedEntrepriseId]);
+  }, [selectedExercice, selectedEntrepriseId, isAdmin]);
 
   const previousExercice = null;
 
@@ -439,7 +441,7 @@ export default function Dashboard() {
     const sansRole = profiles.filter(
       (p) => p.actif && !rolesUserIds.has(p.id),
     ).length;
-    if (sansRole > 0)
+    if (isAdmin && sansRole > 0)
       items.push({
         key: "roles",
         tone: "info",
@@ -455,6 +457,7 @@ export default function Dashboard() {
     ecrituresBrouillon,
     profiles,
     rolesUserIds,
+    isAdmin,
     nav,
   ]);
 
@@ -523,12 +526,12 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="dashboard-header-actions">
-          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading}>
+          {canExport && <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading}>
             Imprimer (PDF)
-          </Button>
-          <Button variant="primary" icon={Download} onClick={handleDashboardExcel} disabled={loading}>
+          </Button>}
+          {canExport && <Button variant="primary" icon={Download} onClick={handleDashboardExcel} disabled={loading}>
             Exporter Excel
-          </Button>
+          </Button>}
           <span className="dashboard-date">Dernière mise à jour : {todayFr()}</span>
         </div>
       </div>
@@ -656,7 +659,7 @@ export default function Dashboard() {
         <AlertCard items={alerts} />
       </div>
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}
@@ -677,4 +680,19 @@ export default function Dashboard() {
       )}
     </div>
   );
+}
+
+function RestrictedSalesDashboard() {
+  const nav = useNavigate();
+  const { selectedEntreprise } = useAuth();
+  return <div className="page-content">
+    <div className="page-header"><div><h1 className="page-title">Activité commerciale</h1><p className="page-subtitle">{selectedEntreprise?.nom || 'Entreprise active'} · Vue limitée aux ventes</p></div></div>
+    <div className="grid grid-2"><Card><h2 className="section-title">Synchronisation des ventes</h2><p className="page-subtitle">Consultez les ventes transmises et leur état de synchronisation comptable.</p><Button onClick={() => nav('/sync-ventes')}>Ouvrir les ventes</Button></Card><Card><h2 className="section-title">Accès limité</h2><p className="page-subtitle">Les rapports comptables, soldes, trésorerie et marges ne sont pas accessibles avec votre rôle commercial.</p></Card></div>
+  </div>;
+}
+
+export default function Dashboard() {
+  const { can } = useAuth();
+  if (!can('COMPTA_READ') && can('SALES_READ')) return <RestrictedSalesDashboard />;
+  return <AccountingDashboard />;
 }

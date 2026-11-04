@@ -2,22 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Home, List, BookOpen, Book, Scale, FileText, PieChart, Wallet, ClipboardList, Building2, Lock, Settings, LogOut, UserRound, CircleHelp, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { ROUTE_PERMISSIONS, canAccessRoute } from '../../lib/rbac';
 
 const items = [
-  ['/dashboard', 'Tableau de bord', Home], ['/plan-comptable', 'Plan comptable', List], ['/journal', 'Journal', BookOpen],
-  ['/grand-livre', 'Grand livre', Book], ['/balance', 'Balance', Scale], ['/bilan', 'Bilan', FileText],
-  ['/compte-resultat', 'Compte de résultat', PieChart], ['/tresorerie', 'Trésorerie', Wallet],
-  ['/livre-inventaire', "Livre d'inventaire", ClipboardList], ['/immobilisations', 'Immobilisations', Building2],
-  ['/sync-ventes', 'Synchro Ventes', RefreshCw],
-  ['/clotures', 'Clôtures', Lock], ['/parametres', 'Paramètres', Settings]
+  ['/dashboard', 'Tableau de bord', Home, ROUTE_PERMISSIONS.dashboard], ['/plan-comptable', 'Plan comptable', List, ROUTE_PERMISSIONS.chart], ['/journal', 'Journal', BookOpen, ROUTE_PERMISSIONS.journal],
+  ['/grand-livre', 'Grand livre', Book, ROUTE_PERMISSIONS.ledger], ['/balance', 'Balance', Scale, ROUTE_PERMISSIONS.reports], ['/bilan', 'Bilan', FileText, ROUTE_PERMISSIONS.reports],
+  ['/compte-resultat', 'Compte de résultat', PieChart, ROUTE_PERMISSIONS.reports], ['/tresorerie', 'Trésorerie', Wallet, ROUTE_PERMISSIONS.treasury],
+  ['/livre-inventaire', "Livre d'inventaire", ClipboardList, ROUTE_PERMISSIONS.inventory], ['/immobilisations', 'Immobilisations', Building2, ROUTE_PERMISSIONS.assets],
+  ['/sync-ventes', 'Synchro Ventes', RefreshCw, ROUTE_PERMISSIONS.sales],
+  ['/clotures', 'Clôtures', Lock, ROUTE_PERMISSIONS.closures], ['/parametres', 'Paramètres', Settings, ROUTE_PERMISSIONS.settings]
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
-  const { profile, roles, signOut, companies } = useAuth();
-  const canViewCompanyAnalytics = companies.some((company) => company.roles?.some((role) => role.code === 'ADMIN'));
+  const { profile, roles, signOut, can, hasRole } = useAuth();
+  const activeAccess = { can, hasRole };
+  const canViewCompanyAnalytics = canAccessRoute(ROUTE_PERMISSIONS.analytics, activeAccess);
 
   const userName = profile ? ([profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Utilisateur') : 'Utilisateur';
   const userRole = roles?.[0]?.nom || 'Rôle non défini';
@@ -60,7 +62,7 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
         <div className="sidebar-divider" />
         <nav>
-          {items.map(([to, label, Icon]) => (
+          {items.filter(([, , , access]) => canAccessRoute(access, activeAccess)).map(([to, label, Icon]) => (
             <NavLink key={to} to={to} onClick={handleNavClick} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Icon size={16} /><span className="nav-label">{label}</span>{label === 'Tableau de bord' && <i />}
             </NavLink>

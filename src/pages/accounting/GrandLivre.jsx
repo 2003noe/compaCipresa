@@ -60,7 +60,8 @@ export default function GrandLivre() {
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
   const devise = 'FCFA';
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
+  const { selectedEntrepriseId, can } = useAuth();
+  const canExport = can('COMPTA_EXPORT');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   
@@ -319,22 +320,22 @@ export default function GrandLivre() {
         </div>
         <div className="page-header-actions">
           <span className="page-subtitle">Exercice : {selectedExercice?.code || 'non sélectionné'}</span>
-          <Button
+          {canExport && <Button
             variant="secondary"
             icon={Printer}
             onClick={() => setShowPDFPreview(true)}
             disabled={loading || ledgerData.accounts.length === 0}
           >
             Imprimer (PDF)
-          </Button>
-          <Button
+          </Button>}
+          {canExport && <Button
             variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={loading || ledgerData.accounts.length === 0}
           >
             Exporter Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -761,7 +762,7 @@ export default function GrandLivre() {
         }
       `}</style>
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}

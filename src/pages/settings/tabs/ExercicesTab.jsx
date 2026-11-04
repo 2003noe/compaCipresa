@@ -6,16 +6,15 @@ import Badge from '../../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
 import { useExercice } from '../../../context/ExerciceContext';
 import { useAuth } from '../../../context/AuthContext';
+import { confirmAction, toast } from '../../../lib/notifications';
 
 const empty = { code: '', annee: '', date_debut: '', date_fin: '' };
 
 export default function ExercicesTab() {
   const { reloadExercices } = useExercice();
   const { can, hasRole, accessLoading, accessError } = useAuth();
-  // COMPTA_CLOTURE couvre la gestion des périodes (création, modification et clôture).
-  // Il n'existe pas de permission dédiée à la suppression : cette action reste ADMIN.
-  const canRead = hasRole('ADMIN') || can('COMPTA_READ');
-  const canManage = hasRole('ADMIN') || can('COMPTA_CLOTURE');
+  const canRead = can('COMPTA_READ');
+  const canManage = can('COMPTA_EXERCISE_EDIT') || hasRole('ADMIN');
   const canDelete = hasRole('ADMIN');
   const [exercices, setExercices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,9 +154,11 @@ export default function ExercicesTab() {
 
   const deleteExercise = async (exercice) => {
     if (!canDelete) { setError('Seul un administrateur peut supprimer un exercice.'); return; }
-    const confirmed = window.confirm(
-      `Supprimer l’exercice ${exercice.code} (${exercice.date_debut} au ${exercice.date_fin}) ?\n\nLa suppression sera refusée par Supabase si des écritures, comptes ou autres données y sont rattachés.`,
-    );
+    const confirmed = await confirmAction({
+      title: `Supprimer l’exercice ${exercice.code} ?`,
+      text: `${exercice.date_debut} au ${exercice.date_fin}. La suppression sera refusée si des écritures, comptes ou autres données y sont rattachés.`,
+      confirmText: 'Supprimer l’exercice', danger: true,
+    });
     if (!confirmed) return;
 
     setError('');
@@ -169,10 +170,12 @@ export default function ExercicesTab() {
     setWorking('');
     if (deleteError) {
       setError(`Suppression impossible. Des données peuvent être rattachées à cet exercice. ${deleteError.message}`);
+      toast.error('Suppression impossible', deleteError.message);
       return;
     }
     await load();
     await reloadExercices();
+    toast.success('Exercice supprimé', `${exercice.code} a été supprimé.`);
   };
 
   const toggleStatut = async (exercice) => {
@@ -210,7 +213,7 @@ export default function ExercicesTab() {
 
       {error && <div className="message error" role="alert">{error}</div>}
 
-      {showForm && (
+      {showForm && canManage && (
         <div className="form-section precise-section">
           <h3>{editingId ? 'Modifier un exercice' : 'Créer un exercice'}</h3>
           <div className="grid grid-2">

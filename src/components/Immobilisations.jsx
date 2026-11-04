@@ -6,6 +6,8 @@ import Button from './ui/Button';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { computeDepreciation } from '../lib/depreciation';
 import { useExercice } from '../context/ExerciceContext';
+import { useAuth } from '../context/AuthContext';
+import { editPhysicalInventory, toast } from '../lib/notifications';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const STATUT_LABEL = { EN_SERVICE: 'En service', CEDE: 'Cédé', REFORME: 'Réformé' };
@@ -13,6 +15,9 @@ const METHODE_LABEL = { LINEAIRE: 'Linéaire', DEGRESSIF: 'Dégressif', AUCUNE: 
 
 export default function Immobilisations() {
   const nav = useNavigate();
+  const { can } = useAuth();
+  const physicalOnly = can('STOCK_INVENTORY') && !can('COMPTA_READ');
+  const canManageFinancialAssets = can('COMPTA_ASSET_EDIT');
   const { selectedExercice, selectedExerciceId, loading: exercicesLoading } = useExercice();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,14 +35,14 @@ export default function Immobilisations() {
     setAssets([]);
     setNotice('');
     let active = true;
-    supabase.from('immobilisations').select('*').eq('exercice_id', selectedExerciceId).order('code').then(({ data, error }) => {
+    supabase.from(physicalOnly ? 'immobilisations_parc_physique' : 'immobilisations').select('*').eq('exercice_id', selectedExerciceId).order('code').then(({ data, error }) => {
       if (!active) return;
       if (error) { setNotice(`Impossible de charger le registre : ${error.message}`); setLoading(false); return; }
       setAssets(data || []);
       setLoading(false);
     });
     return () => { active = false; };
-  }, [refreshTick, selectedExerciceId, selectedExercice, exercicesLoading]);
+  }, [refreshTick, selectedExerciceId, selectedExercice, exercicesLoading, physicalOnly]);
 
   const withDepreciation = useMemo(() => assets.map((a) => ({ ...a, ...computeDepreciation(a, selectedExercice?.date_fin ? new Date(`${selectedExercice.date_fin}T23:59:59`) : new Date()) })), [assets, refreshTick, selectedExercice]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -54,6 +59,33 @@ export default function Immobilisations() {
   const totalAmort = withDepreciation.reduce((acc, a) => acc + a.amortCumule, 0);
   const totalVnc = totalBrut - totalAmort;
 
+  const updatePhysicalRecord = async (asset) => {
+    const values = await editPhysicalInventory({
+      title: `Inventaire physique · ${asset.code}`,
+      etat: asset.etat_physique || '',
+      emplacement: asset.emplacement_physique || '',
+      observation: asset.observation_physique || '',
+    });
+    if (!values) return;
+    const { error } = await supabase.rpc('update_asset_physical_inventory', {
+      p_id: asset.id, p_etat: values.etat, p_emplacement: values.emplacement,
+      p_date: new Date().toISOString().slice(0, 10), p_observation: values.observation,
+    });
+    if (error) { setNotice(error.message); toast.error('Mise à jour impossible', error.message); }
+    else { setRefreshTick((tick) => tick + 1); toast.success('Inventaire mis à jour', asset.designation); }
+  };
+
+  if (physicalOnly) return (
+    <div className="page-content">
+      <div className="page-header"><div><h1 className="page-title">Inventaire physique des biens</h1><p className="page-subtitle">État, emplacement et observations · Exercice {selectedExercice?.code || ''}</p></div></div>
+      {notice && <div className="message error" role="alert">{notice}</div>}
+      <Card><div className="table-wrap"><table className="balance-table"><thead><tr><th>Code</th><th>Désignation</th><th>Catégorie</th><th>État physique</th><th>Emplacement</th><th>Dernier inventaire</th><th>Observation</th><th /></tr></thead><tbody>
+        {assets.map((asset) => <tr key={asset.id}><td>{asset.code}</td><td>{asset.designation}</td><td>{asset.categorie}</td><td>{asset.etat_physique || 'À inventorier'}</td><td>{asset.emplacement_physique || '—'}</td><td>{asset.date_inventaire_physique || '—'}</td><td>{asset.observation_physique || '—'}</td><td><Button size="sm" variant="secondary" onClick={() => updatePhysicalRecord(asset)}>Mettre à jour</Button></td></tr>)}
+        {!assets.length && !loading && <tr><td colSpan={8}>Aucun bien enregistré pour cet exercice.</td></tr>}
+      </tbody></table></div></Card>
+    </div>
+  );
+
   return (
     <div className="page-content">
       <div className="page-header">
@@ -61,7 +93,7 @@ export default function Immobilisations() {
           <h1 className="page-title">Registre des immobilisations</h1>
           <p className="page-subtitle">Situation des immobilisations au {selectedExercice?.date_fin || '—'} — exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
-        <Button icon={Plus} onClick={() => nav('/nouvelle-immobilisation')}>Nouvelle immobilisation</Button>
+        {canManageFinancialAssets && <Button icon={Plus} onClick={() => nav('/nouvelle-immobilisation')}>Nouvelle immobilisation</Button>}
       </div>
 
       {notice && <div className="message error" role="alert">{notice}</div>}

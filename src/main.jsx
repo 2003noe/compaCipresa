@@ -5,6 +5,7 @@ import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ExerciceProvider } from "./context/ExerciceContext";
+import "sweetalert2/dist/sweetalert2.min.css";
 import "./styles/tokens.css";
 import "./styles/globals.css";
 import "./styles/components.css";

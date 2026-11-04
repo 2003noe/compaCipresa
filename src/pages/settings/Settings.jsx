@@ -6,6 +6,7 @@ import JournauxTab from './tabs/JournauxTab';
 import UtilisateursTab from './tabs/UtilisateursTab';
 import IntegrationsTab from './tabs/IntegrationsTab';
 import SecuriteTab from './tabs/SecuriteTab';
+import { useAuth } from '../../context/AuthContext';
 
 const TABS = [
   { key: 'entreprise', label: 'Entreprise', Comp: EntrepriseTab },
@@ -17,8 +18,16 @@ const TABS = [
 ];
 
 export default function Settings() {
+  const { can, hasRole } = useAuth();
   const [active, setActive] = useState('entreprise');
-  const Active = TABS.find((t) => t.key === active)?.Comp || EntrepriseTab;
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.key === 'utilisateurs') return can('CONFIG_USERS');
+    if (['entreprise', 'journaux'].includes(tab.key)) return can('CONFIG_COMPANY') || can('COMPTA_READ');
+    if (['integrations', 'securite'].includes(tab.key)) return can('CONFIG_COMPANY');
+    return can('COMPTA_READ') || can('COMPTA_EXERCISE_EDIT') || hasRole('ADMIN');
+  });
+  const safeActive = visibleTabs.some((tab) => tab.key === active) ? active : (visibleTabs[0]?.key || 'exercices');
+  const Active = visibleTabs.find((t) => t.key === safeActive)?.Comp || ExercicesTab;
 
   return (
     <div className="page-content">
@@ -31,8 +40,8 @@ export default function Settings() {
 
       <div className="params-layout">
         <Card className="params-nav">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" className={`params-nav-item ${active === t.key ? 'active' : ''}`} onClick={() => setActive(t.key)}>
+          {visibleTabs.map((t) => (
+            <button key={t.key} type="button" className={`params-nav-item ${safeActive === t.key ? 'active' : ''}`} onClick={() => setActive(t.key)}>
               {t.label}
             </button>
           ))}

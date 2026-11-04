@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Toggle from '../ui/Toggle';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 const ACCOUNT_CLASSES = [
   'Classe 1 - Ressources durables',
@@ -23,6 +24,8 @@ export default function SubAccountModal({
   selectedExercice,
   onSubAccountCreated,
 }) {
+  const { can } = useAuth();
+  const canCreateSubAccount = can('COMPTA_CREATE') || can('COMPTA_ACCOUNT_CREATE');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
@@ -199,7 +202,7 @@ export default function SubAccountModal({
           )}
 
           {/* Bloc de création de sous-compte */}
-          <div className={`subaccounts-create-box ${showCreateForm ? 'active' : ''}`}>
+          {canCreateSubAccount && <div className={`subaccounts-create-box ${showCreateForm ? 'active' : ''}`}>
             <div className="subaccounts-create-header">
               <h3>
                 <Plus size={16} color="var(--color-primary)" />
@@ -213,7 +216,7 @@ export default function SubAccountModal({
               </Button>
             </div>
 
-            {showCreateForm && (
+            {showCreateForm && canCreateSubAccount && (
               <form onSubmit={handleSaveSubAccount} style={{ marginTop: 16 }}>
                 <div className="grid grid-2" style={{ gap: 14 }}>
                   <Input
@@ -273,7 +276,7 @@ export default function SubAccountModal({
                 </div>
               </form>
             )}
-          </div>
+          </div>}
 
           {/* Liste des sous-comptes existants */}
           <div>

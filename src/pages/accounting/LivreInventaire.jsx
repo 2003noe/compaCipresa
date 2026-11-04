@@ -20,12 +20,52 @@ import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
+import { editPhysicalInventory, toast } from '../../lib/notifications';
 import { computeDepreciation } from '../../lib/depreciation';
 import { exportLivreInventaireExcel, exportLivreInventairePDF, LivreInventairePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
-export default function LivreInventaire() {
+function PhysicalInventoryBook() {
+  const { selectedExerciceId, exercices } = useExercice();
+  const [rows, setRows] = useState([]);
+  const [notice, setNotice] = useState('');
+  const [form, setForm] = useState({ code: '', designation: '', categorie: '', etat_physique: '', emplacement_physique: '', observation: '' });
+  const [saving, setSaving] = useState(false);
+  const selected = exercices.find((item) => item.id === selectedExerciceId);
+  useEffect(() => {
+    if (!selectedExerciceId) { setRows([]); return; }
+    supabase.from('inventaire_physique').select('*').eq('exercice_id', selectedExerciceId).order('code')
+      .then(({ data, error }) => { if (error) setNotice(error.message); else setRows(data || []); });
+  }, [selectedExerciceId]);
+  const create = async (event) => {
+    event.preventDefault(); setSaving(true); setNotice('');
+    const { error } = await supabase.from('inventaire_physique').insert({ ...form, exercice_id: selectedExerciceId, date_inventaire: new Date().toISOString().slice(0, 10) });
+    setSaving(false);
+    if (error) { setNotice(error.message); return; }
+    setForm({ code: '', designation: '', categorie: '', etat_physique: '', emplacement_physique: '', observation: '' });
+    const { data } = await supabase.from('inventaire_physique').select('*').eq('exercice_id', selectedExerciceId).order('code'); setRows(data || []);
+  };
+  const edit = async (row) => {
+    const values = await editPhysicalInventory({ title: `Inventaire physique · ${row.code}`, etat: row.etat_physique || '', emplacement: row.emplacement_physique || '', observation: row.observation || '' });
+    if (!values) return;
+    const { error } = await supabase.from('inventaire_physique').update({ etat_physique: values.etat, emplacement_physique: values.emplacement, date_inventaire: new Date().toISOString().slice(0, 10), observation: values.observation }).eq('id', row.id);
+    if (error) { setNotice(error.message); toast.error('Mise à jour impossible', error.message); }
+    else {
+      const { data } = await supabase.from('inventaire_physique').select('*').eq('exercice_id', selectedExerciceId).order('code');
+      setRows(data || []);
+      toast.success('Inventaire mis à jour', row.designation);
+    }
+  };
+  return <div className="page-content"><div className="page-header"><div><h1 className="page-title">Inventaire physique</h1><p className="page-subtitle">Registre de terrain · Exercice {selected?.code || selected?.annee || '—'}</p></div></div>
+    {notice && <div className="message error" role="alert">{notice}</div>}
+    <Card><h2 className="section-title">Ajouter un élément physique</h2><form onSubmit={create} className="grid grid-3"><Input label="Code inventaire" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /><Input label="Désignation" required value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} /><Input label="Catégorie" value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} /><Input label="État physique" value={form.etat_physique} onChange={(e) => setForm({ ...form, etat_physique: e.target.value })} /><Input label="Emplacement" value={form.emplacement_physique} onChange={(e) => setForm({ ...form, emplacement_physique: e.target.value })} /><Input label="Observation" value={form.observation} onChange={(e) => setForm({ ...form, observation: e.target.value })} /><Button type="submit" disabled={saving || !selectedExerciceId}>{saving ? 'Enregistrement…' : 'Ajouter à l’inventaire'}</Button></form></Card>
+    <Card><div className="table-wrap"><table className="balance-table"><thead><tr><th>Code</th><th>Bien</th><th>Catégorie</th><th>État</th><th>Emplacement</th><th>Inventorié le</th><th>Observation</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.code}</td><td>{row.designation}</td><td>{row.categorie}</td><td>{row.etat_physique || 'À inventorier'}</td><td>{row.emplacement_physique || '—'}</td><td>{row.date_inventaire || '—'}</td><td>{row.observation || '—'}</td><td><Button size="sm" variant="secondary" onClick={() => edit(row)}>Mettre à jour</Button></td></tr>)}{!rows.length && <tr><td colSpan={8}>Aucun bien pour cet exercice.</td></tr>}</tbody></table></div></Card>
+  </div>;
+}
+
+function AccountingLivreInventaire() {
   const { exercices: exercises, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
+  const { selectedEntrepriseId, can } = useAuth();
+  const canExport = can('COMPTA_EXPORT');
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [physicalAssets, setPhysicalAssets] = useState([]);
@@ -384,12 +424,12 @@ export default function LivreInventaire() {
           <Button icon={RefreshCw} variant="outline" onClick={() => setRefreshKey((k) => k + 1)} disabled={loading}>
             Actualiser
           </Button>
-          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={filteredAccounts.length === 0}>
+          {canExport && <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={filteredAccounts.length === 0}>
             Imprimer (PDF)
-          </Button>
-          <Button variant="primary" icon={Download} onClick={handleExportXLSX} disabled={filteredAccounts.length === 0}>
+          </Button>}
+          {canExport && <Button variant="primary" icon={Download} onClick={handleExportXLSX} disabled={filteredAccounts.length === 0}>
             Exporter Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -750,7 +790,7 @@ export default function LivreInventaire() {
         </div>
       </Card>
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}
@@ -772,4 +812,10 @@ export default function LivreInventaire() {
       )}
     </div>
   );
+}
+
+export default function LivreInventaire() {
+  const { can } = useAuth();
+  if (can('STOCK_INVENTORY') && !can('COMPTA_READ')) return <PhysicalInventoryBook />;
+  return <AccountingLivreInventaire />;
 }

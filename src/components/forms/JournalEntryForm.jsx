@@ -8,6 +8,7 @@ import { CalendarDays, CloudUpload, Paperclip, PlusCircle, Trash2, CheckCircle2,
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import ExerciceSelect from './ExerciceSelect';
+import { useAuth } from '../../context/AuthContext';
 
 const money = (value) => new Intl.NumberFormat('fr-FR').format(value || 0);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -30,6 +31,8 @@ const initialLines = () => ([
 
 export default function JournalEntryForm() {
   const nav = useNavigate();
+  const { can } = useAuth();
+  const canCreate = can('COMPTA_CREATE');
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
   const isEdit = Boolean(editId);
@@ -170,6 +173,10 @@ export default function JournalEntryForm() {
     setError(''); setNotice('');
 
     if (locked) return;
+    if (statut === 'VALIDEE' || (statut === 'BROUILLON' && !canCreate)) {
+      setError('Votre rôle ne permet pas cette action.');
+      return;
+    }
     if (lines.length < 2 || !balanced) {
       setError("L'écriture doit contenir au moins deux lignes et être équilibrée.");
       return;
@@ -365,8 +372,7 @@ export default function JournalEntryForm() {
           </Card>
 
           <div className="entry-actions">
-            <Button variant="secondary" disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>
-            <Button disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('VALIDEE')}>{saving ? 'Enregistrement…' : "Valider l'écriture"}</Button>
+            {canCreate && <Button variant="secondary" disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>}
             <button type="button" className="text-button" onClick={() => nav('/journal')}>Annuler</button>
           </div>
           {error && <div className="message error" role="alert">{error}</div>}

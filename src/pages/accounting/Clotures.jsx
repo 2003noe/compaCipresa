@@ -7,8 +7,11 @@ import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { STATUT_LABEL, STATUT_TONE, dateFr } from '../../lib/clotures';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Clotures() {
+  const { can } = useAuth();
+  const canPrepare = can('COMPTA_CLOTURE_PREPARE');
   const nav = useNavigate();
   const { selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
   const [clotures, setClotures] = useState([]);
@@ -59,7 +62,7 @@ export default function Clotures() {
           <p className="page-subtitle">Suivez les périodes comptables et leur checklist de clôture mensuelle{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Button icon={Plus} onClick={() => nav('/nouvelle-cloture')}>Nouvelle clôture</Button>
+          {canPrepare && <Button icon={Plus} onClick={() => nav('/nouvelle-cloture')}>Nouvelle clôture</Button>}
         </div>
       </div>
 

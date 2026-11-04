@@ -4,6 +4,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
+import { confirmAction, toast } from '../../lib/notifications';
 
 const ROLE_ORDER = ['ADMIN', 'GERANT', 'COMPTABLE', 'CONSULTANT', 'MAGASINIER', 'AGENT_COMMERCIAL'];
 
@@ -22,12 +23,35 @@ export default function Configuration() {
   const [savingUserId, setSavingUserId] = useState(null);
   const [pendingRoleByUser, setPendingRoleByUser] = useState({});
   const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [unassignedCompanyUsers, setUnassignedCompanyUsers] = useState([]);
+  const [loadingUnassignedUsers, setLoadingUnassignedUsers] = useState(false);
   const [newMemberRole, setNewMemberRole] = useState("");
   const [newMemberEntrepriseId, setNewMemberEntrepriseId] = useState(selectedEntrepriseId || "");
   const [pendingCompanyRole, setPendingCompanyRole] = useState({});
   const adminCompanies = companies.filter((company) => company.roles?.some((role) => role.code === "ADMIN"));
 
   useEffect(() => { if (!newMemberEntrepriseId || !adminCompanies.some((company) => company.id === newMemberEntrepriseId)) setNewMemberEntrepriseId(selectedEntrepriseId || adminCompanies[0]?.id || ""); }, [selectedEntrepriseId, companies]);
+
+  useEffect(() => {
+    setNewMemberEmail('');
+    setUnassignedCompanyUsers([]);
+    if (!isAdmin || !newMemberEntrepriseId) return undefined;
+
+    let active = true;
+    setLoadingUnassignedUsers(true);
+    supabase.rpc('list_unassigned_company_users', { p_entreprise_id: newMemberEntrepriseId }).then(({ data, error: listError }) => {
+      if (!active) return;
+      if (listError) {
+        setError(`Impossible de charger les comptes disponibles : ${listError.message}`);
+        setUnassignedCompanyUsers([]);
+      } else {
+        setUnassignedCompanyUsers(data || []);
+      }
+      setLoadingUnassignedUsers(false);
+    });
+
+    return () => { active = false; };
+  }, [isAdmin, newMemberEntrepriseId]);
 
   const load = async () => {
     if (!supabaseConfigured || !isAdmin || !selectedEntrepriseId) { setLoading(false); return; }
@@ -74,24 +98,25 @@ export default function Configuration() {
   useEffect(() => { load(); }, [isAdmin, selectedEntrepriseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rolesForUser = (userId) => userRoles.filter((r) => r.user_id === userId && r.role);
+  const announceSuccess = (message) => { setNotice(message); toast.success(message); };
 
   const toggleActif = async (user) => {
     const label = user.actif ? 'désactiver' : 'activer';
-    if (!window.confirm(`Confirmer : ${label} le compte de ${user.prenom || 'cet utilisateur'} ?`)) return;
+    if (!await confirmAction({ title: `${label === 'activer' ? 'Activer' : 'Désactiver'} ce compte ?`, text: `Compte de ${user.prenom || 'cet utilisateur'}.`, confirmText: label === 'activer' ? 'Activer le compte' : 'Désactiver le compte', danger: label !== 'activer' })) return;
     setSavingUserId(user.id);
     setNotice(''); setError('');
     const { error: updErr } = await supabase.from('profiles').update({ actif: !user.actif }).eq('id', user.id);
     setSavingUserId(null);
     if (updErr) { setError(updErr.message); return; }
     setUsers((cur) => cur.map((u) => (u.id === user.id ? { ...u, actif: !u.actif } : u)));
-    setNotice(`Compte ${label === 'activer' ? 'activé' : 'désactivé'}.`);
+    announceSuccess(`Compte ${label === 'activer' ? 'activé' : 'désactivé'}.`);
   };
 
   const assignRole = async (userId) => {
     const roleId = pendingRoleByUser[userId];
     if (!roleId) return;
     const role = allRoles.find((r) => r.id === roleId);
-    if (!window.confirm(`Attribuer le rôle ${role?.nom || ''} à cet utilisateur ?`)) return;
+    if (!await confirmAction({ title: 'Attribuer ce rôle ?', text: role?.nom || '', confirmText: 'Attribuer' })) return;
     setSavingUserId(userId);
     setNotice(''); setError('');
     const { error: insErr } = await supabase.from('entreprise_utilisateurs').insert({ entreprise_id: selectedEntrepriseId, user_id: userId, role_id: roleId });
@@ -99,18 +124,18 @@ export default function Configuration() {
     if (insErr) { setError(`Attribution refusée : ${insErr.message}`); return; }
     setUserRoles((cur) => [...cur, { user_id: userId, role_id: roleId, role }]);
     setPendingRoleByUser((cur) => ({ ...cur, [userId]: '' }));
-    setNotice(`Rôle ${role?.nom || ''} attribué.`);
+    announceSuccess(`Rôle ${role?.nom || ''} attribué.`);
   };
 
   const revokeRole = async (userId, roleId, roleName) => {
-    if (!window.confirm(`Retirer le rôle ${roleName} à cet utilisateur ?`)) return;
+    if (!await confirmAction({ title: 'Retirer ce rôle ?', text: roleName, confirmText: 'Retirer le rôle', danger: true })) return;
     setSavingUserId(userId);
     setNotice(''); setError('');
     const { error: delErr } = await supabase.from('entreprise_utilisateurs').delete().eq('entreprise_id', selectedEntrepriseId).eq('user_id', userId).eq('role_id', roleId);
     setSavingUserId(null);
     if (delErr) { setError(`Révocation refusée : ${delErr.message}`); return; }
     setUserRoles((cur) => cur.filter((r) => !(r.user_id === userId && r.role_id === roleId)));
-    setNotice(`Rôle ${roleName} retiré.`);
+    announceSuccess(`Rôle ${roleName} retiré.`);
   };
 
   const addCompanyRole = async (user, entrepriseId) => {
@@ -124,30 +149,30 @@ export default function Configuration() {
     });
     if (addError) { setError(addError.message); return; }
     setPendingCompanyRole((current) => ({ ...current, [key]: '' }));
-    setNotice(`Rôle ${allRoles.find((role) => role.code === roleCode)?.nom || roleCode} ajouté à ${user.prenom || user.nom || 'l’utilisateur'} dans ${adminCompanies.find((company) => company.id === entrepriseId)?.nom || 'l’entreprise'}.`);
+    announceSuccess(`Rôle ${allRoles.find((role) => role.code === roleCode)?.nom || roleCode} ajouté à ${user.prenom || user.nom || 'l’utilisateur'} dans ${adminCompanies.find((company) => company.id === entrepriseId)?.nom || 'l’entreprise'}.`);
     await load();
   };
 
   const removeCompanyRole = async (user, entrepriseId, role) => {
-    if (!window.confirm(`Retirer le rôle ${role.role_nom} de ${user.prenom || 'cet utilisateur'} dans ${role.entreprise_nom} ?`)) return;
+    if (!await confirmAction({ title: 'Retirer ce rôle ?', text: `${role.role_nom} · ${role.entreprise_nom}`, confirmText: 'Retirer le rôle', danger: true })) return;
     const { error: removeError } = await supabase.rpc('remove_user_company_role', {
       p_user_id: user.id,
       p_entreprise_id: entrepriseId,
       p_role_id: role.role_id,
     });
     if (removeError) { setError(removeError.message); return; }
-    setNotice(`Rôle ${role.role_nom} retiré dans ${role.entreprise_nom}.`);
+    announceSuccess(`Rôle ${role.role_nom} retiré dans ${role.entreprise_nom}.`);
     await load();
   };
 
   const removeFromCompany = async (user, company, roles) => {
-    if (!window.confirm(`Retirer ${user.prenom || 'cet utilisateur'} de ${company.nom} et supprimer ses ${roles.length} rôle(s) dans cette entreprise ?`)) return;
+    if (!await confirmAction({ title: 'Retirer cet utilisateur de l’entreprise ?', text: `${user.prenom || 'Cet utilisateur'} · ${company.nom} · ${roles.length} rôle(s) seront retirés.`, confirmText: 'Retirer de l’entreprise', danger: true })) return;
     const { error: removeError } = await supabase.rpc('remove_user_from_company', {
       p_user_id: user.id,
       p_entreprise_id: company.id,
     });
     if (removeError) { setError(removeError.message); return; }
-    setNotice(`${user.prenom || 'L’utilisateur'} a été retiré de ${company.nom}.`);
+    announceSuccess(`${user.prenom || 'L’utilisateur'} a été retiré de ${company.nom}.`);
     await load();
   };
 
@@ -162,9 +187,11 @@ export default function Configuration() {
     });
     setSavingUserId(null);
     if (addError) { setError(addError.message); return; }
+    const assignedEmail = newMemberEmail.trim().toLocaleLowerCase('fr');
+    setUnassignedCompanyUsers((current) => current.filter((user) => user.email?.toLocaleLowerCase('fr') !== assignedEmail));
     setNewMemberEmail(""); setNewMemberRole("");
     const targetCompany = adminCompanies.find((company) => company.id === newMemberEntrepriseId);
-    setNotice(`Utilisateur ajouté à ${targetCompany?.nom || "l’entreprise sélectionnée"} avec le rôle ${role?.nom || newMemberRole}.`);
+    announceSuccess(`Utilisateur ajouté à ${targetCompany?.nom || "l’entreprise sélectionnée"} avec le rôle ${role?.nom || newMemberRole}.`);
     await load();
   };
 
@@ -191,12 +218,17 @@ export default function Configuration() {
       </div>
 
       {error && <div className="message error" role="alert">{error}</div>}
-      {notice && <div className="message success" role="status">{notice}</div>}
 
       <Card className="configuration-users-card">
-        <div className="configuration-card-heading"><div className="configuration-heading-icon"><UsersRound size={19} /></div><div><h2>Utilisateurs &amp; rôles</h2><p>Invitez un membre et attribuez-lui son rôle dans une entreprise.</p></div></div>
+        <div className="configuration-card-heading"><div className="configuration-heading-icon"><UsersRound size={19} /></div><div><h2>Utilisateurs &amp; rôles</h2><p>Associez un compte inscrit et attribuez-lui un rôle dans une entreprise.</p></div></div>
         <div className="config-add-role config-member-form">
-          <input className="input" type="email" placeholder="E-mail d’un utilisateur déjà inscrit" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
+          <select className="input select" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} disabled={loadingUnassignedUsers || unassignedCompanyUsers.length === 0} aria-label="Compte inscrit sans rôle dans l’entreprise">
+            <option value="">{loadingUnassignedUsers ? 'Chargement des comptes…' : unassignedCompanyUsers.length ? 'Choisir un compte inscrit sans rôle' : 'Aucun compte disponible pour cette entreprise'}</option>
+            {unassignedCompanyUsers.map((user) => {
+              const fullName = [user.prenom, user.nom].filter(Boolean).join(' ');
+              return <option key={user.user_id} value={user.email}>{fullName ? `${user.email} · ${fullName}` : user.email}</option>;
+            })}
+          </select>
           <select className="input select" value={newMemberEntrepriseId} onChange={(e) => setNewMemberEntrepriseId(e.target.value)} disabled={adminCompanies.length === 0} aria-label="Entreprise à laquelle rattacher l’utilisateur">
             {adminCompanies.map((company) => <option key={company.id} value={company.id}>{company.nom}</option>)}
           </select>
@@ -204,9 +236,9 @@ export default function Configuration() {
             <option value="">Attribuer un rôle</option>
             {sortedRoles.map((role) => <option key={role.id} value={role.code}>{role.nom}</option>)}
           </select>
-          <Button size="sm" disabled={!newMemberEmail.trim() || !newMemberRole || !newMemberEntrepriseId || savingUserId === "new"} onClick={addExistingUser}>{savingUserId === "new" ? "Ajout…" : "Ajouter à l’entreprise"}</Button>
+          <Button size="sm" disabled={!newMemberEmail || !newMemberRole || !newMemberEntrepriseId || loadingUnassignedUsers || savingUserId === "new"} onClick={addExistingUser}>{savingUserId === "new" ? "Ajout…" : "Ajouter à l’entreprise"}</Button>
         </div>
-        <p className="configuration-helper">La personne doit déjà avoir créé son compte. L’entreprise choisie détermine où son compte et son rôle seront rattachés.</p>
+        <p className="configuration-helper">La liste affiche les comptes inscrits et actifs qui n’ont encore aucun rôle dans l’entreprise choisie. Après l’association, l’utilisateur pourra se connecter à cette entreprise avec le rôle attribué.</p>
         <div className="table-wrap configuration-table-wrap">
           <table className="balance-table configuration-table">
             <thead><tr><th>Utilisateur</th><th>Contact</th><th>Rôles dans l’entreprise active</th><th>Autres entreprises et rôles</th><th>Ajouter un rôle ici</th><th>Statut</th></tr></thead>

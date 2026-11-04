@@ -6,9 +6,14 @@ import { useAuth } from '../../../context/AuthContext';
 
 const empty = { raison_sociale: '', forme_juridique: '', numero_rccm: '', numero_cc: '', regime_fiscal: '', secteur_activite: '', adresse_postale: '', telephone: '', email_contact: '', plan_comptable_referentiel: '', devise: '', tva_defaut_taux: '' };
 
+function CompanyField({ label, value, canEdit, onChange, type = 'text' }) {
+  if (canEdit) return <Input label={label} type={type} value={value ?? ''} onChange={onChange} />;
+  return <div className="field"><span className="field-label">{label}</span><div className="company-read-value">{value || '—'}</div></div>;
+}
+
 export default function EntrepriseTab() {
-  const { hasRole, selectedEntrepriseId, updateCompanyName } = useAuth();
-  const peutModifier = hasRole('ADMIN');
+  const { can, selectedEntrepriseId, updateCompanyName } = useAuth();
+  const peutModifier = can('CONFIG_COMPANY');
   const [form, setForm] = useState(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,31 +57,31 @@ export default function EntrepriseTab() {
       <div className="form-section precise-section">
         <h2>Informations générales</h2>
         <div className="grid grid-2">
-          <Input label="Raison sociale" value={form.raison_sociale || ''} onChange={update('raison_sociale')} readOnly={!peutModifier} />
-          <Input label="Forme juridique" value={form.forme_juridique || ''} onChange={update('forme_juridique')} readOnly={!peutModifier} />
-          <Input label="N° RCCM" value={form.numero_rccm || ''} onChange={update('numero_rccm')} readOnly={!peutModifier} />
-          <Input label="N° CC (Compte Contribuable)" value={form.numero_cc || ''} onChange={update('numero_cc')} readOnly={!peutModifier} />
-          <Input label="Régime fiscal" value={form.regime_fiscal || ''} onChange={update('regime_fiscal')} readOnly={!peutModifier} />
-          <Input label="Secteur d'activité" value={form.secteur_activite || ''} onChange={update('secteur_activite')} readOnly={!peutModifier} />
+          <CompanyField label="Raison sociale" value={form.raison_sociale} canEdit={peutModifier} onChange={update('raison_sociale')} />
+          <CompanyField label="Forme juridique" value={form.forme_juridique} canEdit={peutModifier} onChange={update('forme_juridique')} />
+          <CompanyField label="N° RCCM" value={form.numero_rccm} canEdit={peutModifier} onChange={update('numero_rccm')} />
+          <CompanyField label="N° CC (Compte Contribuable)" value={form.numero_cc} canEdit={peutModifier} onChange={update('numero_cc')} />
+          <CompanyField label="Régime fiscal" value={form.regime_fiscal} canEdit={peutModifier} onChange={update('regime_fiscal')} />
+          <CompanyField label="Secteur d'activité" value={form.secteur_activite} canEdit={peutModifier} onChange={update('secteur_activite')} />
         </div>
       </div>
 
       <div className="form-section precise-section">
         <h2>Coordonnées</h2>
         <div className="grid grid-2">
-          <Input label="Adresse postale" value={form.adresse_postale || ''} onChange={update('adresse_postale')} readOnly={!peutModifier} />
+          <CompanyField label="Adresse postale" value={form.adresse_postale} canEdit={peutModifier} onChange={update('adresse_postale')} />
           <div />
-          <Input label="Téléphone" value={form.telephone || ''} onChange={update('telephone')} readOnly={!peutModifier} />
-          <Input label="Email de contact" value={form.email_contact || ''} onChange={update('email_contact')} readOnly={!peutModifier} />
+          <CompanyField label="Téléphone" value={form.telephone} canEdit={peutModifier} onChange={update('telephone')} />
+          <CompanyField label="Email de contact" value={form.email_contact} canEdit={peutModifier} onChange={update('email_contact')} />
         </div>
       </div>
 
       <div className="form-section precise-section">
         <h2>Paramètres comptables</h2>
         <div className="grid grid-2">
-          <Input label="Plan comptable référentiel" value={form.plan_comptable_referentiel || ''} onChange={update('plan_comptable_referentiel')} readOnly={!peutModifier} />
-          <Input label="Devise principale" value={form.devise || ''} onChange={update('devise')} readOnly={!peutModifier} />
-          <Input label="TVA par défaut (%)" type="number" step="0.01" value={form.tva_defaut_taux} onChange={update('tva_defaut_taux')} readOnly={!peutModifier} />
+          <CompanyField label="Plan comptable référentiel" value={form.plan_comptable_referentiel} canEdit={peutModifier} onChange={update('plan_comptable_referentiel')} />
+          <CompanyField label="Devise principale" value={form.devise} canEdit={peutModifier} onChange={update('devise')} />
+          <CompanyField label="TVA par défaut (%)" type="number" value={form.tva_defaut_taux} canEdit={peutModifier} onChange={update('tva_defaut_taux')} />
         </div>
         <p className="page-subtitle" style={{ marginTop: 4 }}>La gestion des exercices comptables (dates de période) se fait dans l'onglet « Exercices ».</p>
       </div>

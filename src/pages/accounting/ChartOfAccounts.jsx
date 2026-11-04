@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownRight, ArrowUpRight, BookOpen, CircleAlert, Download, Edit3, Eye, FileDown, Minus, Plus, Search, ShieldCheck, Trash2, X, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Info, ExternalLink, Clock3 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BookOpen, CircleAlert, Download, Edit3, Eye, FileDown, Minus, Plus, Search, ShieldCheck, Trash2, X, ChevronDown, ChevronUp, ChevronRight, AlertTriangle, CheckCircle2, Info, ExternalLink, Clock3 } from 'lucide-react';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +49,7 @@ function accountForm(account) {
     nature: account.nature || 'ACTIF',
     actif: account.actif !== false,
     compte_parent_id: account.compte_parent_id || '',
+    parent_compte_id: account.parent_compte_id || '',
     devise: account.devise || 'XAF',
     lettrable: Boolean(account.lettrable),
     reconciliable: Boolean(account.reconciliable),
@@ -74,7 +75,7 @@ function TrendDelta({ value = 0, money }) {
 
 export default function ChartOfAccounts() {
   const { exercices, selectedExerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
-  const { can, hasRole, roles = [] } = useAuth();
+  const { can, hasRole } = useAuth();
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState([]);
   const [parents, setParents] = useState([]);
@@ -94,6 +95,7 @@ export default function ChartOfAccounts() {
   const [balances, setBalances] = useState({});
   const [expandedClasses, setExpandedClasses] = useState(() => new Set());
   const [expandedRows, setExpandedRows] = useState(() => new Set());
+  const [expandedAccountIds, setExpandedAccountIds] = useState(() => new Set());
   const [previousBalances, setPreviousBalances] = useState({});
   const [previousExercise, setPreviousExercise] = useState(null);
   const [detailAccountId, setDetailAccountId] = useState('');
@@ -109,11 +111,12 @@ export default function ChartOfAccounts() {
   }, [exercices, selectedExercice]);
 
   const isAdmin = hasRole('ADMIN');
-  const canRead = isAdmin || can('COMPTA_READ') || can('COMPTA_CREATE') || can('COMPTA_ACCOUNT_EDIT') || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'COMPTABLE', 'CONSULTANT'].includes(r.code));
-  const canCreate = isAdmin || can('COMPTA_CREATE') || roles.some((r) => ['GERANT', 'COMPTABLE'].includes(r.code));
-  const canEditBasic = isAdmin || can('COMPTA_ACCOUNT_EDIT');
-  const canEditSensitive = isAdmin || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'ADMIN'].includes(r.code));
-  const canDelete = isAdmin || can('COMPTA_ACCOUNT_ADMIN') || roles.some((r) => ['GERANT', 'COMPTABLE', 'ADMIN'].includes(r.code));
+  const canRead = can('COMPTA_READ');
+  const canExport = can('COMPTA_PLAN_EXPORT');
+  const canCreate = can('COMPTA_CREATE') || can('COMPTA_ACCOUNT_CREATE');
+  const canEditBasic = can('COMPTA_ACCOUNT_EDIT');
+  const canEditSensitive = can('COMPTA_ACCOUNT_ADMIN');
+  const canDelete = isAdmin;
   const money = (value) => Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 });
 
   const loadAccounts = useCallback(async () => {
@@ -127,7 +130,7 @@ export default function ChartOfAccounts() {
     setError('');
     const [accountResult, parentResult, balanceResult, previousBalanceResult] = await Promise.all([
       supabase.from('comptes_comptables')
-        .select('id,numero,libelle,classe,nature,actif,compte_parent_id,devise,lettrable,reconciliable,notes,solde_ouverture_debit,solde_ouverture_credit')
+        .select('id,numero,libelle,classe,nature,actif,compte_parent_id,parent_compte_id,devise,lettrable,reconciliable,notes,solde_ouverture_debit,solde_ouverture_credit')
         .order('numero'),
       supabase.from('default_compt').select('id,num_compte,libelle').order('num_compte'),
       selectedExercice?.date_fin ? supabase.rpc('soldes_comptes_exercice', {
@@ -202,12 +205,23 @@ export default function ChartOfAccounts() {
 
   const filteredAccounts = useMemo(() => {
     const search = query.trim().toLocaleLowerCase('fr');
-    return accounts.filter((account) => {
+    const matches = accounts.filter((account) => {
       const number = classNumber(account);
       const matchesSearch = !search || `${account.numero} ${account.libelle} ${account.notes || ''}`.toLocaleLowerCase('fr').includes(search);
       const matchesClass = !selectedClass || String(number) === selectedClass;
       return matchesSearch && matchesClass;
     });
+    if (!search) return matches;
+    const visibleIds = new Set(matches.map((account) => account.id));
+    const byId = new Map(accounts.map((account) => [account.id, account]));
+    matches.forEach((account) => {
+      let parentId = account.parent_compte_id;
+      while (parentId && !visibleIds.has(parentId)) {
+        visibleIds.add(parentId);
+        parentId = byId.get(parentId)?.parent_compte_id;
+      }
+    });
+    return accounts.filter((account) => visibleIds.has(account.id));
   }, [accounts, query, selectedClass]);
 
   const groups = useMemo(() => {
@@ -230,16 +244,47 @@ export default function ChartOfAccounts() {
       ...group,
       rows: group.classes.flatMap((number) => byClass.get(number) || []),
     })).filter((group) => group.rows.length || (!searchHasFilter(query, selectedClass) && !loading)).map((group) => {
-      const totalDebit = group.rows.reduce((sum, account) => sum + Number(balances[account.id]?.periode_debit || 0), 0);
-      const totalCredit = group.rows.reduce((sum, account) => sum + Number(balances[account.id]?.periode_credit || 0), 0);
-      const previousRows = group.rows.map((account) => previousBalances[account.numero]).filter(Boolean);
+      const allRows = accounts.filter((account) => group.classes.includes(classNumber(account)) && (!selectedClass || String(classNumber(account)) === selectedClass));
+      const totalDebit = allRows.reduce((sum, account) => sum + Number(balances[account.id]?.periode_debit || 0), 0);
+      const totalCredit = allRows.reduce((sum, account) => sum + Number(balances[account.id]?.periode_credit || 0), 0);
+      const previousRows = allRows.map((account) => previousBalances[account.numero]).filter(Boolean);
       const previousDebit = previousRows.reduce((sum, row) => sum + Number(row.periode_debit || 0), 0);
       const previousCredit = previousRows.reduce((sum, row) => sum + Number(row.periode_credit || 0), 0);
       const previousBalance = previousRows.reduce((sum, row) => sum + Number(row.solde_fin || 0), 0);
-      const endingBalance = group.rows.reduce((sum, account) => sum + Number(balances[account.id]?.solde_fin || 0), 0);
-      return { ...group, totalDebit, totalCredit, difference: totalDebit - totalCredit, previousDebit, previousCredit, previousBalance, endingBalance };
+      const endingBalance = allRows.reduce((sum, account) => sum + Number(balances[account.id]?.solde_fin || 0), 0);
+      return { ...group, allRows, totalDebit, totalCredit, difference: totalDebit - totalCredit, previousDebit, previousCredit, previousBalance, endingBalance };
     });
-  }, [filteredAccounts, query, selectedClass, loading, balances, previousBalances]);
+  }, [filteredAccounts, accounts, query, selectedClass, loading, balances, previousBalances]);
+
+  const accountChildren = useMemo(() => {
+    const map = new Map();
+    accounts.forEach((account) => {
+      if (!account.parent_compte_id) return;
+      if (!map.has(account.parent_compte_id)) map.set(account.parent_compte_id, []);
+      map.get(account.parent_compte_id).push(account);
+    });
+    map.forEach((items) => items.sort((a, b) => a.numero.localeCompare(b.numero, 'fr', { numeric: true })));
+    return map;
+  }, [accounts]);
+
+  const toggleAccount = (id) => setExpandedAccountIds((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const accountTotals = (account) => {
+    const totals = {
+      debit: Number(balances[account.id]?.periode_debit || 0),
+      credit: Number(balances[account.id]?.periode_credit || 0),
+    };
+    (accountChildren.get(account.id) || []).forEach((child) => {
+      const childTotals = accountTotals(child);
+      totals.debit += childTotals.debit;
+      totals.credit += childTotals.credit;
+    });
+    return totals;
+  };
 
   const healthItems = useMemo(() => {
     const items = [];
@@ -370,12 +415,12 @@ export default function ChartOfAccounts() {
   // Trie les comptes : d'abord ceux avec un solde non nul, puis avec des mouvements,
   // puis les autres. Les comptes inactifs sans activité passent en dernier.
   const sortedRows = (rows) => [...rows].sort((a, b) => {
-    const balA = balances[a.id] || {};
-    const balB = balances[b.id] || {};
-    const soldeA = Math.abs(Number(balA.solde_fin || 0));
-    const soldeB = Math.abs(Number(balB.solde_fin || 0));
-    const mvtA = Number(balA.periode_debit || 0) + Number(balA.periode_credit || 0);
-    const mvtB = Number(balB.periode_debit || 0) + Number(balB.periode_credit || 0);
+    const balA = accountTotals(a);
+    const balB = accountTotals(b);
+    const soldeA = Math.abs(balA.debit - balA.credit);
+    const soldeB = Math.abs(balB.debit - balB.credit);
+    const mvtA = balA.debit + balA.credit;
+    const mvtB = balB.debit + balB.credit;
     // Priorité 1 : solde non nul
     if (soldeA > 0 && soldeB === 0) return -1;
     if (soldeB > 0 && soldeA === 0) return 1;
@@ -432,6 +477,7 @@ export default function ChartOfAccounts() {
       patch.nature = form.nature;
       patch.actif = form.actif;
       patch.compte_parent_id = form.compte_parent_id || null;
+      patch.parent_compte_id = form.parent_compte_id || null;
       patch.devise = form.devise;
       patch.solde_ouverture_debit = Number(form.solde_ouverture_debit) || 0;
       patch.solde_ouverture_credit = Number(form.solde_ouverture_credit) || 0;
@@ -458,8 +504,8 @@ export default function ChartOfAccounts() {
           <p className="page-subtitle">Système comptable OHADA · Exercice <strong>{selectedExercice?.code || selectedExercice?.annee || 'sélectionné'}</strong> · {accounts.length} compte(s)</p>
         </div>
         <div className="chart-header-actions">
-          <button type="button" className="chart-export-button" onClick={() => exportChartOfAccountsExcel({ groups: exportGroups, filename: `Plan_Comptable_${selectedExercice?.code || 'exercice'}`, title: exportTitle, subtitle: exportSubtitle })}><Download size={15} /> Excel</button>
-          <button type="button" className="chart-export-button" onClick={() => setShowPdfPreview(true)}><FileDown size={15} /> PDF</button>
+          {canExport && <button type="button" className="chart-export-button" onClick={() => exportChartOfAccountsExcel({ groups: exportGroups, filename: `Plan_Comptable_${selectedExercice?.code || 'exercice'}`, title: exportTitle, subtitle: exportSubtitle })}><Download size={15} /> Excel</button>}
+          {canExport && <button type="button" className="chart-export-button" onClick={() => setShowPdfPreview(true)}><FileDown size={15} /> PDF</button>}
           {canCreate && <button type="button" className="chart-add-button" onClick={() => navigate('/nouveau-compte')}><Plus size={16} /> Nouveau compte</button>}
         </div>
       </header>
@@ -534,10 +580,53 @@ export default function ChartOfAccounts() {
                   </button>
                 </div>
                 {expandedClasses.has(group.key) && (() => {
-                  const sorted = sortedRows(group.rows);
+                  const includedIds = new Set(group.rows.map((account) => account.id));
+                  const roots = group.rows.filter((account) => !account.parent_compte_id || !includedIds.has(account.parent_compte_id));
+                  const sorted = sortedRows(roots);
                   const showMore = expandedRows.has(group.key);
                   const visible = showMore ? sorted : sorted.slice(0, PREVIEW_COUNT);
                   const hasMore = sorted.length > PREVIEW_COUNT;
+                  const renderAccountRow = (account, depth = 0, ancestry = new Set()) => {
+                    if (ancestry.has(account.id)) return null;
+                    const nextAncestry = new Set(ancestry).add(account.id);
+                    const children = (accountChildren.get(account.id) || []).filter((child) => includedIds.has(child.id));
+                    const isExpanded = expandedAccountIds.has(account.id);
+                    const totals = accountTotals(account);
+                    const net = totals.debit - totals.credit;
+                    const isDebit = net > 0;
+                    const isCredit = net < 0;
+                    return <Fragment key={account.id}>
+                      <tr key={account.id} className={`${!account.actif ? 'chart-account-inactive' : ''} ${depth ? 'chart-account-child-row' : ''}`}>
+                        <td className="chart-account-number">
+                          <span className="chart-account-number-wrap" style={{ paddingInlineStart: `${depth * 20}px` }}>
+                            {children.length > 0 ? <button type="button" className="chart-account-tree-toggle" onClick={() => toggleAccount(account.id)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Réduire' : 'Afficher'} les sous-comptes de ${account.numero}`}>{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button> : <span className="chart-account-tree-spacer" />}
+                            <strong>{account.numero}</strong>
+                          </span>
+                        </td>
+                        <td>
+                          <span className="chart-account-label">{classTitle(account)}</span>
+                          <small className="chart-nature-line">
+                            <span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>
+                            {children.length > 0 && <span>{children.length} sous-compte{children.length > 1 ? 's' : ''} · total incluant la descendance</span>}
+                            {balances[account.id]?.solde_fin ? <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>Solde propre {Number(balances[account.id].solde_fin) > 0 ? 'débiteur' : 'créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}</span> : null}
+                          </small>
+                          {account.notes && <small className="chart-account-note">{account.notes}</small>}
+                        </td>
+                        <td className="numeric">{money(totals.debit)}</td>
+                        <td className="numeric">{money(totals.credit)}</td>
+                        <td className="numeric chart-account-amount-cell">
+                          {net === 0 ? <span className="chart-amount is-zero">Équilibré</span> : <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}><strong className="amount-number">{isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA</strong><span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>{isDebit ? 'Débit' : 'Crédit'}</span></span>}
+                        </td>
+                        <td className="chart-account-action"><span>
+                          <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
+                          {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}&parentAccountId=${encodeURIComponent(account.id)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
+                          {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
+                          {canDelete && <button type="button" className="chart-delete-button" onClick={() => openDeleteModal(account)} aria-label={`Supprimer le compte ${account.numero}`} title="Supprimer le compte"><Trash2 size={14} /></button>}
+                        </span></td>
+                      </tr>
+                      {isExpanded && children.flatMap((child) => [renderAccountRow(child, depth + 1, nextAncestry)])}
+                    </Fragment>;
+                  };
                   return (
                     <>
                     <table>
@@ -545,68 +634,15 @@ export default function ChartOfAccounts() {
                         <tr>
                           <th>Compte</th>
                           <th>Intitulé du compte</th>
-                          <th className="numeric">Montant</th>
+                          <th className="numeric">Débit</th>
+                          <th className="numeric">Crédit</th>
+                          <th className="numeric">Solde net</th>
                           <th aria-label="Actions" />
                         </tr>
                       </thead>
                       <tbody>
-                        {visible.map((account) => {
-                          const debit = Number(balances[account.id]?.periode_debit || 0);
-                          const credit = Number(balances[account.id]?.periode_credit || 0);
-                          const net = debit - credit;
-                          const isDebit = net > 0;
-                          const isCredit = net < 0;
-                          return (
-                            <tr key={account.id} className={!account.actif ? 'chart-account-inactive' : ''}>
-                              <td className="chart-account-number">{account.numero}</td>
-                              <td>
-                                <span className="chart-account-label">{classTitle(account)}</span>
-                                <small className="chart-nature-line">
-                                  <span className="chart-nature-pill">{account.nature || 'Nature non définie'}</span>
-                                  {balances[account.id]?.solde_fin ? (
-                                    <span className={detailNetSide(account, balances[account.id].solde_fin) ? 'normal-side' : 'unusual-side'}>
-                                      {Number(balances[account.id].solde_fin) > 0 ? 'Solde débiteur' : 'Solde créditeur'} · {detailNetSide(account, balances[account.id].solde_fin) ? 'normal' : 'à vérifier'}
-                                    </span>
-                                  ) : null}
-                                </small>
-                                {account.notes && <small className="chart-account-note">{account.notes}</small>}
-                              </td>
-                              <td className="numeric chart-account-amount-cell">
-                                {net === 0 ? (
-                                  <span className="chart-amount is-zero">—</span>
-                                ) : (
-                                  <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}>
-                                    <strong className="amount-number">
-                                      {isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA
-                                    </strong>
-                                    <span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>
-                                      {isDebit ? 'Débit' : 'Crédit'}
-                                    </span>
-                                  </span>
-                                )}
-                              </td>
-                              <td className="chart-account-action">
-                                <span>
-                                  <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
-                                  {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
-                                  {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}
-                                  {canDelete && (
-                                    <button
-                                      type="button"
-                                      className="chart-delete-button"
-                                      onClick={() => openDeleteModal(account)}
-                                      aria-label={`Supprimer le compte ${account.numero}`}
-                                      title="Supprimer le compte"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  )}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {!group.rows.length && <tr><td colSpan={4} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
+                        {visible.map((account) => renderAccountRow(account))}
+                        {!group.rows.length && <tr><td colSpan={6} className="chart-no-rows">Aucun compte dans cette classe.</td></tr>}
                       </tbody>
                     </table>
 
@@ -635,28 +671,35 @@ export default function ChartOfAccounts() {
         ))}
       </div>}
 
-      {editing && form && (
+      {editing && form && (canEditBasic || canEditSensitive) && (
         <div className="chart-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>
           <section className="chart-edit-modal" role="dialog" aria-modal="true" aria-labelledby="chart-edit-title">
             <header><div><span>Compte {editing.numero}</span><h2 id="chart-edit-title">Modifier le compte</h2></div><button type="button" onClick={closeEditor} aria-label="Fermer"><X size={19} /></button></header>
             <div className="chart-permission-note"><ShieldCheck size={15} /> Les champs modifiables dépendent de votre rôle dans cette entreprise.</div>
             <form onSubmit={saveAccount}>
               <div className="chart-edit-grid">
-                <label>Numéro de compte<input required value={form.numero} disabled={!canEditSensitive} onChange={(event) => change('numero', event.target.value)} /></label>
-                <label>Libellé<input required value={form.libelle} disabled={!canEditBasic} onChange={(event) => change('libelle', event.target.value)} /></label>
-                <label>Classe<select value={form.classe} disabled={!canEditSensitive} onChange={(event) => change('classe', event.target.value)}>{CLASS_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-                <label>Nature<select value={form.nature} disabled={!canEditSensitive} onChange={(event) => change('nature', event.target.value)}>{NATURE_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-                <label>Compte de référence OHADA<select value={form.compte_parent_id} disabled={!canEditSensitive} onChange={(event) => change('compte_parent_id', event.target.value)}><option value="">Aucun</option>{parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.num_compte} · {parent.libelle}</option>)}</select></label>
-                <label>Devise<select value={form.devise} disabled={!canEditSensitive} onChange={(event) => change('devise', event.target.value)}>{['XAF', 'EUR', 'USD'].map((item) => <option key={item}>{item}</option>)}</select></label>
-                <label>Solde d’ouverture débiteur<input type="number" min="0" step="0.01" value={form.solde_ouverture_debit} disabled={!canEditSensitive} onChange={(event) => change('solde_ouverture_debit', event.target.value)} /></label>
-                <label>Solde d’ouverture créditeur<input type="number" min="0" step="0.01" value={form.solde_ouverture_credit} disabled={!canEditSensitive} onChange={(event) => change('solde_ouverture_credit', event.target.value)} /></label>
-                <label className="chart-edit-notes">Notes / description<textarea rows="3" value={form.notes} disabled={!canEditBasic} onChange={(event) => change('notes', event.target.value)} /></label>
+                {canEditSensitive && <>
+                  <label>Numéro de compte<input required value={form.numero} onChange={(event) => change('numero', event.target.value)} /></label>
+                  <label>Classe<select value={form.classe} onChange={(event) => change('classe', event.target.value)}>{CLASS_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label>Nature<select value={form.nature} onChange={(event) => change('nature', event.target.value)}>{NATURE_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label>Compte de référence OHADA<select value={form.compte_parent_id} onChange={(event) => change('compte_parent_id', event.target.value)}><option value="">Aucun</option>{parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.num_compte} · {parent.libelle}</option>)}</select></label>
+                  <label>Compte parent dans le plan<select value={form.parent_compte_id} onChange={(event) => change('parent_compte_id', event.target.value)}><option value="">Aucun (racine)</option>{accounts.filter((account) => account.id !== editing.id && String(editing.numero).startsWith(String(account.numero)) && account.numero.length < editing.numero.length).sort((a, b) => b.numero.length - a.numero.length).map((account) => <option key={account.id} value={account.id}>{account.numero} · {account.libelle}</option>)}</select></label>
+                  <label>Devise<select value={form.devise} onChange={(event) => change('devise', event.target.value)}>{['XAF', 'EUR', 'USD'].map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label>Solde d’ouverture débiteur<input type="number" min="0" step="0.01" value={form.solde_ouverture_debit} onChange={(event) => change('solde_ouverture_debit', event.target.value)} /></label>
+                  <label>Solde d’ouverture créditeur<input type="number" min="0" step="0.01" value={form.solde_ouverture_credit} onChange={(event) => change('solde_ouverture_credit', event.target.value)} /></label>
+                </>}
+                {canEditBasic && <>
+                  <label>Libellé<input required value={form.libelle} onChange={(event) => change('libelle', event.target.value)} /></label>
+                  <label className="chart-edit-notes">Notes / description<textarea rows="3" value={form.notes} onChange={(event) => change('notes', event.target.value)} /></label>
+                </>}
               </div>
-              <div className="chart-edit-toggles">
-                <label><input type="checkbox" checked={form.actif} disabled={!canEditSensitive} onChange={(event) => change('actif', event.target.checked)} /> Compte actif</label>
-                <label><input type="checkbox" checked={form.lettrable} disabled={!canEditBasic} onChange={(event) => change('lettrable', event.target.checked)} /> Lettrable</label>
-                <label><input type="checkbox" checked={form.reconciliable} disabled={!canEditBasic} onChange={(event) => change('reconciliable', event.target.checked)} /> Rapprochable</label>
-              </div>
+              {(canEditBasic || canEditSensitive) && <div className="chart-edit-toggles">
+                {canEditSensitive && <label><input type="checkbox" checked={form.actif} onChange={(event) => change('actif', event.target.checked)} /> Compte actif</label>}
+                {canEditBasic && <>
+                  <label><input type="checkbox" checked={form.lettrable} onChange={(event) => change('lettrable', event.target.checked)} /> Lettrable</label>
+                  <label><input type="checkbox" checked={form.reconciliable} onChange={(event) => change('reconciliable', event.target.checked)} /> Rapprochable</label>
+                </>}
+              </div>}
               {canEditSensitive && <p className="chart-sensitive-hint">Les changements du numéro, de la classe, de la nature et des soldes sont réservés aux privilèges élevés.</p>}
               <footer><button className="chart-cancel-button" type="button" onClick={closeEditor} disabled={saving}>Annuler</button><button className="chart-save-button" type="submit" disabled={saving || (!canEditBasic && !canEditSensitive)}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button></footer>
             </form>
@@ -665,7 +708,7 @@ export default function ChartOfAccounts() {
       )}
 
       {/* Modale de confirmation et vérification d'intégrité de suppression */}
-      {accountToDelete && (
+      {accountToDelete && canDelete && (
         <div
           className="chart-modal-backdrop"
           role="presentation"
@@ -791,7 +834,7 @@ export default function ChartOfAccounts() {
         </div>
       )}
 
-      <PDFPreviewModal
+      {canExport && <PDFPreviewModal
         isOpen={showPdfPreview}
         onClose={() => setShowPdfPreview(false)}
         title="Plan comptable général & sectoriel"
@@ -799,7 +842,7 @@ export default function ChartOfAccounts() {
         filename={`Plan_Comptable_${selectedExercice?.code || 'exercice'}`}
         defaultOrientation="landscape"
         renderDocument={(orientation) => <ChartOfAccountsPDF title={exportTitle} subtitle={exportSubtitle} groups={exportGroups} footerText="CIPRESA · Plan comptable OHADA sectoriel agricole" orientation={orientation} />}
-      />
+      />}
     </div>
   );
 }

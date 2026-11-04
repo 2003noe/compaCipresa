@@ -10,6 +10,8 @@ import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
+import { confirmAction } from '../../lib/notifications';
 import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
@@ -83,6 +85,10 @@ function PiecesCell({ pieces, urls }) {
 // ---------------------------------------------------------------------------
 export default function JournalPage() {
   const nav = useNavigate();
+  const { can, profile } = useAuth();
+  const canCreate = can('COMPTA_CREATE');
+  const canValidate = can('COMPTA_VALIDATE');
+  const canExport = can('COMPTA_JOURNAL_EXPORT');
 
   // Données
   const [rowsValidees, setRowsValidees] = useState([]);
@@ -147,7 +153,7 @@ export default function JournalPage() {
         for (let from = 0; from < MAX_ROWS; from += FETCH_BATCH) {
           let q = supabase
             .from('ecritures_comptables')
-            .select('id,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code),lignes_ecritures!ligne_ecriture_company_fk(debit,credit),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
+            .select('id,created_by,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code),lignes_ecritures!ligne_ecriture_company_fk(debit,credit),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
             .order('date_ecriture', { ascending: order === 'asc' })
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);
@@ -179,6 +185,7 @@ export default function JournalPage() {
 
           const row = {
             id: entry.id,
+            created_by: entry.created_by,
             date: entry.date_ecriture,
             journal: entry.journaux?.code || '—',
             ref: entry.reference_piece || entry.numero,
@@ -262,7 +269,8 @@ export default function JournalPage() {
   const handleContinuer = (id) => nav(`/nouvelle-ecriture?edit=${id}`);
 
   const handleSupprimer = async (row) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette écriture en brouillon ?')) return;
+    if (!canCreate || row.status !== 'Brouillon') return;
+    if (!await confirmAction({ title: 'Supprimer ce brouillon ?', text: 'Cette action est définitive.', confirmText: 'Supprimer le brouillon', danger: true })) return;
 
     setDeleting(row.id);
     setError('');
@@ -386,7 +394,7 @@ export default function JournalPage() {
           <p className="page-subtitle">Consultez et gérez les écritures comptables</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button
+          {canExport && <Button
             variant="secondary"
             icon={Printer}
             onClick={() => setShowPDFPreview(true)}
@@ -394,8 +402,8 @@ export default function JournalPage() {
             title="Prévisualiser et imprimer en PDF"
           >
             Imprimer (PDF)
-          </Button>
-          <Button
+          </Button>}
+          {canExport && <Button
             variant="primary"
             icon={Download}
             onClick={handleExportXLSX}
@@ -403,8 +411,8 @@ export default function JournalPage() {
             title="Exporter les écritures validées en Excel"
           >
             Exporter Excel
-          </Button>
-          <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>
+          </Button>}
+          {canCreate && <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>}
         </div>
       </div>
 
@@ -484,7 +492,7 @@ export default function JournalPage() {
             <p className="page-subtitle">{filteredValidees.length} écriture(s) comptabilisée(s)</p>
           </div>
           <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-            <Button
+            {canExport && <Button
               icon={Download}
               variant="outline"
               size="sm"
@@ -492,8 +500,8 @@ export default function JournalPage() {
               disabled={filteredValidees.length === 0}
             >
               Excel
-            </Button>
-            <Button
+            </Button>}
+            {canExport && <Button
               icon={Printer}
               variant="outline"
               size="sm"
@@ -501,7 +509,7 @@ export default function JournalPage() {
               disabled={filteredValidees.length === 0}
             >
               PDF
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -558,7 +566,7 @@ export default function JournalPage() {
                     <tr key={row.id} style={{ opacity: deleting === row.id ? 0.6 : 1 }}>
                       {renderCells(row)}
                       <td style={{ display: 'flex', gap: '8px' }}>
-                        <Button
+                        {canCreate && <Button
                           icon={Edit2}
                           size="sm"
                           variant="primary"
@@ -566,8 +574,9 @@ export default function JournalPage() {
                           disabled={deleting === row.id}
                         >
                           Continuer
-                        </Button>
-                        <Button
+                        </Button>}
+                        {canValidate && row.created_by !== profile?.id && <Button size="sm" onClick={async () => { const { error } = await supabase.rpc('valider_ecriture', { p_ecriture_id: row.id }); if (error) setError(error.message); else window.location.reload(); }}>Valider</Button>}
+                        {canCreate && <Button
                           icon={Trash2}
                           size="sm"
                           variant="secondary"
@@ -576,7 +585,7 @@ export default function JournalPage() {
                           style={{ color: '#e11d48' }}
                         >
                           Supprimer
-                        </Button>
+                        </Button>}
                       </td>
                     </tr>
                   ))}
@@ -588,7 +597,7 @@ export default function JournalPage() {
         </Card>
       )}
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}

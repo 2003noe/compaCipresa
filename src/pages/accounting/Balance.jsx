@@ -19,7 +19,8 @@ const classNumber = (classe) => {
 export default function Balance() {
   const navigate = useNavigate();
   const { selectedExercice, selectedExerciceId: exerciceId, loading: exercicesLoading } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
+  const { selectedEntrepriseId, can } = useAuth();
+  const canExport = can('COMPTA_EXPORT');
   const [accounts, setAccounts] = useState([]);
   const [movementsByAccount, setMovementsByAccount] = useState({});
   const [classFilter, setClassFilter] = useState('Toutes classes');
@@ -205,12 +206,12 @@ export default function Balance() {
           <p className="page-subtitle">Vue synthétique des soldes des comptes{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div className="page-header-actions">
-          <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading || rows.length === 0}>
+          {canExport && <Button variant="secondary" icon={Printer} onClick={() => setShowPDFPreview(true)} disabled={loading || rows.length === 0}>
             Imprimer (PDF)
-          </Button>
-          <Button variant="primary" icon={Download} onClick={handleExportExcel} disabled={loading || rows.length === 0}>
+          </Button>}
+          {canExport && <Button variant="primary" icon={Download} onClick={handleExportExcel} disabled={loading || rows.length === 0}>
             Exporter Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -335,7 +336,7 @@ export default function Balance() {
         }
       `}</style>
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}

@@ -12,7 +12,9 @@ import { STATUT_LABEL, STATUT_TONE, CONTROLE_STATUT_LABEL, dateFr } from '../../
 export default function ClotureDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
+  const canPrepare = can('COMPTA_CLOTURE_PREPARE');
+  const canApprove = can('COMPTA_CLOTURE_APPROVE');
   const { selectedExerciceId, loading: exercicesLoading } = useExercice();
   const [cloture, setCloture] = useState(null);
   const [controles, setControles] = useState([]);
@@ -45,18 +47,21 @@ export default function ClotureDetail() {
   const tousTraites = controles.length > 0 && controles.every((c) => c.statut !== 'A_FAIRE');
 
   const updateControle = async (row, patch) => {
+    if (!canPrepare || cloture?.statut === 'CLOTUREE') return;
     const { error } = await supabase.from('controles_cloture').update({ ...patch, verifie_par: patch.statut && patch.statut !== 'A_FAIRE' ? profile?.id : row.verifie_par }).eq('id', row.id);
     if (error) { setNotice(error.message); return; }
     load();
   };
 
   const toggleGate = async (field, value) => {
+    if (!canApprove || cloture?.statut === 'CLOTUREE') return;
     const { error } = await supabase.from('clotures_comptables').update({ [field]: value }).eq('id', id);
     if (error) { setNotice(error.message); return; }
     load();
   };
 
   const changerStatutCloture = async (statut, extra = {}) => {
+    if ((statut === 'CLOTUREE' && !canApprove) || (statut !== 'CLOTUREE' && !canPrepare)) return;
     setWorking(true);
     const { error } = await supabase.from('clotures_comptables').update({ statut, ...extra }).eq('id', id);
     setWorking(false);
@@ -84,9 +89,11 @@ export default function ClotureDetail() {
       <Card className="cloture-gates-card">
         <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
         <div className="toggle-list" style={{ marginTop: 20 }}>
-          <Toggle label="Balance validée" checked={cloture.balance_validee} onChange={(v) => toggleGate('balance_validee', v)} disabled={cloture.statut === 'CLOTUREE'} />
-          <Toggle label="Rapprochement validé" checked={cloture.rapprochement_valide} onChange={(v) => toggleGate('rapprochement_valide', v)} disabled={cloture.statut === 'CLOTUREE'} />
-          <Toggle label="Fiscalité vérifiée" checked={cloture.fiscalite_verifiee} onChange={(v) => toggleGate('fiscalite_verifiee', v)} disabled={cloture.statut === 'CLOTUREE'} />
+          {canApprove && cloture.statut !== 'CLOTUREE' ? <>
+            <Toggle label="Balance validée" checked={cloture.balance_validee} onChange={(v) => toggleGate('balance_validee', v)} />
+            <Toggle label="Rapprochement validé" checked={cloture.rapprochement_valide} onChange={(v) => toggleGate('rapprochement_valide', v)} />
+            <Toggle label="Fiscalité vérifiée" checked={cloture.fiscalite_verifiee} onChange={(v) => toggleGate('fiscalite_verifiee', v)} />
+          </> : <div><strong>Contrôles de direction</strong><p className="page-subtitle">Balance : {cloture.balance_validee ? 'validée' : 'en attente'} · Rapprochement : {cloture.rapprochement_valide ? 'validé' : 'en attente'} · Fiscalité : {cloture.fiscalite_verifiee ? 'vérifiée' : 'en attente'}</p></div>}
         </div>
       </Card>
 
@@ -110,12 +117,12 @@ export default function ClotureDetail() {
                     <td>{r.responsable_type}</td>
                     <td style={{ whiteSpace: 'normal' }}>{r.justificatif_attendu}</td>
                     <td>
-                      <select className="input select" style={{ height: 34, fontSize: 12 }} value={c.statut} disabled={cloture.statut === 'CLOTUREE'} onChange={(e) => updateControle(c, { statut: e.target.value })}>
+                      {canPrepare && cloture.statut !== 'CLOTUREE' ? <select className="input select" style={{ height: 34, fontSize: 12 }} value={c.statut} onChange={(e) => updateControle(c, { statut: e.target.value })}>
                         {Object.entries(CONTROLE_STATUT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
+                      </select> : <span>{CONTROLE_STATUT_LABEL[c.statut] || c.statut}</span>}
                     </td>
                     <td style={{ whiteSpace: 'normal', minWidth: 160 }}>
-                      <input className="input" style={{ height: 34, fontSize: 12 }} defaultValue={c.commentaire || ''} disabled={cloture.statut === 'CLOTUREE'} placeholder="Commentaire…" onBlur={(e) => { if (e.target.value !== (c.commentaire || '')) updateControle(c, { commentaire: e.target.value.trim() || null }); }} />
+                      {canPrepare && cloture.statut !== 'CLOTUREE' ? <input className="input" style={{ height: 34, fontSize: 12 }} defaultValue={c.commentaire || ''} placeholder="Commentaire…" onBlur={(e) => { if (e.target.value !== (c.commentaire || '')) updateControle(c, { commentaire: e.target.value.trim() || null }); }} /> : <span>{c.commentaire || '—'}</span>}
                     </td>
                   </tr>
                 );
@@ -124,18 +131,18 @@ export default function ClotureDetail() {
           </table>
         </div>
 
-        <div className="form-actions left-actions" style={{ marginTop: 20 }}>
-          {cloture.statut === 'OUVERTE' && (
+        {(canPrepare || canApprove) && <div className="form-actions left-actions" style={{ marginTop: 20 }}>
+          {canPrepare && cloture.statut === 'OUVERTE' && (
             <Button disabled={working} onClick={() => changerStatutCloture('CONTROLES_EN_COURS')}>{working ? '…' : 'Démarrer les contrôles'}</Button>
           )}
-          {cloture.statut === 'CONTROLES_EN_COURS' && (
+          {canPrepare && cloture.statut === 'CONTROLES_EN_COURS' && (
             <Button disabled={working || !tousTraites || !gatesOk} onClick={() => changerStatutCloture('PRE_CLOTURE')}>{working ? '…' : 'Passer en pré-clôture'}</Button>
           )}
-          {cloture.statut === 'PRE_CLOTURE' && (
+          {canApprove && cloture.statut === 'PRE_CLOTURE' && (
             <Button disabled={working} onClick={() => changerStatutCloture('CLOTUREE', { cloturee_par: profile?.id || null, cloturee_le: new Date().toISOString() })}>{working ? '…' : 'Clôturer définitivement'}</Button>
           )}
-        </div>
-        {cloture.statut === 'CONTROLES_EN_COURS' && (!tousTraites || !gatesOk) && (
+        </div>}
+        {canPrepare && cloture.statut === 'CONTROLES_EN_COURS' && (!tousTraites || !gatesOk) && (
           <p className="page-subtitle" style={{ marginTop: 8 }}>La pré-clôture est désactivée tant que tous les contrôles ne sont pas traités et que les trois validations ci-dessus ne sont pas cochées.</p>
         )}
       </Card>

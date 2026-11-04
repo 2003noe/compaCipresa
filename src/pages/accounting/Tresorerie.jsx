@@ -4,6 +4,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import { exportTresorerieExcel, exportTresoreriePDF, TresoreriePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -13,6 +14,8 @@ const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 
 
 export default function Tresorerie() {
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+  const { can } = useAuth();
+  const canExport = can('COMPTA_EXPORT');
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,22 +137,22 @@ export default function Tresorerie() {
           <p className="page-subtitle">Trésorerie de l'exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button
+          {canExport && <Button
             variant="secondary"
             icon={Printer}
             onClick={() => setShowPDFPreview(true)}
             disabled={loading || accounts.length === 0}
           >
             Imprimer (PDF)
-          </Button>
-          <Button
+          </Button>}
+          {canExport && <Button
             variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={loading || accounts.length === 0}
           >
             Exporter Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -222,7 +225,7 @@ export default function Tresorerie() {
         </>
       )}
 
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}

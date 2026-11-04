@@ -136,7 +136,6 @@ export function mapExternalSaleToLocal(item) {
     montant_tva: tva,
     montant_ttc: ttc,
     mode_reglement: reglement.mode_paiement || item.mode_reglement || "ESPECES",
-    statut_comptable: "A_COMPTABILISER",
     donnees_brutes: item,
     updated_at: new Date().toISOString(),
   };
@@ -217,6 +216,12 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
     );
   }
 
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('Connexion requise pour synchroniser les ventes.');
+  const { data: profile, error: profileError } = await supabase.from('profiles').select('active_entreprise_id').eq('id', user.id).single();
+  if (profileError || !profile?.active_entreprise_id) throw new Error('Aucune entreprise active pour synchroniser les ventes.');
+  const entrepriseId = profile.active_entreprise_id;
+
   // A. Création du log de début
   const { data: logEntry, error: logErr } = await supabase
     .from("sync_logs")
@@ -225,6 +230,8 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
         statut: "EN_COURS",
         source: "VENTES_API",
         started_at: new Date().toISOString(),
+        entreprise_id: entrepriseId,
+        created_by: user.id,
       },
     ])
     .select()
@@ -250,7 +257,7 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
             total_insere: 0,
             finished_at: new Date().toISOString(),
           })
-          .eq("id", logId);
+          .eq("id", logId).eq('entreprise_id', entrepriseId);
       }
       return {
         success: true,
@@ -260,13 +267,13 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
     }
 
     // C. Transformation et normalisation
-    const localRecords = items.map(mapExternalSaleToLocal);
+    const localRecords = items.map((item) => ({ ...mapExternalSaleToLocal(item), entreprise_id: entrepriseId }));
 
     // D. Upsert dans la table `ventes`
     const { data: upsertedData, error: upsertErr } = await supabase
       .from("ventes")
       .upsert(localRecords, {
-        onConflict: "external_id",
+        onConflict: "entreprise_id,external_id",
       })
       .select();
 
@@ -286,7 +293,7 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
           total_insere: insertedCount,
           finished_at: new Date().toISOString(),
         })
-        .eq("id", logId);
+        .eq("id", logId).eq('entreprise_id', entrepriseId);
     }
 
     return {
@@ -305,7 +312,7 @@ export async function syncSalesPipeline({ dateDebut, dateFin } = {}) {
           message_erreur: error.message,
           finished_at: new Date().toISOString(),
         })
-        .eq("id", logId);
+        .eq("id", logId).eq('entreprise_id', entrepriseId);
     }
     throw error;
   }

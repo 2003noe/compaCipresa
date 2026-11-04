@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useSyncVentes } from "../../hooks/useSyncVentes";
+import { useAuth } from "../../context/AuthContext";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
@@ -26,6 +27,9 @@ import "./syncVentes.css";
 const formatMoney = (val) => Number(val || 0).toLocaleString("fr-FR");
 
 export default function SyncVentes() {
+  const { can, selectedEntrepriseId } = useAuth();
+  const canConfigure = can("CONFIG_COMPANY");
+  const canSync = can("SALES_SYNC") || can("COMPTA_SYNC");
   const {
     ventes,
     logs,
@@ -38,7 +42,7 @@ export default function SyncVentes() {
     updateConfig,
     triggerSync,
     checkConnection,
-  } = useSyncVentes();
+  } = useSyncVentes({ entrepriseId: selectedEntrepriseId });
 
   // Filtres
   const [search, setSearch] = useState("");
@@ -153,7 +157,7 @@ export default function SyncVentes() {
         </div>
 
         <div className="page-header-actions">
-          <Button
+          {canConfigure && <Button
             variant="secondary"
             icon={Settings}
             onClick={() => {
@@ -165,7 +169,7 @@ export default function SyncVentes() {
             }}
           >
             Paramètres API
-          </Button>
+          </Button>}
 
           <Button
             variant="secondary"
@@ -175,14 +179,14 @@ export default function SyncVentes() {
             Historique ({logs.length})
           </Button>
 
-          <Button
+          {canSync && <Button
             variant="primary"
             icon={RefreshCw}
             onClick={handleLaunchSync}
             disabled={syncing || testingConnection}
           >
             {syncing ? "Synchronisation en cours..." : "Synchroniser maintenant"}
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -236,7 +240,7 @@ export default function SyncVentes() {
           </div>
         </div>
 
-        <Button
+        {canConfigure && <Button
           variant="secondary"
           size="sm"
           icon={Radio}
@@ -244,7 +248,7 @@ export default function SyncVentes() {
           disabled={testingConnection || syncing}
         >
           {testingConnection ? "Vérification..." : "Tester la connexion API"}
-        </Button>
+        </Button>}
       </div>
 
       {/* Cartes KPI */}
@@ -514,7 +518,7 @@ export default function SyncVentes() {
       </Card>
 
       {/* Modale Paramètres API */}
-      {isConfigOpen && (
+      {isConfigOpen && canConfigure && (
         <div className="sync-modal-backdrop" onClick={() => setIsConfigOpen(false)}>
           <div className="sync-modal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="sync-modal-header">

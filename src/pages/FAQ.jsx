@@ -1,131 +1,160 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, CircleHelp, Search } from 'lucide-react';
+import {
+  ArrowRight, BarChart3, BookOpen, Building2, CalendarDays, CircleHelp,
+  ClipboardList, FileText, Lock, Search, ShieldCheck, Sparkles,
+  Users, UserRound,
+} from 'lucide-react';
 import Card from '../components/ui/Card';
 
 const QUESTIONS = [
   {
-    category: 'Bien commencer',
-    question: 'À quoi sert la plateforme CIPRESA ?',
-    answer: 'CIPRESA centralise les opérations comptables de l’entreprise : plan de comptes, journaux, écritures, consultation du grand livre et de la balance, états financiers, trésorerie, immobilisations et suivi des clôtures. Les données sont enregistrées dans Supabase et les écrans disponibles dépendent des droits attribués à votre compte.',
+    category: 'Espace de travail',
+    question: 'Comment fonctionne l’accès aux entreprises ?',
+    answer: 'Chaque entreprise dispose de ses propres utilisateurs, rôles, exercices, journaux, comptes, écritures et états. Vous ne voyez que les entreprises auxquelles un administrateur vous a associé. Si vous êtes membre de plusieurs entreprises, choisissez l’entreprise active dans la barre supérieure : les pages et les opérations se rapportent alors à cette entreprise.',
   },
   {
-    category: 'Bien commencer',
-    question: 'Que faire lors de ma première connexion ?',
-    answer: 'L’administrateur prépare les paramètres de l’entreprise, les exercices, les journaux et les comptes comptables, puis attribue un rôle aux utilisateurs. Avant de saisir ou consulter des opérations, vérifiez l’exercice affiché dans la barre supérieure. Si votre compte vient d’être créé, confirmez votre adresse e-mail avec le code reçu puis connectez-vous.',
+    category: 'Espace de travail',
+    question: 'À quoi sert le sélecteur d’exercice en haut de l’écran ?',
+    answer: 'L’exercice sélectionné dans la barre supérieure est le filtre commun des pages comptables. Le journal, le plan comptable, le grand livre, la balance, le bilan, la trésorerie, les immobilisations et les clôtures chargent les données de cet exercice. Changez d’exercice avant de consulter un état ou de créer une opération. La sélection est mémorisée dans le navigateur.',
   },
   {
-    category: 'Bien commencer',
-    question: 'Comment sélectionner le bon exercice ?',
-    answer: 'Utilisez le sélecteur « Exercice comptable » en haut de l’écran. Il est partagé par les pages de l’application qui affichent des données par exercice et votre sélection est mémorisée dans ce navigateur. À la première ouverture, l’application choisit un exercice ouvert, ou à défaut le plus récent. Vérifiez toujours l’exercice avant de créer une écriture ou un compte.',
+    category: 'Espace de travail',
+    question: 'Comment sélectionner une autre entreprise ou un autre exercice ?',
+    answer: 'Utilisez les deux sélecteurs de la barre supérieure. Commencez par l’entreprise, puis choisissez un exercice de cette entreprise. Si un exercice n’apparaît pas, vérifiez qu’il existe et que votre compte a accès à l’entreprise concernée.',
   },
   {
-    category: 'Bien commencer',
-    question: 'Peut-on avoir plusieurs exercices pour une même année ?',
-    answer: 'Oui. Chaque exercice possède un code unique, une année et une plage de dates comprise dans cette année. Par exemple, plusieurs périodes distinctes peuvent être créées pour 2026 avec des codes différents. La sélection se fait par exercice, pas seulement par année.',
+    category: 'Espace de travail',
+    question: 'Peut-on créer plusieurs exercices dans la même année ?',
+    answer: 'Oui. Chaque exercice a son code, son année, ses dates de début et de fin, et son statut. Plusieurs exercices peuvent avoir la même année, avec des codes distincts. Les dates doivent être comprises dans l’année déclarée et la date de début doit précéder la date de fin.',
   },
   {
-    category: 'Bien commencer',
-    question: 'Comment retrouver un compte ou une écriture ?',
-    answer: 'La recherche dans la barre supérieure commence à partir de deux caractères et porte sur les comptes et écritures de l’exercice sélectionné. La page Journal comptable propose également des filtres par journal, période et texte.',
+    category: 'Plan comptable',
+    question: 'Comment lire le Plan comptable ?',
+    answer: 'Les comptes sont regroupés par classe. Une classe affiche ses totaux débit, crédit et différence pour l’exercice sélectionné. Dépliez une classe pour parcourir ses comptes, puis un compte pour voir ses sous-comptes. Les soldes proviennent des soldes d’ouverture et des écritures validées de l’entreprise et de l’exercice actifs. Une différence positive correspond à un solde net débiteur; une différence négative à un solde net créditeur.',
   },
   {
-    category: 'Paramètres',
-    question: 'À quoi servent les Paramètres ?',
-    answer: 'Les Paramètres regroupent les informations de l’entreprise, les exercices, les journaux, les utilisateurs, les intégrations et les options de sécurité. Les onglets accessibles et les opérations possibles dépendent de votre rôle et des règles d’accès de la base.',
+    category: 'Plan comptable',
+    question: 'Quelle est la relation entre un compte et ses sous-comptes ?',
+    answer: 'La hiérarchie suit la structure du plan OHADA : un compte peut avoir des subdivisions rattachées par leur numéro et leur parent. La page affiche cette relation de façon récursive. Les comptes du référentiel OHADA servent de structure commune; les comptes opérationnels et leurs soldes sont rattachés à l’entreprise et à l’exercice. Un sous-compte ne doit pas être créé sans respecter le préfixe et le parent du compte auquel il appartient.',
   },
   {
-    category: 'Paramètres',
-    question: 'Comment créer ou modifier un exercice ?',
-    answer: 'Dans Paramètres → Exercices, saisissez un code, une année, une date de début et une date de fin. Les deux dates doivent appartenir à l’année indiquée, et la date de début doit précéder la date de fin. Vous pouvez modifier une période si elle ne rend pas les dates des écritures liées incohérentes. La suppression peut être refusée si des données y sont rattachées.',
+    category: 'Plan comptable',
+    question: 'Comment créer ou modifier un compte ?',
+    answer: 'Pour créer un compte, ouvrez Plan comptable puis Nouveau compte, choisissez l’exercice et renseignez son compte de référence, son parent éventuel, son numéro et son libellé. Les comptes déjà utilisés par des écritures ne peuvent pas toujours être supprimés ou modifiés librement. Les champs sensibles, comme le numéro, la classe, la nature et les soldes d’ouverture, sont réservés aux rôles qui ont le privilège comptable élevé. Les actions indisponibles sont masquées selon votre rôle.',
   },
   {
-    category: 'Paramètres',
-    question: 'À quoi servent les journaux comptables ?',
-    answer: 'Les journaux classent les écritures par nature. Les types prévus dans l’application sont Achats, Ventes, Banque, Caisse et Opérations diverses (OD). Ils se configurent dans Paramètres → Journaux. Choisissez le journal correspondant à la pièce et à l’opération enregistrée.',
+    category: 'Plan comptable',
+    question: 'Qui peut exporter le Plan comptable ?',
+    answer: 'Dans la configuration actuelle, les rôles ADMIN et COMPTABLE peuvent exporter le Plan comptable en PDF ou Excel. Les exports reprennent les totaux et les détails visibles pour l’entreprise et l’exercice sélectionnés.',
   },
   {
-    category: 'Comptabilité',
-    question: 'Comment créer un compte comptable ?',
-    answer: 'Ouvrez Plan comptable puis Nouveau compte. Renseignez le numéro, le libellé, la classe, la nature et l’exercice auquel le compte appartient. Le compte est ensuite disponible pour les écritures de cet exercice. Les comptes et soldes d’ouverture sont à vérifier avant la saisie des opérations.',
-  },
-  {
-    category: 'Comptabilité',
+    category: 'Saisie comptable',
     question: 'Comment saisir une écriture ?',
-    answer: 'Ouvrez Nouvelle écriture, vérifiez l’exercice, choisissez le journal, la date et le libellé, puis ajoutez les lignes avec leur compte et leur montant au débit ou au crédit. Une écriture doit comporter des lignes équilibrées : total débit égal au total crédit. Vous pouvez joindre des justificatifs, puis enregistrer en brouillon ou demander la validation.',
+    answer: 'Ouvrez Nouvelle écriture. Vérifiez l’exercice, choisissez le journal, la date et le libellé, puis ajoutez au moins deux lignes. Pour chaque ligne, sélectionnez un compte et saisissez un montant soit au débit, soit au crédit. Le total débit doit être égal au total crédit. Ajoutez la référence de pièce et les justificatifs utiles, puis enregistrez le brouillon.',
   },
   {
-    category: 'Comptabilité',
+    category: 'Saisie comptable',
+    question: 'Pourquoi ne puis-je pas choisir un journal ou enregistrer une écriture ?',
+    answer: 'Vérifiez que l’exercice est ouvert, qu’il couvre la date de l’opération et qu’un journal est disponible pour l’entreprise active. Les commandes de création et de validation ne sont visibles que si votre rôle les autorise. Supabase contrôle aussi l’entreprise, l’exercice et les permissions au moment de l’enregistrement.',
+  },
+  {
+    category: 'Saisie comptable',
     question: 'Quelle différence entre brouillon et écriture validée ?',
-    answer: 'Un brouillon reste modifiable et peut être supprimé depuis le journal. La validation passe par la fonction de base de données valider_ecriture, qui contrôle l’écriture et attribue son numéro définitif. Une écriture validée est verrouillée dans le formulaire : pour corriger une opération déjà validée, suivez la procédure comptable de correction ou d’extourne de votre organisation.',
+    answer: 'Le brouillon peut être repris par une personne qui dispose du droit de saisie. La validation vérifie notamment que l’exercice est ouvert, que la date est dans sa période, que les lignes sont valides et que les totaux débit et crédit sont égaux. L’écriture validée reçoit son numéro définitif et devient verrouillée. Pour corriger une écriture validée, appliquez la procédure de correction comptable de votre organisation, généralement une écriture de contrepassation ou d’extourne.',
   },
   {
-    category: 'Comptabilité',
-    question: 'Pourquoi mon écriture ne peut-elle pas être validée ?',
-    answer: 'Vérifiez que l’exercice et le journal sont sélectionnés, que la date est comprise dans la période de l’exercice, que chaque compte existe dans cet exercice et que les totaux débit et crédit sont égaux. Une erreur renvoyée par Supabase peut aussi indiquer un droit manquant ou une règle de validation côté base.',
+    category: 'Saisie comptable',
+    question: 'Qui peut valider une écriture ?',
+    answer: 'La validation dépend du privilège COMPTA_VALIDATE attribué dans l’entreprise active. La règle de séparation des tâches empêche son créateur de valider sa propre écriture. Le rôle GERANT ou COMPTABLE peut disposer de ce privilège selon les attributions effectives.',
   },
   {
-    category: 'Comptabilité',
-    question: 'À quoi sert le Journal comptable ?',
-    answer: 'Il présente les écritures de l’exercice choisi, séparées entre brouillons et écritures validées. Vous pouvez filtrer par journal et dates, rechercher par texte, consulter les montants et les justificatifs, et poursuivre ou supprimer un brouillon. Les opérations validées sont destinées à la consultation.',
+    category: 'Saisie comptable',
+    question: 'À quoi servent le Journal et le Grand livre ?',
+    answer: 'Le Journal présente les écritures chronologiquement et permet de retrouver les brouillons et opérations validées. Le Grand livre regroupe les mouvements par compte, avec les soldes et le détail des écritures qui les composent. Ce sont des états de consultation : une écriture validée se corrige depuis la procédure comptable prévue, pas en modifiant directement l’état.',
   },
   {
-    category: 'Comptabilité',
-    question: 'À quoi sert le Grand livre ?',
-    answer: 'Le Grand livre détaille les mouvements compte par compte, avec les soldes d’ouverture, les mouvements de la période et le solde de fin. Il sert à examiner l’origine d’un solde et à retrouver les opérations qui l’ont composé. C’est un état de consultation : la correction se fait sur l’écriture source, si elle est encore modifiable.',
-  },
-  {
-    category: 'États financiers',
+    category: 'États et exports',
     question: 'Quelle différence entre la Balance, le Bilan et le Compte de résultat ?',
-    answer: 'La Balance récapitule les soldes et mouvements des comptes. Le Bilan regroupe les postes d’actif et de passif à la date de clôture. Le Compte de résultat synthétise les charges et produits de l’exercice afin de calculer les résultats d’exploitation et net. Ces états se consultent pour l’exercice sélectionné et dépendent de la qualité des écritures validées et du plan comptable.',
+    answer: 'La Balance récapitule les mouvements et soldes des comptes. Le Bilan présente la situation patrimoniale à une date : actifs et passifs. Le Compte de résultat rassemble les charges et les produits de l’exercice pour faire apparaître le résultat. Ces états dépendent des comptes correctement classés et des écritures validées.',
   },
   {
-    category: 'États financiers',
-    question: 'Comment utiliser le suivi de trésorerie ?',
-    answer: 'La page Trésorerie présente les comptes de nature Trésorerie de l’exercice, leurs soldes calculés à partir des soldes d’ouverture et des écritures validées, ainsi que les flux mensuels. Contrôlez que les comptes de banque et de caisse sont correctement classés et rattachés à l’exercice.',
+    category: 'États et exports',
+    question: 'Qui peut exporter les états comptables ?',
+    answer: 'Les rôles GERANT, COMPTABLE et CONSULTANT disposent de l’export des états comptables en PDF et Excel. Pour le Journal, l’export est attribué au CONSULTANT dans la configuration actuelle. L’export du Plan comptable suit son droit spécifique, accordé à ADMIN et COMPTABLE.',
   },
   {
-    category: 'États financiers',
-    question: 'Que contient le Livre d’inventaire ?',
-    answer: 'Le Livre d’inventaire présente les soldes des comptes à une date d’arrêté, regroupés par grandes classes (immobilisations, stocks, tiers, trésorerie et autres postes). Il aide à examiner la situation comptable de fin de période. Il ne remplace pas le comptage physique ni les justificatifs d’inventaire.',
+    category: 'États et exports',
+    question: 'Comment interpréter la trésorerie ?',
+    answer: 'La page Trésorerie présente les comptes classés en trésorerie et leurs mouvements de l’exercice actif. Contrôlez que les comptes de banque, caisse ou mobile money ont la bonne nature et que les opérations correspondantes sont validées. Un solde inhabituel peut venir d’une mauvaise classification ou d’une écriture à vérifier.',
   },
   {
-    category: 'États financiers',
-    question: 'Comment enregistrer une immobilisation ?',
-    answer: 'Ouvrez Immobilisations puis Nouvelle immobilisation. Sélectionnez l’exercice, le compte d’immobilisation, la date d’acquisition, la valeur, la durée et les autres informations demandées. La date d’acquisition doit appartenir à la période de l’exercice choisi. Le registre affiche une estimation d’amortissement à titre indicatif : il ne génère pas encore l’écriture comptable de dotation.',
+    category: 'Opérations',
+    question: 'Quelle différence entre immobilisations et inventaire physique ?',
+    answer: 'Le registre comptable des immobilisations suit les biens, leurs valeurs et une estimation des amortissements. Le module d’inventaire physique permet de mettre à jour l’état, l’emplacement et les observations d’un bien. Le calcul affiché est indicatif : il ne génère pas à lui seul l’écriture comptable de dotation aux amortissements.',
   },
   {
-    category: 'Clôture',
-    question: 'Comment fonctionne une clôture mensuelle ?',
-    answer: 'Dans Clôtures, créez une clôture pour un exercice et une période mensuelle disponible. L’application génère une checklist de 22 contrôles. Les contrôles sont renseignés dans le détail de la clôture. Le passage en pré-clôture demande que tous les contrôles soient traités et que la balance, le rapprochement et la fiscalité soient marqués comme vérifiés. La clôture définitive est ensuite enregistrée dans le suivi.',
+    category: 'Opérations',
+    question: 'Comment fonctionne la synchronisation des ventes ?',
+    answer: 'La page Synchro Ventes récupère les ventes depuis l’application externe configurée. Le rôle autorisé peut gérer les paramètres de connexion et lancer la synchronisation. Vérifiez l’historique et le statut des ventes importées avant leur comptabilisation. Une vente importée n’est pas nécessairement une écriture comptable validée.',
   },
   {
-    category: 'Accès et rôles',
-    question: 'Que peut faire chaque rôle ?',
-    answer: 'Les privilèges affichés dans Configuration déterminent les opérations attribuées à chaque rôle. D’après la configuration fournie : ADMIN possède l’ensemble des privilèges; COMPTABLE dispose des droits de saisie et validation comptables ainsi que des fonctions de fiscalité, trésorerie, immobilisations et clôture; GERANT dispose de droits de consultation et de gestion de plusieurs fonctions comptables et de clôture; CONSULTANT est principalement en lecture; AGENT_COMMERCIAL dispose de droits sur les ventes et clients; MAGASINIER dispose de droits sur le stock. Les écrans et actions réellement disponibles dépendent aussi des modules activés et des règles Supabase.',
+    category: 'Clôtures',
+    question: 'Comment se déroule une clôture mensuelle ?',
+    answer: 'Une personne autorisée à préparer la clôture crée une période dans l’exercice actif. La fiche de clôture contient une liste de contrôles et des champs de préparation. Le passage en pré-clôture dépend de l’avancement des contrôles requis. Les vérifications de direction et la clôture définitive sont réservées au rôle qui possède COMPTA_CLOTURE_APPROVE.',
   },
   {
-    category: 'Accès et rôles',
-    question: 'Où vérifier les rôles et privilèges ?',
-    answer: 'La page Configuration, réservée à ADMIN, affiche les utilisateurs, leurs rôles et les privilèges associés à chaque rôle. Elle permet d’attribuer ou retirer un rôle à un utilisateur et d’activer ou désactiver son compte. Les privilèges sont affichés pour consultation dans cette page.',
+    category: 'Utilisateurs et rôles',
+    question: 'Les rôles sont-ils les mêmes dans toutes les entreprises ?',
+    answer: 'Non. Un utilisateur peut être associé à plusieurs entreprises et avoir un rôle différent dans chacune. Quand vous changez d’entreprise dans la barre supérieure, les droits sont recalculés selon les rôles associés à cette entreprise. Demandez à l’administrateur de vérifier votre association si une page ou une action manque.',
   },
   {
-    category: 'Accès et rôles',
-    question: 'Pourquoi un bouton ou une donnée peut-il être indisponible ?',
-    answer: 'Vérifiez d’abord le rôle qui vous a été attribué, l’exercice sélectionné, le statut de l’écriture ou de la clôture et les champs obligatoires. Un refus Supabase peut provenir des politiques RLS ou d’une permission absente. Contactez l’administrateur en indiquant la page, l’exercice et le message d’erreur.',
+    category: 'Utilisateurs et rôles',
+    question: 'Que permet chaque rôle dans la configuration actuelle ?',
+    answer: 'ADMIN : gestion des utilisateurs et des paramètres de l’entreprise, lecture comptable et gestion avancée du plan comptable; export du plan. GERANT : consultation comptable, validation, approbation des clôtures, modification des exercices et des champs sensibles du plan; export des états. COMPTABLE : saisie et validation comptables, préparation des clôtures, comptes, trésorerie, immobilisations, synchronisation et inventaire physique; export du plan et des états. CONSULTANT : consultation comptable et exports autorisés. MAGASINIER : inventaire physique des biens. AGENT_COMMERCIAL : consultation et synchronisation des ventes, avec un tableau de bord commercial limité. Les permissions supplémentaires attribuées à un utilisateur peuvent compléter ces rôles.',
   },
   {
-    category: 'Compte utilisateur',
-    question: 'Comment changer mon mot de passe ou mon profil ?',
-    answer: 'Utilisez Mon profil depuis le menu utilisateur pour consulter ou modifier les informations de votre profil. Depuis la page de connexion, Mot de passe oublié permet de demander la réinitialisation par e-mail. Selon la configuration, un code de vérification peut être demandé.',
+    category: 'Utilisateurs et rôles',
+    question: 'Qui peut créer une nouvelle entreprise ?',
+    answer: 'Seul un utilisateur ayant le rôle ADMIN dans son entreprise active voit le bouton Nouvelle entreprise dans la barre supérieure. Après sa création, l’administrateur doit gérer les membres et leurs rôles dans chaque entreprise. Les autres utilisateurs ne peuvent pas ouvrir les données d’une entreprise tant qu’ils n’y sont pas associés.',
   },
   {
-    category: 'Compte utilisateur',
-    question: 'Comment changer le thème ou consulter les notifications ?',
-    answer: 'L’icône soleil/lune dans la barre supérieure permet de basculer entre les thèmes clair et sombre. Le panneau de notifications est accessible depuis la même barre. Le menu utilisateur, en bas de la navigation, donne accès au profil et à la déconnexion.',
+    category: 'Utilisateurs et rôles',
+    question: 'Où l’administrateur gère-t-il les utilisateurs et leurs rôles ?',
+    answer: 'L’administrateur ouvre Configuration depuis la gestion de l’entreprise ou les Paramètres. Il peut associer un utilisateur à une ou plusieurs entreprises, attribuer ou retirer ses rôles pour chacune, et gérer l’état de son compte. Les rôles et permissions restent propres à chaque entreprise.',
+  },
+  {
+    category: 'Utilisateurs et rôles',
+    question: 'Pourquoi un bouton, un champ ou une page n’apparaît-il pas ?',
+    answer: 'L’interface masque les liens, formulaires et actions que votre rôle ne permet pas d’utiliser. Vérifiez l’entreprise active et votre rôle dans cette entreprise. Les pages directement ouvertes sans autorisation redirigent vers un espace accessible. Si vous pensez qu’un droit manque, demandez à l’administrateur de vérifier votre association et vos permissions.',
+  },
+  {
+    category: 'Compte et assistance',
+    question: 'Comment modifier mon profil ou mon mot de passe ?',
+    answer: 'Ouvrez Mon profil dans le menu utilisateur pour modifier vos informations personnelles. Pour changer un mot de passe oublié, utilisez le lien prévu sur la page de connexion et suivez les instructions reçues par e-mail.',
+  },
+  {
+    category: 'Compte et assistance',
+    question: 'Que transmet l’assistant comptable ?',
+    answer: 'L’assistant peut recevoir votre question, les derniers échanges de la conversation, le nom de la page, l’entreprise et l’exercice actifs, ainsi que le texte et les chiffres visibles dans la page. Ces éléments sont envoyés au service IA externe configuré pour répondre dans le contexte. Évitez d’inclure des informations confidentielles qui ne sont pas nécessaires à votre demande.',
   },
 ];
 
+const ROLES = [
+  { code: 'ADMIN', title: 'Administrateur', icon: ShieldCheck, tone: 'admin', text: 'Gère les utilisateurs et les paramètres de l’entreprise. Peut lire la comptabilité et gérer les comptes sensibles du plan comptable.' },
+  { code: 'GERANT', title: 'Gérant', icon: BarChart3, tone: 'manager', text: 'Consulte, valide des écritures, approuve les clôtures et gère certains paramètres comptables et exercices.' },
+  { code: 'COMPTABLE', title: 'Comptable', icon: FileText, tone: 'accountant', text: 'Saisit et valide les opérations, prépare les clôtures et gère les fonctions comptables attribuées.' },
+  { code: 'CONSULTANT', title: 'Consultant', icon: BookOpen, tone: 'reader', text: 'Consulte les données comptables et exporte les états qui lui sont autorisés.' },
+  { code: 'MAGASINIER', title: 'Magasinier', icon: ClipboardList, tone: 'stock', text: 'Met à jour les informations d’inventaire physique des biens.' },
+  { code: 'AGENT_COMMERCIAL', title: 'Agent commercial', icon: Users, tone: 'sales', text: 'Consulte l’espace commercial et synchronise les ventes selon les droits attribués.' },
+];
+
 const CATEGORIES = ['Toutes', ...new Set(QUESTIONS.map(({ category }) => category))];
+
+const START_STEPS = [
+  { icon: Building2, title: 'Choisir l’entreprise', text: 'La barre supérieure détermine l’espace de travail et les droits actifs.' },
+  { icon: CalendarDays, title: 'Choisir l’exercice', text: 'Les pages comptables chargent les informations de cet exercice.' },
+  { icon: BookOpen, title: 'Suivre les droits visibles', text: 'Les menus, formulaires et actions disponibles suivent votre rôle.' },
+];
 
 export default function FAQ() {
   const [query, setQuery] = useState('');
@@ -136,62 +165,71 @@ export default function FAQ() {
     return QUESTIONS.filter((item) => {
       const matchesCategory = category === 'Toutes' || item.category === category;
       const matchesQuery = !normalizedQuery || `${item.category} ${item.question} ${item.answer}`
-        .toLocaleLowerCase('fr')
-        .includes(normalizedQuery);
+        .toLocaleLowerCase('fr').includes(normalizedQuery);
       return matchesCategory && matchesQuery;
     });
   }, [query, category]);
 
   return (
     <div className="page-content faq-page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title"><CircleHelp size={25} aria-hidden="true" /> Centre d’aide — CIPRESA</h1>
-          <p className="page-subtitle">Découvrez les écrans, les règles de saisie et les étapes principales de la plateforme.</p>
+      <header className="faq-hero">
+        <div className="faq-hero-copy">
+          <span className="faq-eyebrow"><Sparkles size={14} /> GUIDE D’UTILISATION</span>
+          <h1>Comprendre votre espace CIPRESA</h1>
+          <p>Un guide pratique pour naviguer entre entreprises, exercices, opérations comptables et rapports.</p>
         </div>
-      </div>
+        <div className="faq-hero-mark" aria-hidden="true"><CircleHelp size={54} strokeWidth={1.35} /></div>
+        <div className="faq-hero-meta"><span><Building2 size={14} /> Multi-entreprise</span><span><Lock size={14} /> Accès par rôle</span><span><CalendarDays size={14} /> Filtre par exercice</span></div>
+      </header>
 
-      <Card className="faq-intro">
-        <div className="faq-intro-icon"><BookOpen size={22} /></div>
-        <div>
-          <h2>Bienvenue dans votre espace de gestion comptable</h2>
-          <p>Cette aide explique comment préparer un exercice, enregistrer les opérations et consulter les états. Les informations et les actions visibles peuvent varier selon votre rôle et l’exercice choisi dans la barre supérieure.</p>
-        </div>
-      </Card>
-
-      <div className="faq-tools">
-        <label className="faq-search">
-          <Search size={17} aria-hidden="true" />
-          <span className="sr-only">Rechercher dans l’aide</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher une question…" />
-        </label>
-        <div className="faq-categories" aria-label="Filtrer les thèmes">
-          {CATEGORIES.map((item) => (
-            <button key={item} type="button" className={`faq-category ${category === item ? 'active' : ''}`} onClick={() => setCategory(item)} aria-pressed={category === item}>
-              {item}
-            </button>
+      <section className="faq-start" aria-labelledby="faq-start-title">
+        <div className="faq-section-heading"><div><span className="faq-section-kicker">DÉMARRAGE RAPIDE</span><h2 id="faq-start-title">Avant de commencer</h2></div><p>Trois repères pour que les pages affichent le bon espace et la bonne période.</p></div>
+        <div className="faq-steps">
+          {START_STEPS.map(({ icon: Icon, title, text }, index) => (
+            <Card className="faq-step" key={title}>
+              <span className="faq-step-number">0{index + 1}</span><span className="faq-step-icon"><Icon size={18} /></span>
+              <h3>{title}</h3><p>{text}</p>
+            </Card>
           ))}
         </div>
-      </div>
+      </section>
 
-      <p className="faq-count" aria-live="polite">{visibleQuestions.length} question{visibleQuestions.length > 1 ? 's' : ''}</p>
+      <section className="faq-roles" aria-labelledby="faq-roles-title">
+        <div className="faq-section-heading"><div><span className="faq-section-kicker">HABILITATIONS</span><h2 id="faq-roles-title">Les rôles en bref</h2></div><p>Les rôles s’appliquent dans une entreprise donnée. Un même utilisateur peut avoir des rôles différents ailleurs.</p></div>
+        <div className="faq-roles-grid">
+          {ROLES.map(({ code, title, icon: Icon, tone, text }) => (
+            <article className={`faq-role-card tone-${tone}`} key={code}>
+              <span className="faq-role-icon"><Icon size={18} /></span><div><span className="faq-role-code">{code}</span><h3>{title}</h3></div><p>{text}</p>
+            </article>
+          ))}
+        </div>
+        <p className="faq-role-note"><ShieldCheck size={15} /> Les privilèges précis contrôlent chaque action. ADMIN ne signifie pas que toutes les permissions comptables sont accordées automatiquement.</p>
+      </section>
 
-      <div className="faq-list">
-        {visibleQuestions.map((item) => (
-          <details className="faq-item" key={item.question}>
-            <summary>
-              <span><small>{item.category}</small>{item.question}</span>
-              <span className="faq-chevron" aria-hidden="true">+</span>
-            </summary>
-            <p>{item.answer}</p>
-          </details>
-        ))}
-        {visibleQuestions.length === 0 && <Card><p className="page-subtitle">Aucune question ne correspond à votre recherche. Essayez un autre mot ou choisissez « Toutes ».</p></Card>}
-      </div>
+      <section className="faq-answers" aria-labelledby="faq-answers-title">
+        <div className="faq-section-heading"><div><span className="faq-section-kicker">CENTRE D’AIDE</span><h2 id="faq-answers-title">Questions fréquentes</h2></div><p>Recherchez une page, une action ou un terme comptable.</p></div>
+        <div className="faq-tools">
+          <label className="faq-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Rechercher dans l’aide</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex. exercice, validation, export…" /></label>
+          <div className="faq-categories" aria-label="Filtrer les thèmes">
+            {CATEGORIES.map((item) => <button key={item} type="button" className={`faq-category ${category === item ? 'active' : ''}`} onClick={() => setCategory(item)} aria-pressed={category === item}>{item}</button>)}
+          </div>
+        </div>
+        <p className="faq-count" aria-live="polite">{visibleQuestions.length} réponse{visibleQuestions.length === 1 ? '' : 's'}</p>
+        <div className="faq-list">
+          {visibleQuestions.map((item) => (
+            <details className="faq-item" key={item.question}>
+              <summary><span><small>{item.category}</small>{item.question}</span><span className="faq-chevron" aria-hidden="true">+</span></summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+          {visibleQuestions.length === 0 && <Card className="faq-empty"><Search size={22} /><h3>Aucun résultat</h3><p>Essayez un autre terme ou réinitialisez le filtre de thème.</p><button type="button" onClick={() => { setQuery(''); setCategory('Toutes'); }}>Effacer les filtres</button></Card>}
+        </div>
+      </section>
 
       <Card className="faq-contact">
-        <h2>Vous avez encore une question ?</h2>
-        <p>Notez le nom de la page, le code de l’exercice sélectionné et le message affiché, puis transmettez ces informations à l’administrateur de votre organisation.</p>
+        <span className="faq-contact-icon"><UserRound size={19} /></span>
+        <div><h2>Besoin d’une vérification d’accès ?</h2><p>Transmettez à l’administrateur le nom de l’entreprise active, votre rôle, la page concernée et le message affiché.</p></div>
+        <ArrowRight className="faq-contact-arrow" size={19} aria-hidden="true" />
       </Card>
     </div>
   );

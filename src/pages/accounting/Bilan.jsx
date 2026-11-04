@@ -46,7 +46,8 @@ const COMPANY_FIELDS = [
 export default function Bilan() {
   const navigate = useNavigate();
   const { exercices: exercises, selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
-  const { selectedEntrepriseId } = useAuth();
+  const { selectedEntrepriseId, can } = useAuth();
+  const canExport = can('COMPTA_EXPORT');
   const [soldesN, setSoldesN] = useState(null);
   const [soldesN1, setSoldesN1] = useState(null);
   const [comparisonExerciseId, setComparisonExerciseId] = useState('');
@@ -457,22 +458,22 @@ export default function Bilan() {
           </p>
         </div>
         <div className="page-header-actions">
-          <Button
+          {canExport && <Button
             variant="secondary"
             icon={Printer}
             onClick={() => setShowPDFPreview(true)}
             disabled={isPageBusy || !bilanN}
           >
             Imprimer (PDF)
-          </Button>
-          <Button
+          </Button>}
+          {canExport && <Button
             variant="primary"
             icon={Download}
             onClick={handleExportExcel}
             disabled={isPageBusy || !bilanN}
           >
             Exporter Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -700,7 +701,7 @@ export default function Bilan() {
       `}</style>
 
       {/* Aperçu PDF interactif */}
-      {showPDFPreview && (
+      {showPDFPreview && canExport && (
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}

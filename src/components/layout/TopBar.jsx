@@ -32,7 +32,7 @@ export default function TopBar({ onMenuOpen }) {
   const debounceRef = useRef(null);
 
   const { exercices, selectedExerciceId, setSelectedExerciceId } = useExercice();
-  const { companies, selectedEntrepriseId, switchEntreprise, createCompany, hasRole } = useAuth();
+  const { companies, selectedEntrepriseId, switchEntreprise, createCompany, hasRole, can } = useAuth();
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [companyError, setCompanyError] = useState("");
@@ -134,7 +134,7 @@ export default function TopBar({ onMenuOpen }) {
         >
           <Menu size={20} />
         </button>
-        <div className="topbar-search" ref={searchRef}>
+        {can('COMPTA_READ') && <div className="topbar-search" ref={searchRef}>
           <Search size={16} />
           <input
             placeholder="Rechercher un compte, une écriture…"
@@ -203,7 +203,7 @@ export default function TopBar({ onMenuOpen }) {
               )}
             </div>
           )}
-        </div>
+        </div>}
 
         <label className="topbar-exercice" title="Exercice comptable (appliqué à toutes les pages)">
           <CalendarDays size={14} />
@@ -232,7 +232,7 @@ export default function TopBar({ onMenuOpen }) {
         </button>}
       </div>
       <div className="topbar-right">
-        <button
+        {(can('SALES_SYNC') || can('COMPTA_SYNC')) && <button
           className="icon-button"
           type="button"
           onClick={handleSyncSales}
@@ -258,7 +258,7 @@ export default function TopBar({ onMenuOpen }) {
                 : ""
             }`}
           />
-        </button>
+        </button>}
         <button
           className="icon-button"
           type="button"

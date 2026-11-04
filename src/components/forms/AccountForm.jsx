@@ -85,12 +85,15 @@ export default function AccountForm() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const parentCode = searchParams.get('parentCode') || '';
+  const requestedParentAccountId = searchParams.get('parentAccountId') || '';
   const { selectedExerciceId, exercices, loading: exercicesLoading } = useExercice();
-  const { can, hasRole, roles = [] } = useAuth();
-  const canCreateAccount = hasRole('ADMIN') || can('COMPTA_CREATE') || roles.some((role) => ['GERANT', 'COMPTABLE'].includes(role.code));
+  const { can } = useAuth();
+  const canCreateAccount = can('COMPTA_ACCOUNT_CREATE') || can('COMPTA_CREATE');
   const [formExerciceId, setFormExerciceId] = useState(selectedExerciceId);
   const [form, setForm] = useState(emptyForm());
   const [parentOptions, setParentOptions] = useState([]);
+  const [companyAccounts, setCompanyAccounts] = useState([]);
+  const [parentAccountId, setParentAccountId] = useState(requestedParentAccountId);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -122,6 +125,15 @@ export default function AccountForm() {
   }, []);
 
   useEffect(() => {
+    if (!supabaseConfigured) return;
+    supabase.from('comptes_comptables').select('id,numero,libelle,parent_compte_id').order('numero')
+      .then(({ data, error: fetchErr }) => {
+        if (fetchErr) { console.error('Erreur chargement des comptes de l’entreprise:', fetchErr); return; }
+        setCompanyAccounts(data || []);
+      });
+  }, []);
+
+  useEffect(() => {
     if (!parentCode || !parentOptions.length) return;
     const parent = [...parentOptions]
       .filter((item) => parentCode.startsWith(item.num_compte))
@@ -132,35 +144,45 @@ export default function AccountForm() {
     setForm((current) => ({ ...current, parentId: parent.id, code: parent.num_compte, classe, nature }));
   }, [parentCode, parentOptions]);
 
-  const selectedParent = parentOptions.find((p) => p.id === form.parentId) || null;
-
-  // Propose le prochain numéro libre sous la référence OHADA choisie.
   useEffect(() => {
-    if (!selectedParent) { setNumberHint(''); return undefined; }
+    if (!requestedParentAccountId) return;
+    const account = companyAccounts.find((item) => item.id === requestedParentAccountId);
+    if (!account) return;
+    setParentAccountId(account.id);
+    const reference = [...parentOptions].filter((item) => account.numero.startsWith(item.num_compte)).sort((a, b) => b.num_compte.length - a.num_compte.length)[0];
+    setForm((current) => ({ ...current, code: account.numero, ...(reference ? { parentId: reference.id, classe: detectClasse(account.numero, reference.classe) || current.classe, nature: detectNature(account.numero, reference.categorie) || current.nature } : {}) }));
+  }, [requestedParentAccountId, companyAccounts, parentOptions]);
+
+  const selectedParent = parentOptions.find((p) => p.id === form.parentId) || null;
+  const selectedCompanyParent = companyAccounts.find((account) => account.id === parentAccountId) || null;
+
+  // Propose un code enfant à un chiffre sous le parent opérationnel choisi.
+  useEffect(() => {
+    const prefix = selectedCompanyParent?.numero || selectedParent?.num_compte;
+    if (!prefix) { setNumberHint(''); return undefined; }
     let active = true;
     supabase.from('comptes_comptables').select('numero').then(({ data, error: numberError }) => {
       if (!active) return;
       if (numberError) { setNumberHint('Le numéro sera vérifié à l’enregistrement.'); return; }
-      const prefix = selectedParent.num_compte;
       const used = (data || []).map((row) => String(row.numero || '')).filter((number) => number.startsWith(prefix));
-      const suffixes = used.map((number) => number.slice(prefix.length)).filter((suffix) => /^\d+$/.test(suffix));
-      const width = Math.max(2, ...suffixes.map((suffix) => suffix.length));
-      let sequence = Math.max(0, ...suffixes.map(Number)) + 1;
-      let nextNumber = `${prefix}${String(sequence).padStart(width, '0')}`;
+      let sequence = 1;
+      let nextNumber = `${prefix}${sequence}`;
       while (used.includes(nextNumber)) {
         sequence += 1;
-        nextNumber = `${prefix}${String(sequence).padStart(width, '0')}`;
+        if (sequence > 9) { setNumberHint('Les suffixes 1 à 9 sont utilisés. Choisissez un code disponible ou créez un niveau intermédiaire.'); return; }
+        nextNumber = `${prefix}${sequence}`;
       }
       setForm((current) => ({ ...current, code: current.code === prefix || !current.code.startsWith(prefix) ? nextNumber : current.code }));
       setNumberHint(`Prochain numéro libre proposé : ${nextNumber}. Vous pouvez encore le modifier.`);
     });
     return () => { active = false; };
-  }, [selectedParent?.id]);
+  }, [selectedParent?.id, selectedCompanyParent?.id]);
 
   // Gestion du changement de compte parent
   const handleParentChange = (event) => {
     const newParentId = event.target.value;
-    const parent = parentOptions.find((p) => p.id === newParentId) || null;
+    const parent = companyAccounts.find((p) => p.id === newParentId) || null;
+    let parentReferenceId;
 
     setForm((current) => {
       let nextCode = current.code;
@@ -168,8 +190,8 @@ export default function AccountForm() {
       let nextNature = current.nature;
 
       if (parent) {
-        const prefix = parent.num_compte;
-        const currentOldPrefix = selectedParent ? selectedParent.num_compte : '';
+        const prefix = parent.numero;
+        const currentOldPrefix = selectedCompanyParent?.numero || '';
 
         // Si l'ancien code commençait par l'ancien préfixe, on remplace le préfixe
         if (currentOldPrefix && nextCode.startsWith(currentOldPrefix)) {
@@ -178,21 +200,24 @@ export default function AccountForm() {
           nextCode = prefix;
         }
 
-        const autoClasse = detectClasse(prefix, parent.classe);
+        const reference = [...parentOptions].filter((item) => prefix.startsWith(item.num_compte)).sort((a, b) => b.num_compte.length - a.num_compte.length)[0];
+        parentReferenceId = reference?.id;
+        const autoClasse = detectClasse(prefix, reference?.classe);
         if (autoClasse) nextClasse = autoClasse;
 
-        const autoNature = detectNature(prefix, parent.categorie);
+        const autoNature = detectNature(prefix, reference?.categorie);
         if (autoNature) nextNature = autoNature;
       }
 
       return {
         ...current,
-        parentId: newParentId,
+        ...(parentReferenceId ? { parentId: parentReferenceId } : {}),
         code: nextCode,
         classe: nextClasse,
         nature: nextNature,
       };
     });
+    setParentAccountId(newParentId);
   };
 
   // Gestion de la saisie du numéro de compte (en forçant le préfixe parent et l'auto-détection de la classe)
@@ -238,8 +263,13 @@ export default function AccountForm() {
       return;
     }
 
-    if (selectedParent && !form.code.trim().startsWith(selectedParent.num_compte)) {
-      setError(`Le numéro de compte doit obligatoirement commencer par le numéro du compte parent (${selectedParent.num_compte}).`);
+    const code = form.code.trim();
+    const inferredParent = selectedCompanyParent || companyAccounts
+      .filter((account) => code.startsWith(account.numero) && account.numero.length < code.length)
+      .sort((a, b) => b.numero.length - a.numero.length)[0] || null;
+    if ((inferredParent && !code.startsWith(inferredParent.numero)) || (!inferredParent && selectedParent && !code.startsWith(selectedParent.num_compte))) {
+      const requiredPrefix = inferredParent?.numero || selectedParent?.num_compte;
+      setError(`Le numéro du sous-compte doit commencer par ${requiredPrefix}, le numéro de son compte parent.`);
       return;
     }
 
@@ -257,12 +287,13 @@ export default function AccountForm() {
     if (duplicateAccount) { setSaving(false); setError(`Le numéro ${form.code.trim()} existe déjà. Choisissez le numéro proposé ou saisissez-en un autre.`); return; }
 
     const { error: insertError } = await supabase.from('comptes_comptables').insert({
-      numero: form.code.trim(),
+      numero: code,
       libelle: form.label.trim(),
       classe: form.classe,
       nature: form.nature,
       actif: true,
       compte_parent_id: form.parentId || null,
+      parent_compte_id: inferredParent?.id || null,
       devise: form.devise,
       lettrable: form.lettrable,
       reconciliable: form.reconciliable,
@@ -298,7 +329,7 @@ export default function AccountForm() {
         <div className="form-section precise-section">
           <h2>Identification du compte</h2>
           <ExerciceSelect value={formExerciceId} onChange={(event) => setFormExerciceId(event.target.value)} />
-          <Select label="Compte parent" value={form.parentId} onChange={handleParentChange}>
+          <Select label="Compte de référence OHADA" value={form.parentId} onChange={update('parentId')}>
             <option value="">Aucun</option>
             {parentOptions.map((account) => (
               <option key={account.id} value={account.id}>
@@ -306,10 +337,14 @@ export default function AccountForm() {
               </option>
             ))}
           </Select>
+          <Select label="Compte parent dans le plan de l’entreprise" value={parentAccountId} onChange={handleParentChange}>
+            <option value="">Aucun compte parent (compte racine)</option>
+            {companyAccounts.map((account) => <option key={account.id} value={account.id}>{account.numero} · {account.libelle}</option>)}
+          </Select>
           <div className="grid grid-2">
             <Input
               label="Numéro de sous compte"
-              placeholder={selectedParent ? `Ex: ${selectedParent.num_compte}01` : 'Ex: 411001'}
+              placeholder={`Ex: ${selectedCompanyParent?.numero || selectedParent?.num_compte || '411'}1`}
               required
               value={form.code}
               onChange={handleCodeChange}

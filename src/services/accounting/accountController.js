@@ -36,7 +36,7 @@ export const accountController = {
       const { count: childrenCount, error: childrenError } = await supabase
         .from('comptes_comptables')
         .select('id', { count: 'exact', head: true })
-        .eq('compte_parent_id', account.id);
+        .eq('parent_compte_id', account.id);
 
       if (childrenError) throw childrenError;
 

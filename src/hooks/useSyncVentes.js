@@ -7,7 +7,7 @@ import {
   testApiConnection,
 } from "../services/syncVentesService";
 
-export function useSyncVentes() {
+export function useSyncVentes({ entrepriseId } = {}) {
   const [ventes, setVentes] = useState([]);
   const [logs, setLogs] = useState([]);
   const [lastLog, setLastLog] = useState(null);
@@ -25,7 +25,8 @@ export function useSyncVentes() {
 
   // Chargement des ventes et des logs depuis Supabase
   const loadData = useCallback(async () => {
-    if (!supabase) {
+    if (!supabase || !entrepriseId) {
+      setVentes([]); setLogs([]); setLastLog(null);
       setLoading(false);
       return;
     }
@@ -38,11 +39,13 @@ export function useSyncVentes() {
         supabase
           .from("ventes")
           .select("*")
+          .eq('entreprise_id', entrepriseId)
           .order("date_vente", { ascending: false })
           .limit(150),
         supabase
           .from("sync_logs")
           .select("*")
+          .eq('entreprise_id', entrepriseId)
           .order("started_at", { ascending: false })
           .limit(10),
       ]);
@@ -64,7 +67,7 @@ export function useSyncVentes() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [entrepriseId]);
 
   useEffect(() => {
     loadData();

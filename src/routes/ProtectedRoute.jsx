@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { canAccessRoute } from '../lib/rbac';
 import { ShieldCheck, ShieldAlert, Loader2, LogOut, RefreshCw, CheckCircle2, Clock } from 'lucide-react';
 import '../styles/accessGuard.css';
 
@@ -15,8 +16,8 @@ function BrandHeader() {
   );
 }
 
-export default function ProtectedRoute({ children }) {
-  const { session, profile, roles, companies, loading, accessLoading, accessError, signOut } = useAuth();
+export default function ProtectedRoute({ children, access }) {
+  const { session, profile, roles, companies, loading, accessLoading, accessError, signOut, can, hasRole } = useAuth();
 
   // Écran 1 : Chargement initial de la session
   if (loading) {
@@ -172,6 +173,10 @@ export default function ProtectedRoute({ children }) {
         </div>
       </div>
     );
+  }
+
+  if (!canAccessRoute(access, { can, hasRole })) {
+    return <Navigate to={can('COMPTA_READ') ? '/dashboard' : '/profil'} replace />;
   }
 
   return children;
