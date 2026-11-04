@@ -8,6 +8,7 @@ import { Save } from 'lucide-react';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { useExercice } from '../context/ExerciceContext';
 import ExerciceSelect from './forms/ExerciceSelect';
+import { toast } from '../lib/notifications';
 
 const CATEGORIES = ['Terrains', 'Constructions', 'Matériel et outillage', 'Véhicules', 'Matériel informatique', 'Mobilier'];
 const METHODES = [{ value: 'LINEAIRE', label: 'Linéaire' }, { value: 'DEGRESSIF', label: 'Dégressif' }, { value: 'AUCUNE', label: 'Aucune (non amortissable)' }];
@@ -70,8 +71,9 @@ export default function NewAsset() {
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
 
-    if (createAnother) { setForm(emptyForm()); setNotice('Immobilisation enregistrée. Vous pouvez en créer une autre.'); return; }
+    if (createAnother) { setForm(emptyForm()); setNotice('Immobilisation enregistrée. Vous pouvez en créer une autre.'); toast.success('Immobilisation créée', form.designation); return; }
     setNotice('Immobilisation enregistrée.');
+    toast.success('Immobilisation créée', form.designation);
     window.setTimeout(() => nav('/immobilisations'), 350);
   };
 

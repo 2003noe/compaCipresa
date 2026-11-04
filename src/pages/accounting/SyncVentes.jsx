@@ -3,8 +3,6 @@ import {
   RefreshCw,
   Search,
   Filter,
-  CheckCircle2,
-  AlertTriangle,
   Clock,
   TrendingUp,
   DollarSign,
@@ -22,6 +20,7 @@ import { useAuth } from "../../context/AuthContext";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
+import { toast } from "../../lib/notifications";
 import "./syncVentes.css";
 
 const formatMoney = (val) => Number(val || 0).toLocaleString("fr-FR");
@@ -60,12 +59,11 @@ export default function SyncVentes() {
     apiKey: config.apiKey || "",
   });
 
-  const [notification, setNotification] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState(null);
 
   const showToast = (message, type = "success") => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 5000);
+    if (type === 'error') toast.error('Synchronisation impossible', message);
+    else toast.success('Synchronisation', message);
   };
 
   const handleSaveConfig = (e) => {
@@ -135,18 +133,6 @@ export default function SyncVentes() {
 
   return (
     <div className="page-content sync-ventes-page">
-      {/* Toast de notification */}
-      {notification && (
-        <div className={`sync-toast ${notification.type === "error" ? "error" : "success"}`} role="alert">
-          {notification.type === "error" ? (
-            <AlertTriangle size={18} />
-          ) : (
-            <CheckCircle2 size={18} />
-          )}
-          <span>{notification.message}</span>
-        </div>
-      )}
-
       {/* En-tête de page standardisé et responsive */}
       <div className="page-header">
         <div>

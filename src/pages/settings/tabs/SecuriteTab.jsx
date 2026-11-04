@@ -5,6 +5,7 @@ import Toggle from '../../../components/ui/Toggle';
 import { supabase } from '../../../lib/supabaseClient';
 import { useAuth } from '../../../context/AuthContext';
 import { useTheme } from '../../../context/ThemeContext';
+import { toast } from '../../../lib/notifications';
 
 export default function SecuriteTab() {
   const { session } = useAuth();
@@ -20,8 +21,9 @@ export default function SecuriteTab() {
     setSaving(true);
     const { error: err } = await supabase.auth.updateUser({ password: pwd });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(err.message); toast.error('Mise à jour impossible', err.message); return; }
     setPwd(''); setPwd2(''); setNotice('Mot de passe mis à jour.');
+    toast.success('Mot de passe mis à jour', 'Votre nouveau mot de passe est actif.');
   };
 
   return (

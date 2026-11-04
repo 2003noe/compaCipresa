@@ -11,7 +11,7 @@ import Select from '../../components/ui/Select';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
-import { confirmAction } from '../../lib/notifications';
+import { confirmAction, toast } from '../../lib/notifications';
 import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
@@ -290,9 +290,10 @@ export default function JournalPage() {
       if (err) throw err;
 
       setRowsBrouillons((prev) => prev.filter((r) => r.id !== row.id));
-      setNotice('Écriture supprimée avec succès.');
+      toast.success('Brouillon supprimé', 'L’écriture et ses pièces jointes ont été supprimées.');
     } catch (err) {
       setError(`Erreur lors de la suppression : ${err.message}`);
+      toast.error('Suppression impossible', err.message);
     } finally {
       setDeleting(null);
     }

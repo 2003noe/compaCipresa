@@ -9,6 +9,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import ExerciceSelect from './ExerciceSelect';
 import { useAuth } from '../../context/AuthContext';
+import { toast } from '../../lib/notifications';
 
 const money = (value) => new Intl.NumberFormat('fr-FR').format(value || 0);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -310,7 +311,9 @@ export default function JournalEntryForm() {
 
     setSaving(false);
     setAttachments([]);
-    setNotice(attachmentNotice || (statut === 'VALIDEE' ? `Écriture validée (n° ${numeroDefinitif}).` : 'Écriture enregistrée en brouillon.'));
+    const successMessage = attachmentNotice || (statut === 'VALIDEE' ? `Écriture validée (n° ${numeroDefinitif}).` : 'Écriture enregistrée en brouillon.');
+    setNotice(successMessage);
+    toast.success(statut === 'VALIDEE' ? 'Écriture validée' : 'Brouillon enregistré', successMessage);
     window.setTimeout(() => nav('/journal'), 500);
   };
 

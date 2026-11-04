@@ -133,6 +133,7 @@ export default function ExercicesTab() {
 
     setSaving(false);
     if (result.error) { setError(result.error.message); return; }
+    toast.success(editingId ? 'Exercice modifié' : 'Exercice créé', values.code);
     resetForm();
     await load();
     await reloadExercices();
@@ -190,6 +191,7 @@ export default function ExercicesTab() {
     if (updateError) { setError(updateError.message); return; }
     await load();
     await reloadExercices();
+    toast.success(exercice.statut === 'OUVERT' ? 'Exercice clôturé' : 'Exercice rouvert', exercice.code);
   };
 
   if (loading || accessLoading) return <p className="page-subtitle">Chargement…</p>;

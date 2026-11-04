@@ -5,6 +5,7 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import { toast } from '../../lib/notifications';
 
 export default function Profile() {
   const { session, profile, roles, updateProfile } = useAuth();
@@ -24,9 +25,10 @@ export default function Profile() {
     setSaving(true); setError(''); setNotice('');
     const { data, error: err } = await supabase.from('profiles').update(form).eq('id', session.user.id).select('*').single();
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(err.message); toast.error('Profil non enregistré', err.message); return; }
     updateProfile(data);
     setNotice('Profil mis à jour.');
+    toast.success('Profil mis à jour', 'Vos informations ont été enregistrées.');
   };
 
   const uploadPhoto = async (e) => {
@@ -36,13 +38,14 @@ export default function Profile() {
     const ext = file.name.split('.').pop();
     const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { cacheControl: '3600', upsert: true });
-    if (upErr) { setUploading(false); setError(`Envoi impossible : ${upErr.message}`); return; }
+    if (upErr) { setUploading(false); setError(`Envoi impossible : ${upErr.message}`); toast.error('Envoi impossible', upErr.message); return; }
     const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
     const { data, error: updErr } = await supabase.from('profiles').update({ photo_url: pub.publicUrl }).eq('id', session.user.id).select('*').single();
     setUploading(false);
-    if (updErr) { setError(updErr.message); return; }
+    if (updErr) { setError(updErr.message); toast.error('Photo non enregistrée', updErr.message); return; }
     updateProfile(data);
     setNotice('Photo de profil mise à jour.');
+    toast.success('Photo mise à jour', 'Votre avatar a été enregistré.');
   };
 
   return (

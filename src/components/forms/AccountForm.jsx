@@ -9,6 +9,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import ExerciceSelect from './ExerciceSelect';
+import { toast } from '../../lib/notifications';
 
 const ACCOUNT_CLASSES = [
   'Classe 1 - Ressources durables',
@@ -309,10 +310,12 @@ export default function AccountForm() {
     if (createAnother) {
       setForm(emptyForm());
       setNotice('Compte enregistré. Vous pouvez en créer un autre.');
+      toast.success('Compte créé', `${code} · ${form.label.trim()}`);
       return;
     }
 
     setNotice('Compte enregistré.');
+    toast.success('Compte créé', `${code} · ${form.label.trim()}`);
     window.setTimeout(() => nav('/plan-comptable'), 350);
   };
 

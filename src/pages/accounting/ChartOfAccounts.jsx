@@ -6,6 +6,7 @@ import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { exportChartOfAccountsExcel, ChartOfAccountsPDF, PDFPreviewModal } from '../../lib/generateFile';
 import { accountController } from '../../services/accounting/accountController';
+import { toast } from '../../lib/notifications';
 import './chartOfAccounts.css';
 
 const CLASS_INFO = {
@@ -90,7 +91,6 @@ export default function ChartOfAccounts() {
   const [deleteCheckLoading, setDeleteCheckLoading] = useState(false);
   const [deleteCheckResult, setDeleteCheckResult] = useState(null);
   const [deleteActionLoading, setDeleteActionLoading] = useState(false);
-  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [balances, setBalances] = useState({});
   const [expandedClasses, setExpandedClasses] = useState(() => new Set());
@@ -367,10 +367,9 @@ export default function ChartOfAccounts() {
       }
       return;
     }
-    setDeleteSuccessMessage(result.message);
+    toast.success('Compte supprimé', result.message);
     setAccountToDelete(null);
     setDeleteCheckResult(null);
-    setTimeout(() => setDeleteSuccessMessage(''), 5000);
     await loadAccounts();
   };
 
@@ -384,10 +383,9 @@ export default function ChartOfAccounts() {
       setError(result.error);
       return;
     }
-    setDeleteSuccessMessage(result.message);
+    toast.success('Compte désactivé', result.message);
     setAccountToDelete(null);
     setDeleteCheckResult(null);
-    setTimeout(() => setDeleteSuccessMessage(''), 5000);
     await loadAccounts();
   };
 
@@ -510,12 +508,6 @@ export default function ChartOfAccounts() {
         </div>
       </header>
 
-      {deleteSuccessMessage && (
-        <div className="chart-toast-success" role="status">
-          <CheckCircle2 size={16} />
-          <span>{deleteSuccessMessage}</span>
-        </div>
-      )}
 
       <div className="chart-toolbar">
         <label className="chart-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un numéro, un intitulé…" /></label>

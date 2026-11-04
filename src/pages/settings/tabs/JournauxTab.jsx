@@ -43,6 +43,7 @@ export default function JournauxTab() {
     setSaving(false);
     if (err) { setError(err.message); return; }
     setForm(empty); setEditingId(null); setShowForm(false); load();
+    toast.success(editingId ? 'Journal modifié' : 'Journal créé', `${form.code} · ${form.libelle}`);
   };
 
   const edit = (journal) => { setEditingId(journal.id); setForm({ code: journal.code || '', libelle: journal.libelle || '', type: journal.type || 'OD' }); setShowForm(true); };

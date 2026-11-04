@@ -19,7 +19,6 @@ export default function Configuration() {
   const [rolePermissions, setRolePermissions] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [savingUserId, setSavingUserId] = useState(null);
   const [pendingRoleByUser, setPendingRoleByUser] = useState({});
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -98,13 +97,13 @@ export default function Configuration() {
   useEffect(() => { load(); }, [isAdmin, selectedEntrepriseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rolesForUser = (userId) => userRoles.filter((r) => r.user_id === userId && r.role);
-  const announceSuccess = (message) => { setNotice(message); toast.success(message); };
+  const announceSuccess = (message) => toast.success(message);
 
   const toggleActif = async (user) => {
     const label = user.actif ? 'désactiver' : 'activer';
     if (!await confirmAction({ title: `${label === 'activer' ? 'Activer' : 'Désactiver'} ce compte ?`, text: `Compte de ${user.prenom || 'cet utilisateur'}.`, confirmText: label === 'activer' ? 'Activer le compte' : 'Désactiver le compte', danger: label !== 'activer' })) return;
     setSavingUserId(user.id);
-    setNotice(''); setError('');
+    setError('');
     const { error: updErr } = await supabase.from('profiles').update({ actif: !user.actif }).eq('id', user.id);
     setSavingUserId(null);
     if (updErr) { setError(updErr.message); return; }
@@ -118,7 +117,7 @@ export default function Configuration() {
     const role = allRoles.find((r) => r.id === roleId);
     if (!await confirmAction({ title: 'Attribuer ce rôle ?', text: role?.nom || '', confirmText: 'Attribuer' })) return;
     setSavingUserId(userId);
-    setNotice(''); setError('');
+    setError('');
     const { error: insErr } = await supabase.from('entreprise_utilisateurs').insert({ entreprise_id: selectedEntrepriseId, user_id: userId, role_id: roleId });
     setSavingUserId(null);
     if (insErr) { setError(`Attribution refusée : ${insErr.message}`); return; }
@@ -130,7 +129,7 @@ export default function Configuration() {
   const revokeRole = async (userId, roleId, roleName) => {
     if (!await confirmAction({ title: 'Retirer ce rôle ?', text: roleName, confirmText: 'Retirer le rôle', danger: true })) return;
     setSavingUserId(userId);
-    setNotice(''); setError('');
+    setError('');
     const { error: delErr } = await supabase.from('entreprise_utilisateurs').delete().eq('entreprise_id', selectedEntrepriseId).eq('user_id', userId).eq('role_id', roleId);
     setSavingUserId(null);
     if (delErr) { setError(`Révocation refusée : ${delErr.message}`); return; }
@@ -178,7 +177,7 @@ export default function Configuration() {
 
   const addExistingUser = async () => {
     if (!newMemberEmail.trim() || !newMemberRole) return;
-    setSavingUserId("new"); setError(""); setNotice("");
+    setSavingUserId("new"); setError("");
     const role = allRoles.find((r) => r.code === newMemberRole);
     const { error: addError } = await supabase.rpc("add_user_to_company", {
       p_email: newMemberEmail.trim(),

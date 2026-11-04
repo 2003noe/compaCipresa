@@ -3,6 +3,7 @@ import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
 import { useAuth } from '../../../context/AuthContext';
+import { toast } from '../../../lib/notifications';
 
 const empty = { raison_sociale: '', forme_juridique: '', numero_rccm: '', numero_cc: '', regime_fiscal: '', secteur_activite: '', adresse_postale: '', telephone: '', email_contact: '', plan_comptable_referentiel: '', devise: '', tva_defaut_taux: '' };
 
@@ -39,12 +40,13 @@ export default function EntrepriseTab() {
     }).eq('entreprise_id', selectedEntrepriseId);
     if (!err && form.raison_sociale?.trim()) {
       const { error: companyError } = await supabase.from('entreprises').update({ nom: form.raison_sociale.trim() }).eq('id', selectedEntrepriseId);
-      if (companyError) { setSaving(false); setError(companyError.message); return; }
+      if (companyError) { setSaving(false); setError(companyError.message); toast.error('Enregistrement impossible', companyError.message); return; }
       updateCompanyName(selectedEntrepriseId, form.raison_sociale.trim());
     }
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(err.message); toast.error('Enregistrement impossible', err.message); return; }
     setNotice('Paramètres enregistrés.');
+    toast.success('Paramètres enregistrés', 'Les informations de l’entreprise ont été mises à jour.');
   };
 
   if (loading) return <p className="page-subtitle">Chargement…</p>;

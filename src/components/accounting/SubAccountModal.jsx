@@ -5,6 +5,7 @@ import Input from '../ui/Input';
 import Toggle from '../ui/Toggle';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import { toast } from '../../lib/notifications';
 
 const ACCOUNT_CLASSES = [
   'Classe 1 - Ressources durables',
@@ -126,6 +127,7 @@ export default function SubAccountModal({
       }
 
       setSuccess(`Le sous-compte ${code.trim()} a été créé avec succès.`);
+      toast.success('Sous-compte créé', `${code.trim()} · ${label.trim()}`);
       setLabel('');
       setSoldeDebit('0');
       setSoldeCredit('0');
@@ -136,6 +138,7 @@ export default function SubAccountModal({
       }
     } catch (err) {
       setError(`Erreur lors de la création : ${err.message}`);
+      toast.error('Création impossible', err.message);
     } finally {
       setSaving(false);
     }
