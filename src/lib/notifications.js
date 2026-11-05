@@ -79,10 +79,10 @@ export async function confirmAction({
   return result.isConfirmed;
 }
 
-export async function editPhysicalInventory({ title, etat = '', emplacement = '', observation = '' }) {
+export async function editPhysicalInventory({ title, etat = '', emplacement = '', observation = '', unite = '', quantite_theorique = 0, quantite_reelle = 0, cout_unitaire = 0, valeur_comptable = 0 }) {
   const result = await Swal.fire({
     title,
-    html: '<div class="cipresa-swal-form"><label>État physique<input id="cipresa-inventory-state" class="swal2-input" placeholder="Bon, à réparer, hors service…"></label><label>Emplacement<input id="cipresa-inventory-location" class="swal2-input" placeholder="Ex. Magasin principal"></label><label>Observation<textarea id="cipresa-inventory-note" class="swal2-textarea" placeholder="Ajouter une observation (facultatif)"></textarea></label></div>',
+    html: '<div class="cipresa-swal-form"><label>État physique<input id="cipresa-inventory-state" class="swal2-input" placeholder="Bon, à réparer, hors service…"></label><label>Emplacement<input id="cipresa-inventory-location" class="swal2-input" placeholder="Ex. Magasin principal"></label><label>Unité<input id="cipresa-inventory-unit" class="swal2-input" placeholder="kg, sac, unité…"></label><label>Quantité comptable<input id="cipresa-inventory-expected" class="swal2-input" type="number" min="0" step="0.001" required></label><label>Quantité constatée<input id="cipresa-inventory-actual" class="swal2-input" type="number" min="0" step="0.001" required></label><label>Coût unitaire<input id="cipresa-inventory-cost" class="swal2-input" type="number" min="0" step="0.01" required></label><label>Valeur comptable<input id="cipresa-inventory-book-value" class="swal2-input" type="number" min="0" step="0.01" required></label><label>Observation<textarea id="cipresa-inventory-note" class="swal2-textarea" placeholder="Ajouter une observation (facultatif)"></textarea></label></div>',
     showCancelButton: true,
     reverseButtons: true,
     focusConfirm: false,
@@ -93,13 +93,28 @@ export async function editPhysicalInventory({ title, etat = '', emplacement = ''
     didOpen: () => {
       document.getElementById('cipresa-inventory-state').value = etat;
       document.getElementById('cipresa-inventory-location').value = emplacement;
+      document.getElementById('cipresa-inventory-unit').value = unite;
+      document.getElementById('cipresa-inventory-expected').value = quantite_theorique;
+      document.getElementById('cipresa-inventory-actual').value = quantite_reelle;
+      document.getElementById('cipresa-inventory-cost').value = cout_unitaire;
+      document.getElementById('cipresa-inventory-book-value').value = valeur_comptable;
       document.getElementById('cipresa-inventory-note').value = observation;
     },
-    preConfirm: () => ({
+    preConfirm: () => {
+      const requiredIds = ['cipresa-inventory-expected', 'cipresa-inventory-actual', 'cipresa-inventory-cost', 'cipresa-inventory-book-value'];
+      const invalid = requiredIds.find((id) => !document.getElementById(id).checkValidity());
+      if (invalid) { document.getElementById(invalid).reportValidity(); return false; }
+      return ({
       etat: document.getElementById('cipresa-inventory-state').value.trim(),
       emplacement: document.getElementById('cipresa-inventory-location').value.trim(),
+      unite: document.getElementById('cipresa-inventory-unit').value.trim(),
+      quantite_theorique: Number(document.getElementById('cipresa-inventory-expected').value || 0),
+      quantite_reelle: Number(document.getElementById('cipresa-inventory-actual').value || 0),
+      cout_unitaire: Number(document.getElementById('cipresa-inventory-cost').value || 0),
+      valeur_comptable: Number(document.getElementById('cipresa-inventory-book-value').value || 0),
       observation: document.getElementById('cipresa-inventory-note').value.trim(),
-    }),
+      });
+    },
   });
   return result.isConfirmed ? result.value : null;
 }

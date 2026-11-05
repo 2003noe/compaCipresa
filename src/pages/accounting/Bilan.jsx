@@ -131,67 +131,28 @@ export default function Bilan() {
     setLoadingData(true);
     setNotice('');
 
-    const fetchSoldesFallback = async (ex) => {
-      try {
-        const [accRes, linesRes] = await Promise.all([
-          supabase.from('comptes_comptables').select('id,numero,libelle,classe,nature,solde_ouverture_debit,solde_ouverture_credit').order('numero'),
-          supabase.from('lignes_ecritures')
-            .select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)')
-            .eq('ecritures_comptables.exercice_id', ex.id)
-            .lte('ecritures_comptables.date_ecriture', ex.date_fin)
-            .eq('ecritures_comptables.statut', 'VALIDEE'),
-        ]);
-        if (accRes.error) return { data: null, error: accRes.error };
-
-        const d0 = ex.date_debut || '0001-01-01';
-        const mouv = {};
-        (linesRes.data || []).forEach((l) => {
-          if (!mouv[l.compte_id]) mouv[l.compte_id] = { ant: 0, pdeb: 0, pcre: 0 };
-          const d = Number(l.debit || 0);
-          const c = Number(l.credit || 0);
-          const dt = l.ecritures_comptables?.date_ecriture;
-          if (dt && dt < d0) {
-            mouv[l.compte_id].ant += (d - c);
-          } else {
-            mouv[l.compte_id].pdeb += d;
-            mouv[l.compte_id].pcre += c;
-          }
-        });
-
-        const list = (accRes.data || []).map((acc) => {
-          const ouv = Number(acc.solde_ouverture_debit || 0) - Number(acc.solde_ouverture_credit || 0);
-          const m = mouv[acc.id] || { ant: 0, pdeb: 0, pcre: 0 };
-          const solde_fin = ouv + m.ant + m.pdeb - m.pcre;
-          return {
-            compte_id: acc.id,
-            numero: acc.numero,
-            libelle: acc.libelle,
-            classe: acc.classe,
-            nature: acc.nature,
-            ouverture: ouv,
-            anterieur: m.ant,
-            periode_debit: m.pdeb,
-            periode_credit: m.pcre,
-            solde_fin,
-          };
-        }).filter((k) => k.ouverture !== 0 || k.anterieur !== 0 || k.periode_debit !== 0 || k.periode_credit !== 0);
-
-        return { data: list, error: null };
-      } catch (e) {
-        return { data: null, error: e };
-      }
-    };
-
     const call = async (ex) => {
-      const res = await supabase.rpc('soldes_comptes_exercice', {
-        p_exercice_id: ex.id,
-        p_date_fin: ex.date_fin,
-        p_date_debut: ex.date_debut,
+      const res = await supabase.rpc('get_trial_balance_company_scoped', {
+        p_company_id: selectedEntrepriseId,
+        p_fiscal_year_id: ex.id,
+        p_date_from: ex.date_debut,
+        p_date_to: ex.date_fin,
       });
-      if (res.error && /exercice_id/i.test(res.error.message)) {
-        return fetchSoldesFallback(ex);
-      }
-      return res;
+      return {
+        ...res,
+        data: res.data?.map((row) => ({
+          compte_id: row.account_id,
+          numero: row.account_code,
+          libelle: row.account_name,
+          classe: row.account_class,
+          nature: row.nature,
+          ouverture: Number(row.opening_debit || 0) - Number(row.opening_credit || 0),
+          anterieur: 0,
+          periode_debit: Number(row.period_debit || 0),
+          periode_credit: Number(row.period_credit || 0),
+          solde_fin: Number(row.signed_closing_balance || 0),
+        })) || null,
+      };
     };
 
     Promise.all([call(selected), comparison ? call(comparison) : Promise.resolve({ data: null, error: null })]).then(
@@ -202,7 +163,7 @@ export default function Bilan() {
           const missing = /soldes_comptes|PGRST202|42883/.test(`${err.code} ${err.message}`);
           setNotice(
             missing
-              ? "La fonction SQL « soldes_comptes_exercice » est introuvable : exécutez la migration bilan_soldes_comptes_exercice.sql dans Supabase."
+              ? "La fonction SQL « get_trial_balance_company_scoped » est introuvable : appliquez la migration 20261110_trial_balance_company_scoped.sql dans Supabase."
               : `Impossible de charger le bilan : ${err.message}`,
           );
           setSoldesN(null);
@@ -218,7 +179,7 @@ export default function Bilan() {
     return () => {
       active = false;
     };
-  }, [selected, comparison]);
+  }, [selected, comparison, selectedEntrepriseId]);
 
   const bilanN = useMemo(() => (soldesN ? buildBilan(soldesN) : null), [soldesN]);
   const bilanN1 = useMemo(() => (soldesN1 ? buildBilan(soldesN1) : null), [soldesN1]);

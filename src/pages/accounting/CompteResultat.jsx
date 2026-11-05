@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../../components/ui/Card';
 import { useExercice } from '../../context/ExerciceContext';
+import { useAuth } from '../../context/AuthContext';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
@@ -8,6 +9,7 @@ const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
 
 export default function CompteResultat() {
   const { selectedExerciceId: exerciceId, selectedExercice, loading: exercicesLoading } = useExercice();
+  const { selectedEntrepriseId } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,44 +18,47 @@ export default function CompteResultat() {
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
     if (exercicesLoading) return;
-    if (!exerciceId) { setAccounts([]); setLines([]); setLoading(false); return; }
+    if (!exerciceId || !selectedEntrepriseId) { setAccounts([]); setLines([]); setLoading(false); return; }
     setLoading(true);
     setAccounts([]);
     setLines([]);
     setNotice('');
     let active = true;
 
-    Promise.all([
-      supabase.from('comptes_comptables').select('id,numero,libelle,nature'),
-      supabase.from('lignes_ecritures').select('compte_id,debit,credit,ecritures_comptables!ligne_ecriture_company_fk!inner(exercice_id,date_ecriture,statut)').eq('ecritures_comptables.exercice_id', exerciceId),
-    ]).then(([ac, ln]) => {
+    supabase.rpc('get_trial_balance_company_scoped', {
+      p_company_id: selectedEntrepriseId,
+      p_fiscal_year_id: exerciceId,
+      p_date_from: selectedExercice?.date_debut,
+      p_date_to: selectedExercice?.date_fin,
+    }).then((result) => {
       if (!active) return;
-      if (ac.error || ln.error) {
-        setNotice(`Impossible de charger le compte de résultat : ${(ac.error || ln.error).message}`);
+      if (result.error) {
+        setNotice(`Impossible de charger le compte de résultat : ${result.error.message}`);
         setLoading(false);
         return;
       }
-      setAccounts((ac.data || []).filter((a) => a.nature === 'CHARGE' || a.nature === 'PRODUIT'));
-      setLines((ln.data || []).filter((l) => l.ecritures_comptables?.statut === 'VALIDEE'));
+      const resultRows = (result.data || []).filter((row) => ['CHARGE', 'PRODUIT'].includes(row.nature)).map((row) => ({
+        id: row.account_id,
+        numero: row.account_code,
+        libelle: row.account_name,
+        nature: row.nature,
+        debit: Number(row.period_debit || 0),
+        credit: Number(row.period_credit || 0),
+      }));
+      setAccounts(resultRows);
+      setLines([]);
       setLoading(false);
     });
     return () => { active = false; };
-  }, [exerciceId, exercicesLoading]);
+  }, [exerciceId, exercicesLoading, selectedEntrepriseId, selectedExercice?.date_debut, selectedExercice?.date_fin]);
 
   const selected = selectedExercice;
 
-  const periodNet = (compteId, start, end) => {
-    if (!start || !end) return 0;
-    return lines
-      .filter((l) => l.compte_id === compteId && l.ecritures_comptables.date_ecriture >= start && l.ecritures_comptables.date_ecriture <= end)
-      .reduce((acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0), 0);
-  };
-
   const rows = useMemo(() => accounts.map((a) => {
-    const rawN = periodNet(a.id, selected?.date_debut, selected?.date_fin);
+    const rawN = Number(a.debit || 0) - Number(a.credit || 0);
     const sign = a.nature === 'CHARGE' ? 1 : -1;
     return { ...a, valueN: rawN * sign };
-  }), [accounts, lines, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [accounts, selected]);
 
   const produitsExploit = rows.filter((r) => r.nature === 'PRODUIT' && !r.numero.startsWith('77'));
   const chargesExploit = rows.filter((r) => r.nature === 'CHARGE' && !r.numero.startsWith('67'));

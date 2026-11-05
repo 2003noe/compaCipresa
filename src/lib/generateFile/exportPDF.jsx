@@ -851,10 +851,13 @@ export function TresoreriePDFDocument({
 /* ─── Document PDF : Livre d'Inventaire ────────────────────────────── */
 export function LivreInventairePDFDocument({
   rows = [],
+  statementTotals = null,
+  inventoryItems = [],
   totals = null,
   exercice = null,
   cutoffDate = '',
   devise = 'FCFA',
+  inventoryValidated = false,
   orientation = 'landscape',
   footerText = DEFAULT_FOOTER_TEXT,
 }) {
@@ -865,58 +868,92 @@ export function LivreInventairePDFDocument({
     const n = Math.round(Number(v || 0));
     return n === 0 ? '-' : n.toLocaleString('fr-FR');
   };
+  const fmtQty = (v) => Number(v || 0) === 0 ? '-' : Number(v).toLocaleString('fr-FR', { maximumFractionDigits: 3 });
 
-  const wNum = isPortrait ? '12%' : '10%';
-  const wLib = isPortrait ? '24%' : '26%';
+  const wNum = isPortrait ? '12%' : '9%';
+  const wLib = isPortrait ? '25%' : '25%';
   const wSec = isPortrait ? '16%' : '18%';
-  const wBrut = isPortrait ? '12%' : '12%';
-  const wAmort = isPortrait ? '12%' : '11%';
-  const wNet = isPortrait ? '12%' : '12%';
-  const wPrec = isPortrait ? '12%' : '11%';
-  const wTotLabel = isPortrait ? '52%' : '54%';
+  const wDebit = isPortrait ? '12%' : '12%';
+  const wCredit = isPortrait ? '12%' : '12%';
+  const wNet = isPortrait ? '13%' : '14%';
+  const wAudit = isPortrait ? '10%' : '10%';
+  const sections = new Map();
+  rows.forEach((row) => {
+    const title = row.sectionName || 'Autres comptes';
+    if (!sections.has(title)) sections.set(title, []);
+    sections.get(title).push(row);
+  });
 
   return (
     <Document>
       <Page size="A4" orientation={orientation} style={baseStyles.page}>
         <CipresaBannerHeader
-          title="LIVRE D'INVENTAIRE DU PATRIMOINE"
-          subtitle={`Exercice : ${exCode} — Date d'arrêté : ${dateStr} — Réf. AUDCIF art. 19-20 (OHADA)`}
+          title="LIVRE D'INVENTAIRE — ÉTAT PROVISOIRE"
+          subtitle={`Exercice : ${exCode} — Date de situation : ${dateStr} — ${inventoryValidated ? 'Inventaire physique arrêté' : 'Inventaire physique non arrêté'} — FCFA (XAF) · BEAC`}
         />
+
+        {statementTotals && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {[
+            ['Actif net', statementTotals.actifNet], ['Dettes nettes', statementTotals.dettesTotal],
+            ['Capitaux propres + résultat', statementTotals.capitauxPropres], ['Résultat de la période', statementTotals.resultatNet],
+            ['Écart comptable actif-passif', statementTotals.ecartComptable],
+          ].map(([label, value]) => <View key={label} style={{ width: '19%', padding: 5, backgroundColor: '#f1f5f9', borderRadius: 3 }}>
+            <Text style={{ fontSize: 6, color: '#475569' }}>{label}</Text>
+            <Text style={{ marginTop: 2, fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(value)} {devise}</Text>
+          </View>)}
+        </View>}
 
         <View style={baseStyles.table}>
           <View style={baseStyles.thead}>
             <Text style={[baseStyles.th, { width: wNum }]}>N° Compte</Text>
             <Text style={[baseStyles.th, { width: wLib }]}>Libellé du compte</Text>
             <Text style={[baseStyles.th, { width: wSec }]}>Section OHADA</Text>
-            <Text style={[baseStyles.thRight, { width: wBrut }]}>Valeur Brute</Text>
-            <Text style={[baseStyles.thRight, { width: wAmort }]}>Amort./Dépréc.</Text>
-            <Text style={[baseStyles.thRight, { width: wNet }]}>Valeur Nette</Text>
-            <Text style={[baseStyles.thRight, { width: wPrec }]}>Valeur N-1</Text>
+            <Text style={[baseStyles.thRight, { width: wDebit }]}>Débit clôture</Text>
+            <Text style={[baseStyles.thRight, { width: wCredit }]}>Crédit clôture</Text>
+            <Text style={[baseStyles.thRight, { width: wNet }]}>Solde signé</Text>
+            <Text style={[baseStyles.th, { width: wAudit }]}>Contrôle</Text>
           </View>
 
-          {rows.map((r, i) => (
-            <View key={r.id || r.numero || i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
-              <Text style={[baseStyles.td, { width: wNum, fontFamily: 'Helvetica-Bold' }]}>{r.numero}</Text>
-              <Text style={[baseStyles.td, { width: wLib }]}>{r.libelle}</Text>
-              <Text style={[baseStyles.td, { width: wSec }]}>{r.sectionName || ''}</Text>
-              <Text style={[baseStyles.tdRight, { width: wBrut }]}>{fmt(r.balanceBrute)}</Text>
-              <Text style={[baseStyles.tdRight, { width: wAmort }]}>{fmt(r.amortDeprec)}</Text>
-              <Text style={[baseStyles.tdRight, { width: wNet, fontFamily: 'Helvetica-Bold' }]}>{fmt(r.balanceNette)}</Text>
-              <Text style={[baseStyles.tdRight, { width: wPrec }]}>{r.balancePrecedente ? fmt(r.balancePrecedente) : '-'}</Text>
-            </View>
-          ))}
-
-          {totals && (
-            <View style={baseStyles.totalRow}>
-              <Text style={[baseStyles.totalCell, { width: wTotLabel }]}>TOTAL DU PATRIMOINE INVENTORIÉ</Text>
-              <Text style={[baseStyles.totalCellRight, { width: wBrut }]}>{fmt(totals.brut)}</Text>
-              <Text style={[baseStyles.totalCellRight, { width: wAmort }]}>{fmt(totals.amort)}</Text>
-              <Text style={[baseStyles.totalCellRight, { width: wNet }]}>{fmt(totals.net)}</Text>
-              <Text style={[baseStyles.totalCellRight, { width: wPrec }]}>{totals.prec ? fmt(totals.prec) : '-'}</Text>
-            </View>
-          )}
+          {[...sections.entries()].map(([title, sectionRows]) => {
+            const debit = sectionRows.reduce((sum, row) => sum + Number(row.balanceDebit || 0), 0);
+            const credit = sectionRows.reduce((sum, row) => sum + Number(row.balanceCredit || 0), 0);
+            return <View key={title}>
+              <View style={{ padding: 4, marginTop: 3, backgroundColor: '#e8f3ec' }}><Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#14532d' }}>{title.toLocaleUpperCase('fr-FR')} · {sectionRows.length} compte(s)</Text></View>
+              {sectionRows.map((r, i) => <View key={r.id || r.numero || i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
+                <Text style={[baseStyles.td, { width: wNum, fontFamily: 'Helvetica-Bold' }]}>{r.numero}</Text>
+                <Text style={[baseStyles.td, { width: wLib }]}>{r.libelle}</Text>
+                <Text style={[baseStyles.td, { width: wSec }]}>{r.sectionName || ''}</Text>
+                <Text style={[baseStyles.tdRight, { width: wDebit }]}>{fmt(r.balanceDebit)}</Text>
+                <Text style={[baseStyles.tdRight, { width: wCredit }]}>{fmt(r.balanceCredit)}</Text>
+                <Text style={[baseStyles.tdRight, { width: wNet, fontFamily: 'Helvetica-Bold' }]}>{fmt(r.balanceNette)}</Text>
+                <Text style={[baseStyles.td, { width: wAudit }]}>{r.rpcLineMismatch ? 'Écart GL' : r.hasAnomaly ? 'À vérifier' : 'OK'}</Text>
+              </View>)}
+              <View style={baseStyles.totalRow}>
+                <Text style={[baseStyles.totalCell, { width: '52%' }]}>SOUS-TOTAL · {title}</Text>
+                <Text style={[baseStyles.totalCellRight, { width: wDebit }]}>{fmt(debit)}</Text>
+                <Text style={[baseStyles.totalCellRight, { width: wCredit }]}>{fmt(credit)}</Text>
+                <Text style={[baseStyles.totalCellRight, { width: wNet }]}>{fmt(debit - credit)}</Text>
+                <Text style={[baseStyles.totalCell, { width: wAudit }]} />
+              </View>
+            </View>;
+          })}
         </View>
 
+        <CipresaFooter footerText={footerText} />
+      </Page>
+      <Page size="A4" orientation="landscape" style={baseStyles.page}>
+        <CipresaBannerHeader title={`INVENTAIRE PHYSIQUE — ${inventoryValidated ? 'ARRÊTÉ' : 'ÉTAT PROVISOIRE'}`} subtitle={`Exercice : ${exCode} — Date de situation : ${dateStr} — ${inventoryValidated ? 'Validé' : 'Non validé'} — FCFA (XAF) · BEAC`} />
+        <View style={baseStyles.table}>
+          <View style={baseStyles.thead}>
+            {['Code', 'Désignation', 'Catégorie / emplacement', 'Qté théorique', 'Qté réelle', 'Écart quantité', 'Valeur comptable', 'Valeur constatée', 'Écart valeur'].map((label, index) => <Text key={label} style={[index > 2 ? baseStyles.thRight : baseStyles.th, { width: ['8%','20%','19%','9%','9%','9%','9%','9%','8%'][index] }]}>{label}</Text>)}
+          </View>
+          {inventoryItems.length ? inventoryItems.map((item, index) => <View key={item.id || index} style={index % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
+            <Text style={[baseStyles.td,{width:'8%'}]}>{item.code || '—'}</Text><Text style={[baseStyles.td,{width:'20%'}]}>{item.designation || ''}</Text><Text style={[baseStyles.td,{width:'19%'}]}>{[item.categorie,item.emplacement_physique].filter(Boolean).join(' · ') || '—'}</Text>
+            <Text style={[baseStyles.tdRight,{width:'9%'}]}>{item.recensement_effectue ? `${fmtQty(item.quantite_theorique)} ${item.unite || ''}` : 'Non déterminé'}</Text><Text style={[baseStyles.tdRight,{width:'9%'}]}>{item.recensement_effectue ? `${fmtQty(item.quantite_reelle)} ${item.unite || ''}` : 'Non déterminé'}</Text><Text style={[baseStyles.tdRight,{width:'9%'}]}>{item.recensement_effectue ? `${fmtQty(item.ecart_quantite)} ${item.unite || ''}` : 'Non déterminé'}</Text>
+            <Text style={[baseStyles.tdRight,{width:'9%'}]}>{item.recensement_effectue ? fmt(item.valeur_comptable) : 'Non déterminé'}</Text><Text style={[baseStyles.tdRight,{width:'9%'}]}>{item.recensement_effectue ? fmt(item.valeur_constatee) : 'Non déterminé'}</Text><Text style={[baseStyles.tdRight,{width:'8%'}]}>{item.recensement_effectue ? fmt(item.ecart_valeur) : 'Non déterminé'}</Text>
+          </View>) : <Text style={{ padding: 10, fontSize: 9 }}>Aucun comptage physique détaillé n’a été saisi.</Text>}
+        </View>
+        <Text style={{ marginTop: 8, fontSize: 7, color: '#475569' }}>L’écart d’inventaire physique compare valeur constatée et valeur comptable uniquement pour les lignes recensées. Il est distinct de l’écart comptable actif/passif et ne produit pas d’écriture de régularisation.</Text>
         <CipresaFooter footerText={footerText} />
       </Page>
     </Document>

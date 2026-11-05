@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/inventory-statement.test.js"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.9.0",

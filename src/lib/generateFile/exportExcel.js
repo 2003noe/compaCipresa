@@ -527,10 +527,13 @@ export function exportTresorerieExcel({
  */
 export function exportLivreInventaireExcel({
   rows = [],
+  statementTotals = null,
+  inventoryItems = [],
   totals = null,
   exercice = null,
   cutoffDate = '',
   devise = 'FCFA',
+  inventoryValidated = false,
   filename = 'Livre_Inventaire',
 }) {
   const exCode = exercice?.code || exercice?.annee || '';
@@ -539,46 +542,32 @@ export function exportLivreInventaireExcel({
   const aoa = [
     [COMPANY_NAME],
     [COMPANY_SUBTITLE],
-    ["LIVRE D'INVENTAIRE DU PATRIMOINE (AUDCIF art. 19-20 OHADA)"],
-    [`Exercice : ${exCode} — Date d'arrêté : ${dateStr}`],
+    [`LIVRE D'INVENTAIRE DU PATRIMOINE — ${inventoryValidated ? 'INVENTAIRE PHYSIQUE ARRÊTÉ' : 'ÉTAT PROVISOIRE'} (AUDCIF art. 19-20 OHADA)`],
+    [`Exercice : ${exCode} — Date de situation : ${dateStr} — ${inventoryValidated ? 'Inventaire physique arrêté' : 'Inventaire physique non arrêté'}`],
     [],
-    [
-      'N° Compte',
-      'Libellé du compte',
-      'Section OHADA',
-      `Valeur Brute (${devise})`,
-      `Amort. / Dépréc. (${devise})`,
-      `Valeur Nette N (${devise})`,
-      `Valeur N-1 (${devise})`,
-      `Variation (${devise})`,
-    ],
+    ['N° compte', 'Libellé', 'Rubrique', `Débit clôture (${devise})`, `Crédit clôture (${devise})`, `Solde signé (${devise})`, `Mouvements débit (${devise})`, `Mouvements crédit (${devise})`, 'Lignes validées', 'Contrôle'],
   ];
 
-  rows.forEach((a) => {
-    aoa.push([
-      a.numero || '',
-      a.libelle || '',
-      a.sectionName || '',
-      Number(a.balanceBrute || 0),
-      Number(a.amortDeprec || 0),
-      Number(a.balanceNette || 0),
-      a.balancePrecedente !== undefined && a.balancePrecedente !== null ? Number(a.balancePrecedente) : '',
-      a.variation !== undefined && a.variation !== null ? Number(a.variation) : '',
-    ]);
+  const sectionMap = new Map();
+  rows.forEach((row) => {
+    const name = row.sectionName || 'Autres comptes';
+    if (!sectionMap.has(name)) sectionMap.set(name, []);
+    sectionMap.get(name).push(row);
   });
-
-  if (totals) {
-    aoa.push([
-      'TOTAL',
-      '',
-      '',
-      Number(totals.brut || 0),
-      Number(totals.amort || 0),
-      Number(totals.net || 0),
-      totals.prec !== undefined ? Number(totals.prec) : '',
-      totals.var !== undefined ? Number(totals.var) : '',
-    ]);
-  }
+  sectionMap.forEach((sectionRows, sectionName) => {
+    aoa.push([sectionName.toLocaleUpperCase('fr-FR')]);
+    sectionRows.forEach((account) => aoa.push([
+      account.numero || '', account.libelle || '', sectionName,
+      Number(account.balanceDebit || 0), Number(account.balanceCredit || 0), Number(account.balanceNette || 0),
+      Number(account.periodDebit || 0), Number(account.periodCredit || 0), Number(account.sourceLineCount || 0),
+      account.rpcLineMismatch ? 'Écart Balance / Grand Livre' : account.hasAnomaly ? 'Solde atypique à contrôler' : 'OK',
+    ]));
+    const debit = sectionRows.reduce((sum, account) => sum + Number(account.balanceDebit || 0), 0);
+    const credit = sectionRows.reduce((sum, account) => sum + Number(account.balanceCredit || 0), 0);
+    aoa.push(['SOUS-TOTAL', sectionName, '', debit, credit, debit - credit, '', '', '', '']);
+    aoa.push([]);
+  });
+  aoa.push(['Les comptes parents et sous-comptes sont reportés sur leurs seules lignes de mouvements; aucun solde enfant n’est réadditionné dans un parent.']);
 
   aoa.push([]);
   aoa.push([DEFAULT_FOOTER_TEXT]);
@@ -588,5 +577,30 @@ export function exportLivreInventaireExcel({
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Livre d'inventaire");
+
+  const statementRows = [
+    ['SYNTHÈSE ACTIF / PASSIF', `${exCode}`, dateStr],
+    ['Actif brut débiteur', Number(statementTotals?.actifBrut || 0), devise],
+    ['Comptes correcteurs créditeurs', Number(statementTotals?.actifAmort || 0), devise],
+    ['Actif net signé', Number(statementTotals?.actifNet || 0), devise],
+    ['Dettes nettes (un solde débiteur reste négatif)', Number(statementTotals?.dettesTotal || 0), devise],
+    ['Capitaux propres et résultat', Number(statementTotals?.capitauxPropres || 0), devise],
+    ['Total passif', Number(statementTotals?.passifTotal || 0), devise],
+    ['Écart comptable actif - passif', Number(statementTotals?.ecartComptable || 0), devise],
+    ['Écart inventaire physique', inventoryItems.some((item) => item.recensement_effectue) ? Number(inventoryItems.filter((item) => item.recensement_effectue).reduce((sum, item) => sum + Number(item.ecart_valeur || 0), 0)) : 'Non déterminé', devise],
+    [], ['Résultat net calculé depuis les mouvements validés des classes 6 et 7', Number(statementTotals?.resultatNet || 0), devise],
+    ['Cette synthèse est calculée à la date sélectionnée; elle ne constitue pas une certification d’inventaire arrêté.'],
+  ];
+  const statementWs = XLSX.utils.aoa_to_sheet(statementRows);
+  statementWs['!cols'] = autoFitColumns(statementRows);
+  XLSX.utils.book_append_sheet(wb, statementWs, 'Synthèse états financiers');
+
+  const physicalRows = [
+    ['Code', 'Désignation', 'Catégorie', 'État', 'Emplacement', 'Unité', 'Qté comptable', 'Qté constatée', 'Écart quantité', 'Coût unitaire', 'Valeur comptable', 'Valeur constatée', 'Écart valeur'],
+    ...inventoryItems.map((item) => [item.code || '', item.designation || '', item.categorie || '', item.etat_physique || '', item.emplacement_physique || '', item.unite || '', item.recensement_effectue ? Number(item.quantite_theorique || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.quantite_reelle || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.ecart_quantite || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.cout_unitaire || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.valeur_comptable || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.valeur_constatee || 0) : 'Non déterminé', item.recensement_effectue ? Number(item.ecart_valeur || 0) : 'Non déterminé']),
+  ];
+  const physicalWs = XLSX.utils.aoa_to_sheet(physicalRows);
+  physicalWs['!cols'] = autoFitColumns(physicalRows);
+  XLSX.utils.book_append_sheet(wb, physicalWs, 'Inventaire physique');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
