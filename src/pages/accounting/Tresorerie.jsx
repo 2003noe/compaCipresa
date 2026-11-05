@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, Download } from 'lucide-react';
+import { Printer, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
@@ -9,6 +9,7 @@ import { exportTresorerieExcel, exportTresoreriePDF, TresoreriePDFDocument, PDFP
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const isCaisse = (numero) => (numero || '').startsWith('57');
+const ITEMS_PER_PAGE = 5;
 
 const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
@@ -22,6 +23,7 @@ export default function Tresorerie() {
   const [notice, setNotice] = useState('');
   const [exportingPDF, setExportingPDF] = useState(false);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [accountPage, setAccountPage] = useState(1);
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
@@ -55,6 +57,23 @@ export default function Tresorerie() {
     const mvt = lines.filter((l) => l.compte_id === a.id).reduce((acc, l) => acc + Number(l.debit || 0) - Number(l.credit || 0), 0);
     return { ...a, balance: base + mvt, caisse: isCaisse(a.numero) };
   }), [accounts, lines]);
+
+  // Filtrer uniquement les comptes non nuls (solde != 0)
+  const nonZeroAccounts = useMemo(() => {
+    return accountBalances.filter((a) => Math.abs(Number(a.balance || 0)) > 0.0001);
+  }, [accountBalances]);
+
+  useEffect(() => {
+    setAccountPage(1);
+  }, [exerciceId]);
+
+  const totalAccountPages = Math.max(1, Math.ceil(nonZeroAccounts.length / ITEMS_PER_PAGE));
+  const currentAccountPage = Math.min(accountPage, totalAccountPages);
+
+  const paginatedAccounts = useMemo(() => {
+    const start = (currentAccountPage - 1) * ITEMS_PER_PAGE;
+    return nonZeroAccounts.slice(start, start + ITEMS_PER_PAGE);
+  }, [nonZeroAccounts, currentAccountPage]);
 
   const soldeBanque = accountBalances.filter((a) => !a.caisse).reduce((acc, a) => acc + a.balance, 0);
   const soldeCaisse = accountBalances.filter((a) => a.caisse).reduce((acc, a) => acc + a.balance, 0);
@@ -105,7 +124,7 @@ export default function Tresorerie() {
         soldeBanque,
         soldeCaisse,
         disponibilites,
-        accounts: accountBalances,
+        accounts: nonZeroAccounts,
         movements,
         monthlyFlows,
         exercice: selectedExercice,
@@ -122,7 +141,7 @@ export default function Tresorerie() {
       soldeBanque,
       soldeCaisse,
       disponibilites,
-      accounts: accountBalances,
+      accounts: nonZeroAccounts,
       movements,
       monthlyFlows,
       exercice: selectedExercice,
@@ -141,7 +160,7 @@ export default function Tresorerie() {
             variant="secondary"
             icon={Printer}
             onClick={() => setShowPDFPreview(true)}
-            disabled={loading || accounts.length === 0}
+            disabled={loading || nonZeroAccounts.length === 0}
           >
             Imprimer (PDF)
           </Button>}
@@ -149,7 +168,7 @@ export default function Tresorerie() {
             variant="primary"
             icon={Download}
             onClick={handleExportExcel}
-            disabled={loading || accounts.length === 0}
+            disabled={loading || nonZeroAccounts.length === 0}
           >
             Exporter Excel
           </Button>}
@@ -185,9 +204,16 @@ export default function Tresorerie() {
             </Card>
 
             <Card>
-              <h2 className="bilan-side-title">Comptes de trésorerie</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h2 className="bilan-side-title" style={{ margin: 0 }}>Comptes de trésorerie</h2>
+                {nonZeroAccounts.length > 0 && (
+                  <span className="page-subtitle" style={{ margin: 0 }}>
+                    {nonZeroAccounts.length} compte{nonZeroAccounts.length > 1 ? 's' : ''} non nul{nonZeroAccounts.length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
               <div className="tresor-account-list">
-                {accountBalances.map((a) => (
+                {paginatedAccounts.map((a) => (
                   <div className="tresor-account-row" key={a.id}>
                     <span className={`dot ${a.caisse ? 'warn' : 'ok'}`} />
                     <div className="tresor-account-info">
@@ -197,8 +223,41 @@ export default function Tresorerie() {
                     <strong>{money(a.balance)} FCFA</strong>
                   </div>
                 ))}
-                {accountBalances.length === 0 && <p className="page-subtitle">Aucun compte de trésorerie dans le plan comptable.</p>}
+                {nonZeroAccounts.length === 0 && (
+                  <p className="page-subtitle">Aucun compte de trésorerie avec un solde non nul pour cet exercice.</p>
+                )}
               </div>
+
+              {totalAccountPages > 1 && (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <span className="page-subtitle" style={{ margin: 0 }}>
+                    {(currentAccountPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentAccountPage * ITEMS_PER_PAGE, nonZeroAccounts.length)} sur {nonZeroAccounts.length}
+                  </span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={ChevronLeft}
+                      disabled={currentAccountPage <= 1}
+                      onClick={() => setAccountPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      Précédent
+                    </Button>
+                    <span className="page-subtitle" style={{ margin: 0, fontWeight: 600 }}>
+                      {currentAccountPage} / {totalAccountPages}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={ChevronRight}
+                      disabled={currentAccountPage >= totalAccountPages}
+                      onClick={() => setAccountPage((prev) => Math.min(totalAccountPages, prev + 1))}
+                    >
+                      Suivant
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
 
@@ -238,7 +297,7 @@ export default function Tresorerie() {
               soldeBanque={soldeBanque}
               soldeCaisse={soldeCaisse}
               disponibilites={disponibilites}
-              accounts={accountBalances}
+              accounts={nonZeroAccounts}
               movements={movements}
               monthlyFlows={monthlyFlows}
               exercice={selectedExercice}
