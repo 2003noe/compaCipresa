@@ -93,7 +93,7 @@ Ce document définit la matrice **RBAC (Role-Based Access Control)** de l'applic
 *Opérateur central de la chaîne comptable, garant de la conformité OHADA au quotidien.*
 
 - **Ce qu'il doit pouvoir faire :**
-  - Saisir, importer et corriger les écritures comptables dans tous les journaux auxiliaires (Achats, Ventes, Caisse, Banque, Opérations Diverses).
+  - Saisir, importer, corriger et **valider directement** les écritures comptables dans tous les journaux auxiliaires (Achats, Ventes, Caisse, Banque, Opérations Diverses).
   - Réaliser le lettrage des comptes tiers (clients/fournisseurs) et le rapprochement bancaire (`/tresorerie`).
   - Intégrer les ventes synchronisées vers les écritures comptables définitives (`/sync-ventes`).
   - Gérer le registre des immobilisations et calculer les tableaux d'amortissement (`/immobilisations`).

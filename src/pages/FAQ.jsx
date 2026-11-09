@@ -64,8 +64,8 @@ const QUESTIONS = [
   },
   {
     category: 'Saisie comptable',
-    question: 'Qui peut valider une écriture ?',
-    answer: 'La validation dépend du privilège COMPTA_VALIDATE attribué dans l’entreprise active. La règle de séparation des tâches empêche son créateur de valider sa propre écriture. Le rôle GERANT ou COMPTABLE peut disposer de ce privilège selon les attributions effectives.',
+    question: 'Qui peut valider une écriture et puis-je valider ma propre écriture ?',
+    answer: 'La validation requiert les droits COMPTA_VALIDATE ou COMPTA_CREATE dans l’entreprise active. Le créateur d’une ressource peut désormais valider directement son écriture lors de sa saisie ou depuis les brouillons, sans blocage de séparation des tâches.',
   },
   {
     category: 'Saisie comptable',

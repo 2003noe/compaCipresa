@@ -576,7 +576,7 @@ export default function JournalPage() {
                         >
                           Continuer
                         </Button>}
-                        {canValidate && row.created_by !== profile?.id && <Button size="sm" onClick={async () => { const { error } = await supabase.rpc('valider_ecriture', { p_ecriture_id: row.id }); if (error) setError(error.message); else window.location.reload(); }}>Valider</Button>}
+                        {(canValidate || canCreate) && <Button size="sm" onClick={async () => { const { error } = await supabase.rpc('valider_ecriture', { p_ecriture_id: row.id }); if (error) setError(error.message); else window.location.reload(); }}>Valider</Button>}
                         {canCreate && <Button
                           icon={Trash2}
                           size="sm"

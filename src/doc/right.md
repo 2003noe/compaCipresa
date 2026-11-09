@@ -256,6 +256,13 @@ Pour chaque table isolée par entreprise (`ecritures_comptables`, `lignes_ecritu
 
 *(Pour les tables spécifiques comme `clotures_comptables` ou `exercices_comptables`, les droits de suppression ou de validation requièrent `COMPTA_CLOTURE` ou `CONFIG_COMPANY`).*
 
+### 6.3. Validation Directe par le Créateur de Ressource
+
+Le créateur d'une ressource (notamment une écriture comptable) peut désormais la **valider directement** :
+- Lors de la saisie dans le formulaire via le bouton « Valider directement ».
+- Depuis la liste des brouillons du journal via le bouton « Valider ».
+- La fonction PostgreSQL `valider_ecriture` autorise formellement l'utilisateur si celui-ci possède `COMPTA_VALIDATE` ou s'il est le créateur de l'écriture (`created_by = auth.uid()`) avec `COMPTA_CREATE`.
+
 ---
 
 ## 7. Guide Pratique pour les Évolutions Futures

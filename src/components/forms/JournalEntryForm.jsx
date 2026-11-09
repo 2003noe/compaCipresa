@@ -34,6 +34,7 @@ export default function JournalEntryForm() {
   const nav = useNavigate();
   const { can } = useAuth();
   const canCreate = can('COMPTA_CREATE');
+  const canValidate = can('COMPTA_VALIDATE');
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
   const isEdit = Boolean(editId);
@@ -174,7 +175,8 @@ export default function JournalEntryForm() {
     setError(''); setNotice('');
 
     if (locked) return;
-    if (statut === 'VALIDEE' || (statut === 'BROUILLON' && !canCreate)) {
+    const canSaveAsValidee = canValidate || canCreate;
+    if ((statut === 'VALIDEE' && !canSaveAsValidee) || (statut === 'BROUILLON' && !canCreate)) {
       setError('Votre rôle ne permet pas cette action.');
       return;
     }
@@ -374,8 +376,25 @@ export default function JournalEntryForm() {
             <div className="entry-total-row"><strong>Total général</strong><strong>{money(totals.debit)} FCFA</strong><strong>{money(totals.credit)} FCFA</strong></div>
           </Card>
 
-          <div className="entry-actions">
-            {canCreate && <Button variant="secondary" disabled={saving || locked || exercise?.statut !== 'OUVERT'} onClick={() => save('BROUILLON')}>Enregistrer en brouillon</Button>}
+          <div className="entry-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {canCreate && (
+              <Button
+                variant="secondary"
+                disabled={saving || locked || exercise?.statut !== 'OUVERT'}
+                onClick={() => save('BROUILLON')}
+              >
+                Enregistrer en brouillon
+              </Button>
+            )}
+            {(canValidate || canCreate) && (
+              <Button
+                variant="primary"
+                disabled={saving || locked || exercise?.statut !== 'OUVERT'}
+                onClick={() => save('VALIDEE')}
+              >
+                {saving ? 'Validation…' : 'Valider directement'}
+              </Button>
+            )}
             <button type="button" className="text-button" onClick={() => nav('/journal')}>Annuler</button>
           </div>
           {error && <div className="message error" role="alert">{error}</div>}
