@@ -3492,15 +3492,15 @@
 
 /* Sélecteur d'exercice global (topbar) */
 .topbar-exercice {
-    height: 36px;
+    height: 28px;
     border: 1px solid var(--color-border);
     background: var(--color-surface);
-    border-radius: 8px;
-    padding: 0 10px;
+    border-radius: 6px;
+    padding: 0 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: var(--color-text)
+    gap: 6px;
+    color: var(--color-text);
 }
 
 .topbar-exercice select {
@@ -3508,15 +3508,15 @@
     outline: 0;
     background: transparent;
     color: var(--color-text);
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 500;
     cursor: pointer;
-    max-width: 220px
+    max-width: 190px;
 }
 
 .topbar-exercice select option {
     background: var(--color-surface);
-    color: var(--color-text)
+    color: var(--color-text);
 }
 
 .grid-5 {
