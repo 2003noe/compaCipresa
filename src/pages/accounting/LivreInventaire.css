@@ -18,7 +18,7 @@
 .inventory-account-item { min-width:0; padding:11px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-surface,#fff); }
 .inventory-account-item.has-anomaly { border-color:#dc2626; box-shadow:inset 3px 0 #dc2626; }
 .inventory-account-item header { display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; margin-bottom:9px; align-items:start; }
-.inventory-account-item header strong { padding:3px 6px; border-radius:5px; color:var(--color-primary,#0d9488); background:color-mix(in srgb,var(--color-primary,#0d9488) 9%,var(--color-surface,#fff)); font-size:11px; font-variant-numeric:tabular-nums; }
+.inventory-account-item header strong { padding:3px 6px; border-radius:5px; color:var(--color-primary,#275a43); background:color-mix(in srgb,var(--color-primary,#275a43) 9%,var(--color-surface,#fff)); font-size:11px; font-variant-numeric:tabular-nums; }
 .inventory-account-item header span { min-width:0; color:var(--color-text); font-size:12px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
 .inventory-account-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
 .inventory-account-values > span { min-width:0; padding:6px; border-radius:6px; background:var(--color-surface-subtle,rgba(127,127,127,.07)); color:var(--color-muted); font-size:10px; }

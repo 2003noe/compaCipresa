@@ -11,4 +11,4 @@ export const CHARGE_PREFIX_LABEL = {
 
 export const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
-export const DONUT_COLORS = ['#0d9488', '#14b8a6', '#5eead4', '#99f6e4', '#cbd5e1'];
+export const DONUT_COLORS = ['#275a43', '#3b825e', '#68aa82', '#a7d6ba', '#cbd5e1'];

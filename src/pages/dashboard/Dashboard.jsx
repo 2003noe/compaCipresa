@@ -12,6 +12,8 @@ import { useAuth } from "../../context/AuthContext";
 import { buildBilan } from "../../lib/bilan";
 import { exportToExcel, GenericTablePDF, PDFPreviewModal } from "../../lib/generateFile";
 import Button from "../../components/ui/Button";
+import Modal from "../../components/ui/Modal";
+import Badge from "../../components/ui/Badge";
 import {
   money,
   dateFr,
@@ -47,6 +49,7 @@ function AccountingDashboard() {
   const [profiles, setProfiles] = useState([]);
   const [userRoles, setUserRoles] = useState([]);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   useEffect(() => {
     if (!supabaseConfigured || !selectedExercice || !selectedEntrepriseId) {
@@ -655,9 +658,68 @@ function AccountingDashboard() {
       </div>
 
       <div className="grid dashboard-bottom">
-        <AccountingTable rows={recentRows} onSeeAll={() => nav("/journal")} />
+        <AccountingTable
+          rows={recentRows}
+          onSeeAll={() => nav("/journal")}
+          onRowClick={(row) => setSelectedEntry(row)}
+        />
         <AlertCard items={alerts} />
       </div>
+
+      {selectedEntry && (
+        <Modal
+          isOpen={Boolean(selectedEntry)}
+          onClose={() => setSelectedEntry(null)}
+          title="Détail de l'opération comptable"
+          subtitle={`Pièce N° ${selectedEntry.ref || 'Sans référence'}`}
+          icon={FileText}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSelectedEntry(null)}>
+                Fermer
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setSelectedEntry(null);
+                  nav('/journal');
+                }}
+              >
+                Consulter dans le Journal →
+              </Button>
+            </>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Date d'opération</span>
+              <span className="detail-value">{selectedEntry.date}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Statut</span>
+              <div>
+                <Badge tone={selectedEntry.statusTone}>{selectedEntry.status}</Badge>
+              </div>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Libellé de l'écriture</span>
+              <span className="detail-value">{selectedEntry.description || '—'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Montant Débit</span>
+              <span className="detail-value font-mono" style={{ color: '#047857' }}>
+                {selectedEntry.debit} FCFA
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Montant Crédit</span>
+              <span className="detail-value font-mono" style={{ color: '#b91c1c' }}>
+                {selectedEntry.credit} FCFA
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showPDFPreview && canExport && (
         <PDFPreviewModal

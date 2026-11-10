@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Printer, Download } from 'lucide-react';
+import { Printer, Download, BookOpen } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import Modal from '../../components/ui/Modal';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -77,6 +79,7 @@ export default function GrandLivre() {
   const [exportingPDF, setExportingPDF] = useState(false);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [printDate] = useState(new Date());
+  const [selectedLine, setSelectedLine] = useState(null);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -453,7 +456,13 @@ export default function GrandLivre() {
 
                   {/* Transaction Lines */}
                   {rows.map((r, idx) => (
-                    <tr key={idx} className="sage-gl-entry-row">
+                    <tr
+                      key={idx}
+                      className="sage-gl-entry-row clickable-row"
+                      onClick={() => setSelectedLine({ ...r, account })}
+                      title="Cliquer pour afficher les détails de l'écriture"
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td className="col-date">{r.dateShort}</td>
                       <td className="col-cj">{r.journal}</td>
                       <td className="col-piece">{r.piece}</td>
@@ -534,7 +543,7 @@ export default function GrandLivre() {
         .sage-gl-header-row .company-name {
           font-weight: 700;
           font-size: 16px;
-          color: var(--color-primary, #0d9488);
+          color: var(--color-primary, #275a43);
           width: 30%;
         }
 
@@ -619,7 +628,7 @@ export default function GrandLivre() {
         .sage-gl-account-header-cell {
           font-weight: 700;
           font-size: 14px;
-          color: var(--color-primary-dark, #0f766e);
+          color: var(--color-primary-dark, #1b4332);
           padding: 10px 12px !important;
           border-bottom: 1px solid var(--color-border, #e2e8f0) !important;
         }
@@ -628,7 +637,7 @@ export default function GrandLivre() {
           display: inline-block;
           width: 110px;
           font-weight: 800;
-          color: var(--color-primary, #0d9488);
+          color: var(--color-primary, #275a43);
         }
 
         .sage-gl-account-header-cell .acc-label {
@@ -638,6 +647,11 @@ export default function GrandLivre() {
         .sage-gl-entry-row td {
           padding-top: 6px;
           padding-bottom: 6px;
+          transition: background-color 0.15s ease;
+        }
+
+        .sage-gl-entry-row:hover td {
+          background-color: #edf6f0;
         }
 
         .sage-gl-account-total-row td {
@@ -657,8 +671,8 @@ export default function GrandLivre() {
         .sage-gl-grand-total-row td {
           font-weight: 800;
           font-size: 14px;
-          border-top: 2px solid var(--color-primary, #0d9488) !important;
-          border-bottom: 2px solid var(--color-primary, #0d9488) !important;
+          border-top: 2px solid var(--color-primary, #275a43) !important;
+          border-bottom: 2px solid var(--color-primary, #275a43) !important;
           background-color: #ecfdf5;
           color: #065f46;
           padding: 12px 10px;
@@ -780,6 +794,62 @@ export default function GrandLivre() {
             />
           )}
         />
+      )}
+
+      {selectedLine && (
+        <Modal
+          isOpen={Boolean(selectedLine)}
+          onClose={() => setSelectedLine(null)}
+          title="Détail de l'écriture au Grand Livre"
+          subtitle={`Compte : ${selectedLine.account?.numero} — ${selectedLine.account?.libelle}`}
+          icon={BookOpen}
+          footer={
+            <Button variant="secondary" onClick={() => setSelectedLine(null)}>
+              Fermer
+            </Button>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Date de l'écriture</span>
+              <span className="detail-value">{selectedLine.dateShort || '—'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Code Journal</span>
+              <div><Badge tone="neutral">{selectedLine.journal || '—'}</Badge></div>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">N° de Pièce</span>
+              <span className="detail-value font-mono">{selectedLine.piece || '—'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Lettrage</span>
+              <span className="detail-value font-mono">{selectedLine.lettrage || 'Non lettré'}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Libellé de l'opération</span>
+              <span className="detail-value" style={{ fontWeight: 600 }}>{selectedLine.libelle}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Débit</span>
+              <span className="detail-value font-mono" style={{ fontSize: '15px' }}>
+                {selectedLine.debit ? `${formatMoney(selectedLine.debit)} FCFA` : '—'}
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Crédit</span>
+              <span className="detail-value font-mono" style={{ fontSize: '15px' }}>
+                {selectedLine.credit ? `${formatMoney(selectedLine.credit)} FCFA` : '—'}
+              </span>
+            </div>
+            <div className="detail-item full-width" style={{ background: 'var(--color-primary-light, #eef7f2)', padding: '12px 16px', borderRadius: '8px' }}>
+              <span className="detail-label" style={{ color: 'var(--color-primary-dark, #1b4332)' }}>Solde progressif du compte</span>
+              <span className="detail-value font-mono" style={{ color: 'var(--color-primary, #275a43)', fontSize: '17px', fontWeight: 700 }}>
+                {formatSolde(selectedLine.runningBalance)} FCFA
+              </span>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, Download, ChevronLeft, ChevronRight, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
+import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +26,8 @@ export default function Tresorerie() {
   const [exportingPDF, setExportingPDF] = useState(false);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [accountPage, setAccountPage] = useState(1);
+  const [selectedMovement, setSelectedMovement] = useState(null);
+  const [selectedAccount, setSelectedAccount] = useState(null);
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
@@ -214,7 +218,13 @@ export default function Tresorerie() {
               </div>
               <div className="tresor-account-list">
                 {paginatedAccounts.map((a) => (
-                  <div className="tresor-account-row" key={a.id}>
+                  <div
+                    className="tresor-account-row clickable-row"
+                    key={a.id}
+                    onClick={() => setSelectedAccount(a)}
+                    title="Cliquer pour afficher les détails du compte"
+                    style={{ cursor: 'pointer', transition: 'all 0.18s ease' }}
+                  >
                     <span className={`dot ${a.caisse ? 'warn' : 'ok'}`} />
                     <div className="tresor-account-info">
                       <strong>{a.libelle}</strong>
@@ -268,7 +278,13 @@ export default function Tresorerie() {
                 <thead><tr><th>Date</th><th>Type</th><th>Libellé du mouvement</th><th>Compte</th><th className="text-right">Montant (FCFA)</th></tr></thead>
                 <tbody>
                   {movements.map((m, i) => (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      className="clickable-row"
+                      onClick={() => setSelectedMovement(m)}
+                      title="Cliquer pour afficher les détails de l'opération"
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td>{new Date(m.date).toLocaleDateString('fr-FR')}</td>
                       <td><span className={`badge-pill ${m.type === 'Encaissement' ? 'success' : 'danger'}`}>{m.type}</span></td>
                       <td>{m.libelle}</td>
@@ -281,6 +297,93 @@ export default function Tresorerie() {
               </table>
             </div>
           </Card>
+
+          {/* Modal détail mouvement */}
+          {selectedMovement && (
+            <Modal
+              isOpen={Boolean(selectedMovement)}
+              onClose={() => setSelectedMovement(null)}
+              title="Détail du mouvement de trésorerie"
+              subtitle={`Opération du ${new Date(selectedMovement.date).toLocaleDateString('fr-FR')}`}
+              icon={selectedMovement.type === 'Encaissement' ? ArrowUpRight : ArrowDownRight}
+              footer={
+                <Button variant="secondary" onClick={() => setSelectedMovement(null)}>
+                  Fermer
+                </Button>
+              }
+            >
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <span className="detail-label">Type d'opération</span>
+                  <div>
+                    <Badge tone={selectedMovement.type === 'Encaissement' ? 'success' : 'danger'}>
+                      {selectedMovement.type}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Montant</span>
+                  <span
+                    className="detail-value font-mono"
+                    style={{ color: selectedMovement.montant >= 0 ? '#047857' : '#b91c1c' }}
+                  >
+                    {selectedMovement.montant >= 0 ? '+' : ''}{money(selectedMovement.montant)} FCFA
+                  </span>
+                </div>
+                <div className="detail-item full-width">
+                  <span className="detail-label">Compte de trésorerie</span>
+                  <span className="detail-value">{selectedMovement.compte}</span>
+                </div>
+                <div className="detail-item full-width">
+                  <span className="detail-label">Libellé du mouvement</span>
+                  <span className="detail-value">{selectedMovement.libelle || '—'}</span>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {/* Modal détail compte */}
+          {selectedAccount && (
+            <Modal
+              isOpen={Boolean(selectedAccount)}
+              onClose={() => setSelectedAccount(null)}
+              title="Compte de trésorerie"
+              subtitle={`${selectedAccount.numero} — ${selectedAccount.libelle}`}
+              icon={Wallet}
+              footer={
+                <Button variant="secondary" onClick={() => setSelectedAccount(null)}>
+                  Fermer
+                </Button>
+              }
+            >
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <span className="detail-label">Numéro de compte</span>
+                  <span className="detail-value font-mono">{selectedAccount.numero}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Type de compte</span>
+                  <span className="detail-value">{selectedAccount.caisse ? 'Caisse (espèces)' : 'Banque (bancaire)'}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Solde d'ouverture</span>
+                  <span className="detail-value font-mono">
+                    {money(Number(selectedAccount.solde_ouverture_debit || 0) - Number(selectedAccount.solde_ouverture_credit || 0))} FCFA
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Solde net actuel</span>
+                  <span className="detail-value font-mono" style={{ color: selectedAccount.balance >= 0 ? '#047857' : '#b91c1c' }}>
+                    {money(selectedAccount.balance)} FCFA
+                  </span>
+                </div>
+                <div className="detail-item full-width">
+                  <span className="detail-label">Intitulé complet</span>
+                  <span className="detail-value">{selectedAccount.libelle}</span>
+                </div>
+              </div>
+            </Modal>
+          )}
         </>
       )}
 

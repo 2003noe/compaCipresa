@@ -588,10 +588,16 @@ export default function ChartOfAccounts() {
                     const isDebit = net > 0;
                     const isCredit = net < 0;
                     return <Fragment key={account.id}>
-                      <tr key={account.id} className={`${!account.actif ? 'chart-account-inactive' : ''} ${depth ? 'chart-account-child-row' : ''}`}>
+                      <tr
+                        key={account.id}
+                        className={`clickable-row ${!account.actif ? 'chart-account-inactive' : ''} ${depth ? 'chart-account-child-row' : ''}`}
+                        onClick={() => setDetailAccountId(account.id)}
+                        title="Cliquer pour afficher la fiche du compte"
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td className="chart-account-number">
                           <span className="chart-account-number-wrap" style={{ paddingInlineStart: `${depth * 20}px` }}>
-                            {children.length > 0 ? <button type="button" className="chart-account-tree-toggle" onClick={() => toggleAccount(account.id)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Réduire' : 'Afficher'} les sous-comptes de ${account.numero}`}>{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button> : <span className="chart-account-tree-spacer" />}
+                            {children.length > 0 ? <button type="button" className="chart-account-tree-toggle" onClick={(e) => { e.stopPropagation(); toggleAccount(account.id); }} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Réduire' : 'Afficher'} les sous-comptes de ${account.numero}`}>{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button> : <span className="chart-account-tree-spacer" />}
                             <strong>{account.numero}</strong>
                           </span>
                         </td>
@@ -609,7 +615,7 @@ export default function ChartOfAccounts() {
                         <td className="numeric chart-account-amount-cell">
                           {net === 0 ? <span className="chart-amount is-zero">Équilibré</span> : <span className={`chart-amount ${isDebit ? 'is-debit' : 'is-credit'}`}><strong className="amount-number">{isDebit ? '+' : '−'}{money(Math.abs(net))} FCFA</strong><span className={`amount-tag ${isDebit ? 'tag-debit' : 'tag-credit'}`}>{isDebit ? 'Débit' : 'Crédit'}</span></span>}
                         </td>
-                        <td className="chart-account-action"><span>
+                        <td className="chart-account-action" onClick={(e) => e.stopPropagation()}><span>
                           <button type="button" onClick={() => setDetailAccountId(account.id)} aria-label={`Voir la fiche du compte ${account.numero}`} title="Voir la fiche"><Eye size={14} /></button>
                           {canCreate && <button type="button" onClick={() => navigate(`/nouveau-compte?parentCode=${encodeURIComponent(account.numero)}&parentAccountId=${encodeURIComponent(account.id)}`)} aria-label={`Ajouter un sous-compte à ${account.numero}`} title="Ajouter un sous-compte"><Plus size={14} /></button>}
                           {(canEditBasic || canEditSensitive) && <button type="button" onClick={() => openEditor(account)} aria-label={`Modifier le compte ${account.numero}`} title="Modifier"><Edit3 size={14} /></button>}

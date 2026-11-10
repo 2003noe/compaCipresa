@@ -19,6 +19,7 @@ import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import FinancialTabs from '../../components/accounting/FinancialTabs';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -423,6 +424,8 @@ function AccountingLivreInventaire() {
         </div>
       </div>
 
+      <FinancialTabs />
+
       {notice && (
         <div className="message error no-print" role="alert" style={{ marginBottom: '16px' }}>
           {notice}
@@ -482,9 +485,9 @@ function AccountingLivreInventaire() {
                   gap: '6px',
                   padding: '6px 12px',
                   borderRadius: '6px',
-                  border: isSel ? '1px solid var(--color-primary, #0d9488)' : '1px solid var(--color-border, #e2e8f0)',
-                  backgroundColor: isSel ? 'rgba(13, 148, 136, 0.1)' : 'var(--color-surface, #fff)',
-                  color: isSel ? 'var(--color-primary, #0d9488)' : 'var(--color-text, #334155)',
+                  border: isSel ? '1px solid var(--color-primary, #275a43)' : '1px solid var(--color-border, #e2e8f0)',
+                  backgroundColor: isSel ? 'var(--color-primary-light, #eef7f2)' : 'var(--color-surface, #fff)',
+                  color: isSel ? 'var(--color-primary, #275a43)' : 'var(--color-text, #334155)',
                   fontWeight: isSel ? 600 : 400,
                   fontSize: '12px',
                   cursor: 'pointer',
@@ -520,7 +523,7 @@ function AccountingLivreInventaire() {
 
         <Card>
             <span className="ledger-summary-label">Actif net comptable · provisoire</span>
-          <strong style={{ color: '#0d9488' }}>{money(totals.actifNet)} {devise}</strong>
+          <strong style={{ color: 'var(--color-primary, #275a43)' }}>{money(totals.actifNet)} {devise}</strong>
             <small style={{ color: 'var(--color-muted)' }}>Actif brut + soldes signés des correcteurs et autres comptes d’actif; un crédit n’est pas converti en actif.</small>
         </Card>
 
@@ -620,7 +623,7 @@ function AccountingLivreInventaire() {
                       <td>{asset.date_acquisition ? new Date(asset.date_acquisition).toLocaleDateString('fr-FR') : '—'}</td>
                       <td className="text-right">{money(asset.valeur_brute)}</td>
                       <td className="text-right" style={{ color: '#e11d48' }}>{money(asset.amortCumule)}</td>
-                      <td className="text-right" style={{ fontWeight: 600, color: '#0d9488' }}>{money(asset.vnc)}</td>
+                      <td className="text-right" style={{ fontWeight: 600, color: 'var(--color-primary, #275a43)' }}>{money(asset.vnc)}</td>
                       <td className="text-center">
                         <Badge variant={asset.statut === 'EN_SERVICE' ? 'success' : 'warning'}>
                           {asset.statut || 'En service'}

@@ -8,6 +8,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
+import Modal from '../../components/ui/Modal';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -117,6 +118,7 @@ export default function JournalPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(null);
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   // 1. Référentiels (exercices + journaux) ; exercice ouvert sélectionné par défaut
   useEffect(() => {
@@ -525,7 +527,15 @@ export default function JournalPage() {
                 {renderHead(false)}
                 <tbody>
                   {pageValidees.map((row) => (
-                    <tr key={row.id}>{renderCells(row)}</tr>
+                    <tr
+                      key={row.id}
+                      className="clickable-row"
+                      onClick={() => setSelectedEntry(row)}
+                      title="Cliquer pour afficher le détail de l'écriture"
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {renderCells(row)}
+                    </tr>
                   ))}
                 </tbody>
                 {renderFoot(filteredValidees.length, totalsValidees, false, true)}
@@ -564,9 +574,15 @@ export default function JournalPage() {
                 {renderHead(true)}
                 <tbody>
                   {filteredBrouillons.map((row) => (
-                    <tr key={row.id} style={{ opacity: deleting === row.id ? 0.6 : 1 }}>
+                    <tr
+                      key={row.id}
+                      className="clickable-row"
+                      onClick={() => setSelectedEntry(row)}
+                      title="Cliquer pour afficher le détail"
+                      style={{ opacity: deleting === row.id ? 0.6 : 1, cursor: 'pointer' }}
+                    >
                       {renderCells(row)}
-                      <td style={{ display: 'flex', gap: '8px' }}>
+                      <td style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
                         {canCreate && <Button
                           icon={Edit2}
                           size="sm"
@@ -615,6 +631,75 @@ export default function JournalPage() {
             />
           )}
         />
+      )}
+
+      {selectedEntry && (
+        <Modal
+          isOpen={Boolean(selectedEntry)}
+          onClose={() => setSelectedEntry(null)}
+          title="Fiche d'écriture comptable"
+          subtitle={`Réf : ${selectedEntry.ref} — Journal : ${selectedEntry.journal}`}
+          icon={FileText}
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSelectedEntry(null)}>
+                Fermer
+              </Button>
+              {selectedEntry.status !== 'Validée' && canCreate && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const id = selectedEntry.id;
+                    setSelectedEntry(null);
+                    handleContinuer(id);
+                  }}
+                >
+                  Modifier le brouillon
+                </Button>
+              )}
+            </>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Date d'enregistrement</span>
+              <span className="detail-value">{selectedEntry.date ? new Date(selectedEntry.date).toLocaleDateString('fr-FR') : '—'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Journal comptable</span>
+              <div><Badge tone="neutral">{selectedEntry.journal}</Badge></div>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Référence pièce</span>
+              <span className="detail-value font-mono">{selectedEntry.ref}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Statut</span>
+              <div><Badge tone={selectedEntry.statusTone}>{selectedEntry.status}</Badge></div>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Libellé / Description</span>
+              <span className="detail-value" style={{ fontWeight: 600 }}>{selectedEntry.description}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Montant Débit</span>
+              <span className="detail-value font-mono" style={{ fontSize: '15px' }}>{money(selectedEntry.debitValue)} FCFA</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Montant Crédit</span>
+              <span className="detail-value font-mono" style={{ fontSize: '15px' }}>{money(selectedEntry.creditValue)} FCFA</span>
+            </div>
+            {selectedEntry.pieces && selectedEntry.pieces.length > 0 && (
+              <div className="detail-item full-width">
+                <span className="detail-label">Pièces justificatives ({selectedEntry.pieces.length})</span>
+                <div style={{ marginTop: '8px' }}>
+                  <PiecesCell pieces={selectedEntry.pieces} urls={pieceUrls} />
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

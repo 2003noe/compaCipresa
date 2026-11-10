@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Activity, ArrowUpRight, Building2, RefreshCw, Users, UserCheck } from 'lucide-react';
+import { Activity, ArrowUpRight, Building2, RefreshCw, Users, UserCheck, ShieldCheck, Clock } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -21,6 +24,8 @@ export default function CompanyAnalytics() {
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [managingCompanyId, setManagingCompanyId] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedCompany, setSelectedCompany] = useState(null);
 
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -180,10 +185,24 @@ export default function CompanyAnalytics() {
               const active = Number(company.utilisateurs_actifs || 0);
               const pct = users ? Math.round((active / users) * 100) : 0;
               return (
-                <article className="company-stat-row" key={company.entreprise_id}>
+                <article
+                  className="company-stat-row clickable-row"
+                  key={company.entreprise_id}
+                  onClick={() => setSelectedCompany(company)}
+                  title="Cliquer pour afficher la fiche de l'entreprise"
+                  style={{ cursor: 'pointer' }}
+                >
                   <div className="company-stat-title">
                     <div><strong>{company.entreprise_nom}</strong><span>{users} utilisateur{users > 1 ? 's' : ''}</span></div>
-                    <button type="button" className="manage-company-users" disabled={managingCompanyId === company.entreprise_id} onClick={() => manageCompanyUsers(company.entreprise_id)}>
+                    <button
+                      type="button"
+                      className="manage-company-users"
+                      disabled={managingCompanyId === company.entreprise_id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        manageCompanyUsers(company.entreprise_id);
+                      }}
+                    >
                       <Users size={14} /> {managingCompanyId === company.entreprise_id ? 'Ouverture…' : 'Gérer les utilisateurs'} <ArrowUpRight size={14} />
                     </button>
                   </div>
@@ -216,9 +235,15 @@ export default function CompanyAnalytics() {
             <table className="activity-table">
               <thead><tr><th>Heure</th><th>Entreprise</th><th>Utilisateur</th><th>Événement</th><th>Détail</th></tr></thead>
               <tbody>{events.map((event) => (
-                <tr key={event.event_id}>
+                <tr
+                  key={event.event_id}
+                  className="clickable-row"
+                  onClick={() => setSelectedEvent(event)}
+                  title="Cliquer pour afficher le détail de l'événement"
+                  style={{ cursor: 'pointer' }}
+                >
                   <td>{formatDate(event.created_at)}</td>
-                  <td>{event.entreprise_nom}</td>
+                  <td><strong>{event.entreprise_nom}</strong></td>
                   <td>{event.utilisateur}</td>
                   <td><span className={`activity-category ${event.categorie === 'VISITE' ? 'visit' : event.categorie === 'ACCÈS' ? 'access' : 'accounting'}`}>{event.categorie}</span> {event.libelle}</td>
                   <td>{event.detail ? <code>{event.detail}</code> : '—'}</td>
@@ -228,6 +253,123 @@ export default function CompanyAnalytics() {
           </div>
         )}
       </Card>
+
+      {/* Modal Détail Événement */}
+      {selectedEvent && (
+        <Modal
+          isOpen={Boolean(selectedEvent)}
+          onClose={() => setSelectedEvent(null)}
+          title="Détail de l'événement d'activité"
+          subtitle={`${selectedEvent.categorie} — ${selectedEvent.libelle}`}
+          icon={Activity}
+          footer={
+            <Button variant="secondary" onClick={() => setSelectedEvent(null)}>
+              Fermer
+            </Button>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Date &amp; Heure</span>
+              <span className="detail-value font-mono">{formatDate(selectedEvent.created_at)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Catégorie</span>
+              <div>
+                <Badge tone={selectedEvent.categorie === 'VISITE' ? 'info' : selectedEvent.categorie === 'ACCÈS' ? 'warning' : 'success'}>
+                  {selectedEvent.categorie}
+                </Badge>
+              </div>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Entreprise</span>
+              <span className="detail-value">{selectedEvent.entreprise_nom}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Utilisateur</span>
+              <span className="detail-value">{selectedEvent.utilisateur}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Libellé de l'action</span>
+              <span className="detail-value" style={{ fontWeight: 600 }}>{selectedEvent.libelle}</span>
+            </div>
+            {selectedEvent.detail && (
+              <div className="detail-item full-width">
+                <span className="detail-label">Données techniques associées</span>
+                <pre style={{
+                  background: 'var(--color-neutral-bg, #f8fafc)',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  fontFamily: 'monospace',
+                  margin: 0
+                }}>
+                  {selectedEvent.detail}
+                </pre>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Détail Entreprise */}
+      {selectedCompany && (
+        <Modal
+          isOpen={Boolean(selectedCompany)}
+          onClose={() => setSelectedCompany(null)}
+          title="Fiche d'entreprise"
+          subtitle={selectedCompany.entreprise_nom}
+          icon={Building2}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSelectedCompany(null)}>
+                Fermer
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const compId = selectedCompany.entreprise_id;
+                  setSelectedCompany(null);
+                  manageCompanyUsers(compId);
+                }}
+              >
+                Gérer les accès
+              </Button>
+            </>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item full-width">
+              <span className="detail-label">Raison sociale</span>
+              <span className="detail-value" style={{ fontSize: '16px', fontWeight: 700 }}>
+                {selectedCompany.entreprise_nom}
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Utilisateurs au total</span>
+              <span className="detail-value font-mono">{selectedCompany.utilisateurs}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Utilisateurs actifs</span>
+              <span className="detail-value font-mono" style={{ color: 'var(--color-primary, #275a43)', fontWeight: 700 }}>
+                {selectedCompany.utilisateurs_actifs}
+              </span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Rôles configurés</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                {(selectedCompany.roles || []).map((role) => (
+                  <Badge key={role.code} tone="neutral">
+                    {role.nom} : {role.utilisateurs}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

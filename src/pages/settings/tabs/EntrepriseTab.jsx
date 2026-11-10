@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Building2, Plus, X } from 'lucide-react';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
+import Badge from '../../../components/ui/Badge';
+import Modal from '../../../components/ui/Modal';
 import { supabase, supabaseConfigured } from '../../../lib/supabaseClient';
 import { useAuth } from '../../../context/AuthContext';
 import { toast } from '../../../lib/notifications';
@@ -215,9 +217,9 @@ export default function EntrepriseTab() {
           </div>
           {selectedEntreprise && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-end', paddingBottom: 4 }}>
-              <span className="badge-pill success" style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>
+              <Badge tone="success" style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600 }}>
                 Entreprise active : {selectedEntreprise.nom}
-              </span>
+              </Badge>
             </div>
           )}
         </div>
@@ -279,66 +281,58 @@ export default function EntrepriseTab() {
         </>
       )}
 
-      {/* Boîte de dialogue de création d'entreprise */}
-      {companyFormOpen && (
-        <div
-          className="company-dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !creatingCompany) setCompanyFormOpen(false);
-          }}
-        >
-          <section className="company-dialog" role="dialog" aria-modal="true" aria-labelledby="company-dialog-title">
-            <header>
-              <div>
-                <Building2 size={19} />
-                <h2 id="company-dialog-title">Créer une entreprise</h2>
-              </div>
-              <button
-                type="button"
-                aria-label="Fermer"
-                onClick={() => setCompanyFormOpen(false)}
-                disabled={creatingCompany}
-              >
-                <X size={18} />
-              </button>
-            </header>
-            <p>
-              Vous deviendrez administrateur de cette entreprise. Ses comptes, exercices et écritures seront séparés des autres entreprises.
-            </p>
-            <form onSubmit={handleCreateCompany}>
-              <label htmlFor="new-company-name">Nom de l’entreprise</label>
-              <input
-                id="new-company-name"
-                autoFocus
-                required
-                minLength={2}
-                maxLength={120}
-                value={companyName}
-                onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Ex. CIPRESA SARL"
-              />
-              {companyError && <p className="company-dialog-error" role="alert">{companyError}</p>}
-              <footer>
-                <button
-                  type="button"
-                  className="company-dialog-cancel"
-                  onClick={() => setCompanyFormOpen(false)}
-                  disabled={creatingCompany}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingCompany || companyName.trim().length < 2}
-                >
-                  {creatingCompany ? "Création…" : "Créer et ouvrir"}
-                </button>
-              </footer>
-            </form>
-          </section>
-        </div>
-      )}
+      {/* Boîte de dialogue de création d'entreprise via le composant Modal standard */}
+      <Modal
+        isOpen={companyFormOpen}
+        onClose={() => !creatingCompany && setCompanyFormOpen(false)}
+        title="Créer une entreprise"
+        subtitle="Vous deviendrez administrateur de cette nouvelle entité"
+        icon={Building2}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setCompanyFormOpen(false)}
+              disabled={creatingCompany}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleCreateCompany}
+              disabled={creatingCompany || companyName.trim().length < 2}
+            >
+              {creatingCompany ? 'Création…' : 'Créer et ouvrir'}
+            </Button>
+          </>
+        }
+      >
+        <p style={{ color: 'var(--color-muted)', fontSize: 13, marginBottom: 16 }}>
+          Ses comptes, exercices et écritures seront totalement isolés des autres entreprises.
+        </p>
+        <form onSubmit={handleCreateCompany}>
+          <label
+            htmlFor="new-company-name"
+            className="field-label"
+            style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}
+          >
+            Nom de l’entreprise
+          </label>
+          <input
+            id="new-company-name"
+            className="input"
+            autoFocus
+            required
+            minLength={2}
+            maxLength={120}
+            value={companyName}
+            onChange={(event) => setCompanyName(event.target.value)}
+            placeholder="Ex. CIPRESA SARL"
+            style={{ width: '100%', height: 42, padding: '0 12px' }}
+          />
+          {companyError && <p className="company-dialog-error" role="alert" style={{ color: '#e11d48', fontSize: 12, marginTop: 8 }}>{companyError}</p>}
+        </form>
+      </Modal>
     </div>
   );
 }

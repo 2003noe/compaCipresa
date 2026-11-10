@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
-import { Printer, Download } from 'lucide-react';
+import { Printer, Download, BookOpen } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
+import FinancialTabs from '../../components/accounting/FinancialTabs';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +30,7 @@ export default function Balance() {
   const [notice, setNotice] = useState('');
   const [exportingPDF, setExportingPDF] = useState(false);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [companyName, setCompanyName] = useState('CIPRESA SARL');
 
   useEffect(() => {
@@ -183,6 +186,8 @@ export default function Balance() {
         </div>
       </div>
 
+      <FinancialTabs />
+
       <Card className="ledger-toolbar no-print">
         <div className="field"><span className="field-label">Exercice actif</span><div className="input" aria-live="polite">{selectedExercice?.code || (exercicesLoading ? 'Chargement…' : 'Aucun exercice')}</div></div>
         <Select label="Filtrer" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
@@ -243,17 +248,32 @@ export default function Balance() {
               <tbody>
                 {groups.map(([classe, list]) => (
                   <Fragment key={classe}>
-                    <tr className="balance-class-row" key={`h-${classe}`}><td colSpan={8}>{classe}</td></tr>
+                    <tr className="balance-class-row table-category-pill" key={`h-${classe}`}><td colSpan={8}>{classe}</td></tr>
                     {list.map((r) => (
-                      <tr key={r.id}>
-                        <td className="account-cell"><button type="button" className="report-account-link" title="Ouvrir le grand livre de ce compte" onClick={() => navigate(`/grand-livre?compte=${encodeURIComponent(r.id)}`)}>{r.numero}</button></td>
+                      <tr
+                        key={r.id}
+                        className="clickable-row"
+                        onClick={() => setSelectedAccount(r)}
+                        title="Cliquer pour afficher les détails du compte"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td className="account-cell" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="report-account-link"
+                            title="Ouvrir le grand livre de ce compte"
+                            onClick={() => navigate(`/grand-livre?compte=${encodeURIComponent(r.id)}`)}
+                          >
+                            {r.numero}
+                          </button>
+                        </td>
                         <td>{r.libelle}</td>
-                        <td className="text-right">{dash(r.openingDebit)}</td>
-                        <td className="text-right">{dash(r.openingCredit)}</td>
-                        <td className="text-right">{money(r.mvtDebit)}</td>
-                        <td className="text-right">{money(r.mvtCredit)}</td>
-                        <td className="text-right">{dash(r.closingDebit)}</td>
-                        <td className="text-right">{dash(r.closingCredit)}</td>
+                        <td className="text-right font-mono">{dash(r.openingDebit)}</td>
+                        <td className="text-right font-mono">{dash(r.openingCredit)}</td>
+                        <td className="text-right font-mono">{money(r.mvtDebit)}</td>
+                        <td className="text-right font-mono">{money(r.mvtCredit)}</td>
+                        <td className="text-right font-mono">{dash(r.closingDebit)}</td>
+                        <td className="text-right font-mono">{dash(r.closingCredit)}</td>
                       </tr>
                     ))}
                     <tr className="balance-subtotal-row" key={`s-${classe}`}>
@@ -303,6 +323,81 @@ export default function Balance() {
           tr { page-break-inside: avoid !important; }
         }
       `}</style>
+
+      {/* Modal détail compte */}
+      {selectedAccount && (
+        <Modal
+          isOpen={Boolean(selectedAccount)}
+          onClose={() => setSelectedAccount(null)}
+          title="Fiche du compte comptable"
+          subtitle={`${selectedAccount.numero} — ${selectedAccount.libelle}`}
+          icon={BookOpen}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSelectedAccount(null)}>
+                Fermer
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const id = selectedAccount.id;
+                  setSelectedAccount(null);
+                  navigate(`/grand-livre?compte=${encodeURIComponent(id)}`);
+                }}
+              >
+                Voir dans le Grand Livre →
+              </Button>
+            </>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Numéro de compte</span>
+              <span className="detail-value font-mono">{selectedAccount.numero}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Classe</span>
+              <span className="detail-value">{selectedAccount.classe || '—'}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Intitulé du compte</span>
+              <span className="detail-value">{selectedAccount.libelle}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Solde d'ouverture Débit</span>
+              <span className="detail-value font-mono">{dash(selectedAccount.openingDebit)} FCFA</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Solde d'ouverture Crédit</span>
+              <span className="detail-value font-mono">{dash(selectedAccount.openingCredit)} FCFA</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Mouvements Débit (période)</span>
+              <span className="detail-value font-mono" style={{ color: '#047857' }}>
+                {money(selectedAccount.mvtDebit)} FCFA
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Mouvements Crédit (période)</span>
+              <span className="detail-value font-mono" style={{ color: '#b91c1c' }}>
+                {money(selectedAccount.mvtCredit)} FCFA
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Solde final Débit</span>
+              <span className="detail-value font-mono" style={{ color: '#047857' }}>
+                {dash(selectedAccount.closingDebit)} FCFA
+              </span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Solde final Crédit</span>
+              <span className="detail-value font-mono" style={{ color: '#b91c1c' }}>
+                {dash(selectedAccount.closingCredit)} FCFA
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showPDFPreview && canExport && (
         <PDFPreviewModal

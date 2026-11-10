@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
+import FinancialTabs from '../../components/accounting/FinancialTabs';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
@@ -90,6 +92,7 @@ export default function CompteResultat() {
   const [hideZero, setHideZero] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
 
   // Charger les paramètres entreprise
   useEffect(() => {
@@ -399,6 +402,8 @@ export default function CompteResultat() {
         </div>
       </div>
 
+      <FinancialTabs />
+
       {notice && (
         <div className="message error" role="alert">
           {notice}
@@ -534,7 +539,13 @@ export default function CompteResultat() {
                           </thead>
                           <tbody>
                             {group.items.map((item) => (
-                              <tr key={item.id}>
+                              <tr
+                                key={item.id}
+                                className="clickable-row"
+                                onClick={() => setSelectedRow(item)}
+                                title="Cliquer pour afficher les détails du compte"
+                                style={{ cursor: 'pointer' }}
+                              >
                                 <td className="cr-account-code">{item.numero}</td>
                                 <td>{item.libelle}</td>
                                 <td className="text-right font-mono">{fmt(item.value)}</td>
@@ -609,7 +620,13 @@ export default function CompteResultat() {
                           </thead>
                           <tbody>
                             {group.items.map((item) => (
-                              <tr key={item.id}>
+                              <tr
+                                key={item.id}
+                                className="clickable-row"
+                                onClick={() => setSelectedRow(item)}
+                                title="Cliquer pour afficher les détails du compte"
+                                style={{ cursor: 'pointer' }}
+                              >
                                 <td className="cr-account-code">{item.numero}</td>
                                 <td>{item.libelle}</td>
                                 <td className="text-right font-mono">{fmt(item.value)}</td>
@@ -693,6 +710,59 @@ export default function CompteResultat() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal détail compte de gestion */}
+      {selectedRow && (
+        <Modal
+          isOpen={Boolean(selectedRow)}
+          onClose={() => setSelectedRow(null)}
+          title="Fiche du compte de gestion"
+          subtitle={`${selectedRow.numero} — ${selectedRow.libelle}`}
+          icon={FileText}
+          footer={
+            <Button variant="secondary" onClick={() => setSelectedRow(null)}>
+              Fermer
+            </Button>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Numéro de compte</span>
+              <span className="detail-value font-mono">{selectedRow.numero}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Catégorie</span>
+              <span className="detail-value">{selectedRow.groupLabel}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Libellé complet</span>
+              <span className="detail-value">{selectedRow.libelle}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Total Débit de l'exercice</span>
+              <span className="detail-value font-mono">{money(selectedRow.debit)} {devise}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Total Crédit de l'exercice</span>
+              <span className="detail-value font-mono">{money(selectedRow.credit)} {devise}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">
+                Solde net calculé ({selectedRow.side === 'CHARGE' ? 'Charge' : 'Produit'})
+              </span>
+              <span
+                className="detail-value font-mono"
+                style={{
+                  color: selectedRow.side === 'CHARGE' ? '#be123c' : '#047857',
+                  fontSize: '16px',
+                }}
+              >
+                {fmt(selectedRow.value)} {devise}
+              </span>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* 6. Aperçu PDF */}

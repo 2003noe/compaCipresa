@@ -13,6 +13,7 @@ import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
+import FinancialTabs from '../../components/accounting/FinancialTabs';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
 import { exportBilanExcel, exportBilanPDF, BilanPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
@@ -437,6 +438,8 @@ export default function Bilan() {
           </Button>}
         </div>
       </div>
+
+      <FinancialTabs />
 
       {/* 2. Barre d'outils et sélecteurs dans une Card dédiée */}
       <Card className="bilan-toolbar ledger-toolbar no-print">

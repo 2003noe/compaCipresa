@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Search } from 'lucide-react';
+import { Plus, RefreshCw, Search, Building2 } from 'lucide-react';
 import Card from './ui/Card';
 import Button from './ui/Button';
+import Badge from './ui/Badge';
+import Modal from './ui/Modal';
 import { supabase, supabaseConfigured } from '../lib/supabaseClient';
 import { computeDepreciation } from '../lib/depreciation';
 import { useExercice } from '../context/ExerciceContext';
@@ -26,6 +28,7 @@ export default function Immobilisations() {
   const [categorie, setCategorie] = useState('Tout');
   const [statut, setStatut] = useState('Tout');
   const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedAsset, setSelectedAsset] = useState(null);
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
@@ -132,17 +135,23 @@ export default function Immobilisations() {
             </thead>
             <tbody>
               {filtered.map((a) => (
-                <tr key={a.id}>
+                <tr
+                  key={a.id}
+                  className="clickable-row"
+                  onClick={() => setSelectedAsset(a)}
+                  title="Cliquer pour afficher les détails de l'immobilisation"
+                  style={{ cursor: 'pointer' }}
+                >
                   <td className="account-cell">{a.code}</td>
                   <td>{a.designation}</td>
                   <td>{a.categorie}</td>
                   <td>{new Date(a.date_acquisition).toLocaleDateString('fr-FR')}</td>
-                  <td className="text-right">{money(a.valeur_brute)}</td>
+                  <td className="text-right font-mono">{money(a.valeur_brute)}</td>
                   <td>{a.duree_annees ? `${a.duree_annees} ans` : '-'}</td>
                   <td>{METHODE_LABEL[a.methode]}</td>
-                  <td className="text-right">{money(a.amortCumule)}</td>
-                  <td className="text-right"><strong>{money(a.vnc)}</strong></td>
-                  <td><span className={`badge-pill ${a.statut === 'EN_SERVICE' ? 'success' : 'danger'}`}>{STATUT_LABEL[a.statut]}</span></td>
+                  <td className="text-right font-mono">{money(a.amortCumule)}</td>
+                  <td className="text-right font-mono"><strong>{money(a.vnc)}</strong></td>
+                  <td><Badge tone={a.statut === 'EN_SERVICE' ? 'success' : 'danger'}>{STATUT_LABEL[a.statut]}</Badge></td>
                 </tr>
               ))}
               {filtered.length === 0 && <tr><td colSpan={10}>Aucune immobilisation ne correspond à ces filtres.</td></tr>}
@@ -150,6 +159,71 @@ export default function Immobilisations() {
           </table>
         </div>
       </Card>
+
+      {selectedAsset && (
+        <Modal
+          isOpen={Boolean(selectedAsset)}
+          onClose={() => setSelectedAsset(null)}
+          title="Fiche d'immobilisation"
+          subtitle={`${selectedAsset.code} — ${selectedAsset.designation}`}
+          icon={Building2}
+          size="lg"
+          footer={
+            <Button variant="secondary" onClick={() => setSelectedAsset(null)}>
+              Fermer
+            </Button>
+          }
+        >
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">Code actif</span>
+              <span className="detail-value font-mono">{selectedAsset.code}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Catégorie</span>
+              <span className="detail-value">{selectedAsset.categorie}</span>
+            </div>
+            <div className="detail-item full-width">
+              <span className="detail-label">Désignation du bien</span>
+              <span className="detail-value" style={{ fontWeight: 600 }}>{selectedAsset.designation}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Date d'acquisition</span>
+              <span className="detail-value">{new Date(selectedAsset.date_acquisition).toLocaleDateString('fr-FR')}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Méthode d'amortissement</span>
+              <span className="detail-value">{METHODE_LABEL[selectedAsset.methode] || selectedAsset.methode}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Durée d'amortissement</span>
+              <span className="detail-value">{selectedAsset.duree_annees ? `${selectedAsset.duree_annees} ans` : '—'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Statut comptable</span>
+              <div>
+                <Badge tone={selectedAsset.statut === 'EN_SERVICE' ? 'success' : 'danger'}>
+                  {STATUT_LABEL[selectedAsset.statut] || selectedAsset.statut}
+                </Badge>
+              </div>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Valeur d'origine (brute)</span>
+              <span className="detail-value font-mono" style={{ fontSize: '15px' }}>{money(selectedAsset.valeur_brute)} FCFA</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Amortissements cumulés</span>
+              <span className="detail-value font-mono" style={{ color: '#b91c1c' }}>{money(selectedAsset.amortCumule)} FCFA</span>
+            </div>
+            <div className="detail-item full-width" style={{ background: 'var(--color-primary-light, #eef7f2)', padding: '12px 16px', borderRadius: '8px' }}>
+              <span className="detail-label" style={{ color: 'var(--color-primary-dark, #1b4332)' }}>Valeur Nette Comptable (VNC)</span>
+              <span className="detail-value font-mono" style={{ color: 'var(--color-primary, #275a43)', fontSize: '18px', fontWeight: 700 }}>
+                {money(selectedAsset.vnc)} FCFA
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
