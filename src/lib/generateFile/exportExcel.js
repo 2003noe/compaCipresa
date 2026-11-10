@@ -604,3 +604,72 @@ export function exportLivreInventaireExcel({
   XLSX.utils.book_append_sheet(wb, physicalWs, 'Inventaire physique');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+
+/**
+ * Export Excel dédié au Compte de Résultat (SYSCOHADA)
+ */
+export function exportCompteResultatExcel({
+  chargesGroups = [],
+  produitsGroups = [],
+  totalCharges = 0,
+  totalProduits = 0,
+  resultatNet = 0,
+  exercice = null,
+  filename = 'Compte_de_Resultat',
+}) {
+  const exCode = exercice?.code || exercice?.annee || '';
+  const dateStr = new Date().toLocaleDateString('fr-FR');
+
+  const aoa = [
+    [COMPANY_NAME],
+    [COMPANY_SUBTITLE],
+    ['COMPTE DE RÉSULTAT (SYSCOHADA)'],
+    [`Exercice : ${exCode} — Date : ${dateStr}`],
+    [],
+  ];
+
+  // 1. CHARGES
+  aoa.push(['--- CHARGES ---', '', '']);
+  aoa.push(['N° Compte', 'Libellé des comptes', 'Montant (FCFA)']);
+  chargesGroups.forEach((g) => {
+    aoa.push([g.label.toUpperCase(), '', '']);
+    (g.items || []).forEach((item) => {
+      aoa.push([item.numero || '', item.libelle || '', Number(item.value || 0)]);
+    });
+    aoa.push(['', `Total ${g.label}`, Number(g.total || 0)]);
+    aoa.push([]);
+  });
+  aoa.push(['TOTAL CHARGES', '', Number(totalCharges || 0)]);
+  aoa.push([]);
+
+  // 2. PRODUITS
+  aoa.push(['--- PRODUITS ---', '', '']);
+  aoa.push(['N° Compte', 'Libellé des comptes', 'Montant (FCFA)']);
+  produitsGroups.forEach((g) => {
+    aoa.push([g.label.toUpperCase(), '', '']);
+    (g.items || []).forEach((item) => {
+      aoa.push([item.numero || '', item.libelle || '', Number(item.value || 0)]);
+    });
+    aoa.push(['', `Total ${g.label}`, Number(g.total || 0)]);
+    aoa.push([]);
+  });
+  aoa.push(['TOTAL PRODUITS', '', Number(totalProduits || 0)]);
+  aoa.push([]);
+
+  // 3. RÉSULTAT NET
+  aoa.push([
+    resultatNet >= 0 ? "RÉSULTAT NET : BÉNÉFICE DE L'EXERCICE" : "RÉSULTAT NET : PERTE DE L'EXERCICE",
+    '',
+    Number(resultatNet || 0),
+  ]);
+
+  aoa.push([]);
+  aoa.push([DEFAULT_FOOTER_TEXT]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = autoFitColumns(aoa);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Compte de Résultat');
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}

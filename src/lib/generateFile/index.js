@@ -12,6 +12,7 @@ export {
   exportBilanExcel,
   exportTresorerieExcel,
   exportLivreInventaireExcel,
+  exportCompteResultatExcel,
 } from './exportExcel.js';
 
 export {
@@ -27,12 +28,14 @@ export {
   BilanPDFDocument,
   TresoreriePDFDocument,
   LivreInventairePDFDocument,
+  CompteResultatPDFDocument,
   exportJournalPDF,
   exportBalancePDF,
   exportGrandLivrePDF,
   exportBilanPDF,
   exportTresoreriePDF,
   exportLivreInventairePDF,
+  exportCompteResultatPDF,
 } from './exportPDF.jsx';
 
 export { default as PDFPreviewModal } from './PDFPreviewModal.jsx';

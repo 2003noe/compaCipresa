@@ -1019,3 +1019,121 @@ export async function exportLivreInventairePDF(options) {
     document: <LivreInventairePDFDocument {...options} />,
   });
 }
+
+/* ─── Document PDF : Compte de Résultat (SYSCOHADA) ─────────────────── */
+export function CompteResultatPDFDocument({
+  chargesGroups = [],
+  produitsGroups = [],
+  totalCharges = 0,
+  totalProduits = 0,
+  resultatNet = 0,
+  exercice = null,
+  orientation = 'landscape',
+  footerText = DEFAULT_FOOTER_TEXT,
+}) {
+  const exCode = exercice?.code || exercice?.annee || '';
+  const isPortrait = orientation === 'portrait';
+  const fmt = (v) => {
+    const n = Math.round(Number(v || 0));
+    if (n === 0) return '-';
+    const txt = Math.abs(n).toLocaleString('fr-FR');
+    return n < 0 ? `(${txt})` : txt;
+  };
+
+  const renderSide = (title, groups, totalVal, isCharges) => (
+    <View style={{ flex: 1, paddingHorizontal: 4 }}>
+      <View style={{ backgroundColor: isCharges ? '#991b1b' : '#166534', padding: '4 6', borderRadius: 2, marginBottom: 4 }}>
+        <Text style={{ color: '#fff', fontFamily: 'Helvetica-Bold', fontSize: 8.5 }}>{title.toUpperCase()}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', backgroundColor: '#e2e8f0', padding: '3 4' }}>
+        <Text style={{ width: '20%', fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>Compte</Text>
+        <Text style={{ flex: 1, fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>Intitulé</Text>
+        <Text style={{ width: '25%', textAlign: 'right', fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>Montant (FCFA)</Text>
+      </View>
+      {groups.map((g, gIdx) => (
+        <View key={gIdx} style={{ marginTop: 4 }}>
+          <View style={{ backgroundColor: isCharges ? '#fee2e2' : '#dcfce7', padding: '3 4' }}>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: isCharges ? '#991b1b' : '#166534' }}>
+              {g.label.toUpperCase()}
+            </Text>
+          </View>
+          {(g.items || []).length === 0 ? (
+            <View style={{ padding: '2 4' }}>
+              <Text style={{ fontSize: 6, color: '#64748b', fontStyle: 'italic' }}>Aucune écriture</Text>
+            </View>
+          ) : (
+            g.items.map((item, iIdx) => (
+              <View key={iIdx} style={{ flexDirection: 'row', padding: '2 4', borderBottomWidth: 0.5, borderBottomColor: '#f1f5f9' }}>
+                <Text style={{ width: '20%', fontSize: 6.5, color: '#475569' }}>{item.numero}</Text>
+                <Text style={{ flex: 1, fontSize: 6.5 }}>{item.libelle}</Text>
+                <Text style={{ width: '25%', textAlign: 'right', fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>{fmt(item.value)}</Text>
+              </View>
+            ))
+          )}
+          <View style={{ flexDirection: 'row', backgroundColor: '#f8fafc', padding: '2 4', borderTopWidth: 0.5, borderTopColor: '#cbd5e1' }}>
+            <Text style={{ flex: 1, fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>Total {g.label}</Text>
+            <Text style={{ width: '25%', textAlign: 'right', fontSize: 6.5, fontFamily: 'Helvetica-Bold' }}>{fmt(g.total)}</Text>
+          </View>
+        </View>
+      ))}
+      <View style={{ flexDirection: 'row', backgroundColor: isCharges ? '#fecaca' : '#bbf7d0', padding: '4 4', marginTop: 6, borderRadius: 2 }}>
+        <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: isCharges ? '#7f1d1d' : '#14532d' }}>
+          TOTAL {title.toUpperCase()}
+        </Text>
+        <Text style={{ width: '35%', textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: isCharges ? '#7f1d1d' : '#14532d' }}>
+          {fmt(totalVal)} FCFA
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <Document>
+      <Page size="A4" orientation={orientation} style={baseStyles.page}>
+        <CipresaBannerHeader
+          title="COMPTE DE RÉSULTAT (SYSCOHADA)"
+          subtitle={`Exercice : ${exCode} — Performance globale de l'exercice`}
+        />
+
+        <View style={{ flexDirection: isPortrait ? 'column' : 'row', marginTop: 6, gap: isPortrait ? 10 : 0 }}>
+          {renderSide('Charges', chargesGroups, totalCharges, true)}
+          {renderSide('Produits', produitsGroups, totalProduits, false)}
+        </View>
+
+        <View style={{
+          marginTop: 8,
+          padding: '6 8',
+          backgroundColor: resultatNet >= 0 ? '#f0fdf4' : '#fef2f2',
+          borderWidth: 1,
+          borderColor: resultatNet >= 0 ? '#86efac' : '#fca5a5',
+          borderRadius: 3,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <View>
+            <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: resultatNet >= 0 ? '#15803d' : '#b91c1c' }}>
+              RÉSULTAT NET DE L'EXERCICE : {resultatNet >= 0 ? 'BÉNÉFICE NET' : 'PERTE NETTE'}
+            </Text>
+            <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 1 }}>
+              Total Produits ({fmt(totalProduits)} FCFA) − Total Charges ({fmt(totalCharges)} FCFA)
+            </Text>
+          </View>
+          <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: resultatNet >= 0 ? '#15803d' : '#b91c1c' }}>
+            {resultatNet >= 0 ? '+' : ''}{fmt(resultatNet)} FCFA
+          </Text>
+        </View>
+
+        <CipresaFooter footerText={footerText} />
+      </Page>
+    </Document>
+  );
+}
+
+export async function exportCompteResultatPDF(options) {
+  const filename = options.filename || `Compte_Resultat_${options.exercice?.code || 'exercice'}`;
+  await downloadPDF({
+    filename,
+    document: <CompteResultatPDFDocument {...options} />,
+  });
+}
