@@ -526,12 +526,26 @@ export default function ChartOfAccounts() {
       {!loading && accounts.length === 0 && !error && <div className="chart-empty"><BookOpen size={25} /><strong>Aucun compte pour cet exercice</strong><span>Les comptes seront regroupés ici selon leur classe comptable.</span>{canCreate && <button type="button" onClick={() => navigate('/nouveau-compte')}>Créer le premier compte</button>}</div>}
       {!loading && accounts.length > 0 && filteredAccounts.length === 0 && <div className="chart-empty"><Search size={22} /><strong>Aucun compte correspondant</strong><span>Modifiez la recherche ou réinitialisez le filtre de classe.</span></div>}
 
-      {(loading || filteredAccounts.length > 0) && <div className="chart-columns">
-        {['left', 'right'].map((column) => (
-          <div className="chart-column" key={column}>
-            {groups.filter((group) => group.column === column).map((group) => (
+      {(loading || filteredAccounts.length > 0) && (
+        <div className="chart-columns">
+          {groups.map((group) => {
+            const isExpanded = expandedClasses.has(group.key);
+            return (
               <section className="chart-class-card" key={group.key}>
-                <div className="chart-class-summary">
+                <div
+                  className="chart-class-summary"
+                  onClick={() => toggleClass(group.key)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleClass(group.key);
+                    }
+                  }}
+                  aria-expanded={isExpanded}
+                  title={isExpanded ? 'Cliquer pour replier' : 'Cliquer pour afficher les comptes'}
+                >
                   <div>
                     <span className="chart-class-count">{group.rows.length} compte{group.rows.length > 1 ? 's' : ''}</span>
                     <h2>{group.title}</h2>
@@ -559,19 +573,22 @@ export default function ChartOfAccounts() {
                   </div>
                   <button
                     type="button"
-                    className="chart-expand-icon-button"
-                    onClick={() => toggleClass(group.key)}
-                    aria-expanded={expandedClasses.has(group.key)}
-                    title={expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
-                    aria-label={expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
+                    className={`chart-expand-icon-button ${isExpanded ? 'is-expanded' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleClass(group.key);
+                    }}
+                    aria-expanded={isExpanded}
+                    title={isExpanded ? 'Réduire' : 'Déplier'}
+                    aria-label={isExpanded ? 'Réduire' : 'Déplier'}
                   >
-                    {expandedClasses.has(group.key) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    <ChevronDown size={18} />
                     <span className="chart-expand-tooltip">
-                      {expandedClasses.has(group.key) ? 'Réduire' : 'Voir plus'}
+                      {isExpanded ? 'Réduire' : 'Déplier'}
                     </span>
                   </button>
                 </div>
-                {expandedClasses.has(group.key) && (() => {
+                {isExpanded && (() => {
                   const includedIds = new Set(group.rows.map((account) => account.id));
                   const roots = group.rows.filter((account) => !account.parent_compte_id || !includedIds.has(account.parent_compte_id));
                   const sorted = sortedRows(roots);
@@ -664,10 +681,10 @@ export default function ChartOfAccounts() {
                   );
                 })()}
               </section>
-            ))}
-          </div>
-        ))}
-      </div>}
+            );
+          })}
+        </div>
+      )}
 
       {editing && form && (canEditBasic || canEditSensitive) && (
         <div className="chart-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>

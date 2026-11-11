@@ -17,15 +17,18 @@
 .chart-summary-strip{display:grid;gap:12px;padding:15px;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:linear-gradient(135deg,color-mix(in srgb,var(--color-primary) 8%,var(--color-surface)),var(--color-surface) 62%);box-shadow:var(--shadow-card)}
 .chart-summary-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.chart-summary-heading h2{margin:2px 0 0;color:var(--color-text);font-size:15px}.chart-eyebrow,.chart-class-count{color:var(--color-muted);font-size:9px;font-weight:750;letter-spacing:.09em;text-transform:uppercase}.chart-summary-period{color:var(--color-muted);font-size:10px}
 .chart-summary-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.chart-summary-card{display:grid;gap:9px;padding:12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.chart-summary-card>span{display:flex;align-items:center;gap:7px;color:var(--color-muted);font-size:10px}.chart-summary-card>span svg{color:var(--color-primary)}.chart-summary-card strong{color:var(--color-text);font-size:20px;font-variant-numeric:tabular-nums}.chart-summary-card strong small{color:var(--color-muted);font-size:9px;font-weight:600}.chart-summary-caption{margin:0;color:var(--color-muted);font-size:10px;line-height:1.45}
-.chart-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:32px}
-.chart-column{display:grid;align-content:start;gap:32px}
-.chart-class-card{overflow:hidden;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:var(--shadow-card)}
-.chart-class-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px;background:var(--color-primary-dark,var(--color-primary));color:#fff}
-.chart-class-summary h2{margin:3px 0 0;font-size:13px;font-weight:750;letter-spacing:.02em;text-transform:uppercase;color:#fff!important}
-.chart-class-summary .chart-class-count{color:rgba(255,255,255,.85)!important;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.chart-class-totals{display:flex;align-items:center;gap:14px;margin-left:auto}
-.chart-class-totals small{color:rgba(255,255,255,.75)!important;font-size:9px;display:block;margin-bottom:2px}
-.chart-class-totals strong{color:#fff!important;font-size:12px;font-variant-numeric:tabular-nums}
+.chart-columns{display:flex;flex-direction:column;gap:20px;width:100%}
+.chart-column{display:flex;flex-direction:column;gap:20px;width:100%}
+.chart-class-card{width:100%;overflow:hidden;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.chart-class-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;background:var(--color-primary-dark,var(--color-primary));color:#fff;cursor:pointer;user-select:none;transition:background-color .18s ease,box-shadow .18s ease,transform .1s ease}
+.chart-class-summary:hover{background:#153828;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.chart-class-summary:active{transform:scale(0.999)}
+.chart-class-summary:focus-visible{outline:2px solid #86efac;outline-offset:-2px}
+.chart-class-summary h2{margin:3px 0 0;font-size:13.5px;font-weight:750;letter-spacing:.02em;text-transform:uppercase;color:#fff!important}
+.chart-class-summary .chart-class-count{color:rgba(255,255,255,.8)!important;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.chart-class-totals{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-left:auto}
+.chart-class-totals small{color:rgba(255,255,255,.75)!important;font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:1px;text-align:right}
+.chart-class-totals strong{color:#fff!important;font-size:12.5px;font-variant-numeric:tabular-nums;text-align:right}
 .chart-class-card table{width:100%;border-collapse:collapse;text-align:left}
 .chart-class-card th{padding:7px 9px;background:var(--color-surface-muted);color:var(--color-muted);font-size:10px;font-weight:700}.chart-class-card th.numeric{text-align:right}
 .chart-class-card th:first-child{width:92px}.chart-class-card th:last-child{width:66px}
@@ -86,18 +89,21 @@
 .chart-class-comparison{padding:7px 12px;background:var(--color-surface);font-size:10px}
 .chart-health-toggle{flex-shrink:0}
 
-/* Bouton Voir plus / Réduire en icône seule avec infobulle au survol */
-.chart-expand-icon-button{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;padding:0;border:1px solid rgba(255,255,255,.35);border-radius:8px;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;transition:all .18s ease}
-.chart-expand-icon-button:hover{background:#fff;color:var(--color-primary-dark,var(--color-primary));border-color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+/* Bouton Voir plus / Réduire : fond retiré, rotation fluide */
+.chart-expand-icon-button{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;padding:0;border:none!important;border-radius:50%;background:transparent!important;color:rgba(255,255,255,.85);cursor:pointer;transition:transform .28s cubic-bezier(.34,1.56,.64,1),background-color .18s ease,color .18s ease}
+.chart-class-summary:hover .chart-expand-icon-button{color:#fff;background:rgba(255,255,255,.08)!important}
+.chart-expand-icon-button.is-expanded{transform:rotate(180deg)}
+.chart-class-summary:hover .chart-expand-icon-button.is-expanded{transform:rotate(180deg)}
 .chart-expand-tooltip{position:absolute;bottom:calc(100% + 7px);right:0;padding:4px 9px;border-radius:6px;background:rgba(15,23,42,.94);color:#fff;font-size:11px;font-weight:600;white-space:nowrap;pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .15s ease,transform .15s ease;z-index:40;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .chart-expand-tooltip::after{content:'';position:absolute;top:100%;right:12px;border-width:4px;border-style:solid;border-color:rgba(15,23,42,.94) transparent transparent transparent}
 .chart-expand-icon-button:hover .chart-expand-tooltip,.chart-expand-icon-button:focus-visible .chart-expand-tooltip{opacity:1;transform:translateY(0)}
 
-/* Badge récapitulatif dans l'en-tête de classe */
-.header-total-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700}
-.header-total-badge.is-debit{background:rgba(255,255,255,.2);color:#dcfce7;border:1px solid rgba(220,252,231,.4)}
-.header-total-badge.is-credit{background:rgba(255,255,255,.2);color:#fee2e2;border:1px solid rgba(254,226,226,.4)}
-.header-total-badge.is-zero{background:rgba(255,255,255,.15);color:rgba(255,255,255,.9)}
+/* Badge récapitulatif dans l'en-tête de classe : fond et bordures retirés */
+.chart-class-total-item{display:flex;flex-direction:column;align-items:flex-end}
+.header-total-badge{display:inline-flex;align-items:center;gap:5px;padding:0!important;border:none!important;background:transparent!important;font-size:13px;font-weight:750;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.header-total-badge.is-debit{color:#86efac!important}
+.header-total-badge.is-credit{color:#fca5a5!important}
+.header-total-badge.is-zero{color:rgba(255,255,255,.85)!important}
 
 /* Colonne Montant du compte : vert (débit) ou rouge (crédit) */
 .chart-account-amount-cell{text-align:right;white-space:nowrap}
