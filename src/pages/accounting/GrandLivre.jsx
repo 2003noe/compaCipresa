@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Printer, Download, BookOpen } from 'lucide-react';
+import { Printer, Download, BookOpen, Search, Calendar, RotateCcw } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
@@ -342,44 +342,97 @@ export default function GrandLivre() {
         </div>
       </div>
 
-      <Card className="ledger-toolbar no-print" style={{ marginBottom: '20px' }}>
-        <div className="grid grid-4" style={{ gap: '12px' }}>
-          <Input label="Période du" type="date" min={selectedExercice?.date_debut} max={periodEnd || selectedExercice?.date_fin} value={periodStart} onChange={(e) => {
-            const nextStart = e.target.value;
-            setPeriodStart(nextStart);
-            if (periodEnd && nextStart > periodEnd) setPeriodEnd(nextStart);
-          }} />
-          <Input label="au" type="date" min={periodStart || selectedExercice?.date_debut} max={selectedExercice?.date_fin} value={periodEnd} onChange={(e) => {
-            const nextEnd = e.target.value;
-            setPeriodEnd(nextEnd);
-            if (periodStart && nextEnd < periodStart) setPeriodStart(nextEnd);
-          }} />
-          <Select label="Filtrer par classe" value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>
-            <option value="ALL">Toutes les classes</option>
-            {classesList.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="grid grid-2" style={{ marginTop: '12px', gap: '12px' }}>
-          <Select label="Compte spécifique" value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}>
-            <option value="ALL">Tous les comptes</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.numero} - {a.libelle}
-              </option>
-            ))}
-          </Select>
-          <Input
-            label="Rechercher écriture / compte"
-            placeholder="N° compte ou libellé..."
+      {/* Barre de filtres compacte */}
+      <div className="compact-filter-bar no-print" style={{ marginBottom: '20px' }}>
+        <div className="compact-filter-search">
+          <Search size={15} />
+          <input
+            type="text"
+            placeholder="Rechercher écriture, n° compte ou libellé..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-      </Card>
+
+        <select
+          className="input select compact-filter-select"
+          value={selectedClasse}
+          onChange={(e) => setSelectedClasse(e.target.value)}
+          title="Filtrer par classe"
+        >
+          <option value="ALL">Toutes les classes</option>
+          {classesList.map((cls) => (
+            <option key={cls} value={cls}>
+              {cls}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="input select compact-filter-select"
+          value={selectedAccountId}
+          onChange={(e) => setSelectedAccountId(e.target.value)}
+          title="Filtrer par compte"
+          style={{ maxWidth: 220 }}
+        >
+          <option value="ALL">Tous les comptes</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.numero} — {a.libelle}
+            </option>
+          ))}
+        </select>
+
+        <div className="compact-date-range">
+          <Calendar size={13} />
+          <span>Du</span>
+          <input
+            type="date"
+            min={selectedExercice?.date_debut}
+            max={periodEnd || selectedExercice?.date_fin}
+            value={periodStart}
+            onChange={(e) => {
+              const nextStart = e.target.value;
+              setPeriodStart(nextStart);
+              if (periodEnd && nextStart > periodEnd) setPeriodEnd(nextStart);
+            }}
+            title="Date de début"
+          />
+          <span>au</span>
+          <input
+            type="date"
+            min={periodStart || selectedExercice?.date_debut}
+            max={selectedExercice?.date_fin}
+            value={periodEnd}
+            onChange={(e) => {
+              const nextEnd = e.target.value;
+              setPeriodEnd(nextEnd);
+              if (periodStart && nextEnd < periodStart) setPeriodStart(nextEnd);
+            }}
+            title="Date de fin"
+          />
+        </div>
+
+        {(searchQuery || selectedClasse !== 'ALL' || selectedAccountId !== 'ALL' || (selectedExercice && (periodStart !== selectedExercice.date_debut || periodEnd !== selectedExercice.date_fin))) && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={RotateCcw}
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedClasse('ALL');
+              setSelectedAccountId('ALL');
+              if (selectedExercice) {
+                setPeriodStart(selectedExercice.date_debut || '');
+                setPeriodEnd(selectedExercice.date_fin || '');
+              }
+            }}
+            className="compact-filter-reset"
+          >
+            Réinitialiser
+          </Button>
+        )}
+      </div>
 
       {notice && <div className="message error no-print">{notice}</div>}
 

@@ -123,14 +123,14 @@ export default function AmortissementsTab() {
         <table className="balance-table amort-config-table">
           <thead>
             <tr>
-              <th style={{ width: '40%' }}>Catégorie</th>
-              <th className="text-center" style={{ width: '20%' }}>
+              <th style={{ minWidth: 160 }}>Catégorie</th>
+              <th className="text-center" style={{ minWidth: 120 }}>
                 <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <Percent size={12} /> Taux annuel (%)
                 </span>
               </th>
-              <th className="text-center" style={{ width: '20%' }}>Durée (années)</th>
-              <th style={{ width: '20%', color: 'var(--color-muted)', fontWeight: 400 }}>Note</th>
+              <th className="text-center" style={{ minWidth: 110 }}>Durée (années)</th>
+              <th className="amort-note-col" style={{ minWidth: 140, color: 'var(--color-muted)', fontWeight: 400 }}>Note</th>
             </tr>
           </thead>
           <tbody>
@@ -171,7 +171,7 @@ export default function AmortissementsTab() {
                     <span className="font-mono">{row.duree === '' || row.duree === 0 ? '—' : `${row.duree} ans`}</span>
                   )}
                 </td>
-                <td style={{ color: 'var(--color-muted)', fontSize: 12 }}>{row.note}</td>
+                <td className="amort-note-col" style={{ color: 'var(--color-muted)', fontSize: 12 }}>{row.note}</td>
               </tr>
             ))}
           </tbody>
@@ -185,7 +185,7 @@ export default function AmortissementsTab() {
       )}
 
       {peutModifier && (
-        <div className="form-actions" style={{ marginTop: 20 }}>
+        <div className="form-actions amort-actions" style={{ marginTop: 20 }}>
           <Button
             variant="secondary"
             disabled={saving}

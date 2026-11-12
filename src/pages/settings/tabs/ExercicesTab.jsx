@@ -225,7 +225,7 @@ export default function ExercicesTab() {
             <Input label="Date de fin" type="date" min={form.date_debut || dateMin} max={dateMax} required value={form.date_fin} onChange={update('date_fin')} />
           </div>
           <p className="page-subtitle">Les deux dates doivent être comprises dans l’année sélectionnée. Plusieurs exercices peuvent partager la même année, avec un code unique pour chacun.</p>
-          <div className="form-actions left-actions">
+          <div className="form-actions left-actions exercice-form-actions">
             <Button variant="secondary" disabled={saving} onClick={resetForm}>Annuler</Button>
             <Button disabled={saving} onClick={save}>{saving ? 'Enregistrement…' : editingId ? 'Enregistrer les modifications' : 'Créer l’exercice'}</Button>
           </div>
@@ -243,7 +243,7 @@ export default function ExercicesTab() {
                 <td>{new Date(`${exercice.date_debut}T00:00:00`).toLocaleDateString('fr-FR')} → {new Date(`${exercice.date_fin}T00:00:00`).toLocaleDateString('fr-FR')}</td>
                 <td><Badge tone={exercice.statut === 'OUVERT' ? 'success' : 'neutral'}>{exercice.statut === 'OUVERT' ? 'Ouvert' : 'Clôturé'}</Badge></td>
                 {canManage && <td>
-                  <div className="form-actions">
+                  <div className="form-actions exercice-row-actions">
                     <Button variant="secondary" size="sm" icon={Edit2} disabled={Boolean(working) || saving} onClick={() => startEdit(exercice)}>Modifier</Button>
                     <Button variant="secondary" size="sm" disabled={Boolean(working) || saving} onClick={() => toggleStatut(exercice)}>{working === exercice.id ? '…' : (exercice.statut === 'OUVERT' ? 'Clôturer' : 'Rouvrir')}</Button>
                     {canDelete && <Button variant="secondary" size="sm" icon={Trash2} disabled={Boolean(working) || saving} onClick={() => deleteExercise(exercice)}>{working === exercice.id ? '…' : 'Supprimer'}</Button>}

@@ -1,7 +1,7 @@
 // src/pages/accounting/JournalPage.jsx
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Edit2, Trash2, FileText, Download, Printer } from 'lucide-react';
+import { Edit2, Trash2, FileText, Download, Printer, Search, Calendar, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import Card from '../../components/ui/Card';
@@ -448,44 +448,69 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Filtres */}
-      <Card style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-          <div style={{ minWidth: 200 }}>
-            <Select label="Journal" value={journalId} onChange={(e) => setJournalId(e.target.value)}>
-              <option value="">Tous les journaux</option>
-              {journaux.map((j) => <option key={j.id} value={j.id}>{j.code} — {j.libelle}</option>)}
-            </Select>
-          </div>
-          <label className="field" style={{ minWidth: 150 }}>
-            <span className="field-label">Du</span>
-            <input type="date" className="input" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
-          </label>
-          <label className="field" style={{ minWidth: 150 }}>
-            <span className="field-label">Au</span>
-            <input type="date" className="input" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
-          </label>
-          <div style={{ minWidth: 190 }}>
-            <Select label="Ordre" value={order} onChange={(e) => setOrder(e.target.value)}>
-              <option value="desc">Plus récentes d'abord</option>
-              <option value="asc">Chronologique (anciennes d'abord)</option>
-            </Select>
-          </div>
-          <label className="field" style={{ flex: 1, minWidth: 220 }}>
-            <span className="field-label">Recherche</span>
-            <input
-              type="text"
-              placeholder="Référence ou description..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="input"
-            />
-          </label>
-          {filtersActive && (
-            <Button variant="secondary" size="sm" onClick={resetFilters}>Réinitialiser</Button>
-          )}
+      {/* Barre de filtres compacte */}
+      <div className="compact-filter-bar no-print" style={{ marginBottom: '24px' }}>
+        <div className="compact-filter-search">
+          <Search size={15} />
+          <input
+            type="text"
+            placeholder="Rechercher par référence, libellé..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
-      </Card>
+
+        <select
+          className="input select compact-filter-select"
+          value={journalId}
+          onChange={(e) => setJournalId(e.target.value)}
+          title="Filtrer par journal"
+        >
+          <option value="">Tous les journaux</option>
+          {journaux.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.code} — {j.libelle}
+            </option>
+          ))}
+        </select>
+
+        <div className="compact-date-range">
+          <Calendar size={13} />
+          <span>Du</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            title="Date de début"
+          />
+          <span>au</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            title="Date de fin"
+          />
+        </div>
+
+        <select
+          className="input select compact-filter-select"
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+          title="Trier les écritures"
+          style={{ maxWidth: 180 }}
+        >
+          <option value="desc">Plus récentes d'abord</option>
+          <option value="asc">Plus anciennes d'abord</option>
+        </select>
+
+        {filtersActive && (
+          <Button variant="secondary" size="sm" icon={RotateCcw} onClick={resetFilters} className="compact-filter-reset">
+            Réinitialiser
+          </Button>
+        )}
+      </div>
 
       {/* SECTION 1 : ÉCRITURES VALIDÉES (en haut) */}
       <Card style={{ marginBottom: '32px' }}>
