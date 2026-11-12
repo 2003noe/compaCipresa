@@ -10,19 +10,19 @@ import {
 } from "lucide-react";
 import AuthLayout from "./AuthLayout";
 import Input from "../../components/ui/Input";
-import OtpInput from "../../components/ui/OtpInput";
+// import OtpInput from "../../components/ui/OtpInput"; // OTP temporairement désactivé
 import Button from "../../components/ui/Button";
-import useCountdown from "../../hooks/useCountdown";
+// import useCountdown from "../../hooks/useCountdown"; // OTP temporairement désactivé
 import { useAuth } from "../../context/AuthContext";
 import MyPhoneInput from "../../components/ui/phoneInput";
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 6; // conservé pour réactivation future
 const RESEND_DELAY = 60; // Supabase impose 60 s minimum entre deux envois
 
 export default function Register() {
   const nav = useNavigate();
-  const { signUp, verifySignupOtp, resendSignupOtp, signOut, provisionCompany } = useAuth();
-  const [step, setStep] = useState("form"); // "form" -> "otp"
+  const { signUp, /* verifySignupOtp, resendSignupOtp, */ signOut, provisionCompany } = useAuth();
+  // const [step, setStep] = useState("form"); // OTP temporairement désactivé
   const [form, setForm] = useState({
     entreprise: "",
     createEnterprise: true,
@@ -32,16 +32,16 @@ export default function Register() {
     password: "",
     confirmPassword: "",
   });
-  const [code, setCode] = useState("");
+  // const [code, setCode] = useState(""); // OTP temporairement désactivé
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [secondsLeft, startCountdown] = useCountdown(RESEND_DELAY);
+  // const [secondsLeft, startCountdown] = useCountdown(RESEND_DELAY); // OTP temporairement désactivé
 
   const update = (field) => (event) =>
     setForm((current) => ({ ...current, [field]: event.target.value }));
 
-  // Étape 1 : création du compte, Supabase envoie le code par e-mail.
+  // Inscription directe — OTP temporairement désactivé
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -69,31 +69,41 @@ export default function Register() {
       telephone: form.phone,
       entreprise: form.createEnterprise ? form.entreprise.trim() : "",
     });
-    setSubmitting(false);
 
     if (signUpError) {
+      setSubmitting(false);
       setError(signUpError.message);
       return;
     }
 
-    // Si "Confirm email" est désactivé côté Supabase, une session existe déjà : pas de code à saisir.
+    // Si une session existe (connexion directe réussie), on provisionne l'entreprise
+    // puis on déconnecte pour renvoyer l'utilisateur à l'écran de connexion.
     if (data?.session) {
       if (form.createEnterprise) {
         const { error: companyError } = await provisionCompany(form.entreprise.trim());
-        if (companyError) { setError(companyError.message); return; }
+        if (companyError) {
+          setSubmitting(false);
+          setError(companyError.message);
+          return;
+        }
       }
       await signOut();
-      nav("/connexion", {
-        replace: true,
-        state: { registered: true, registeredEmail: email, waitingForCompany: !form.createEnterprise },
-      });
-      return;
     }
 
-    setForm((f) => ({ ...f, email }));
-    setCode("");
-    setStep("otp");
-    startCountdown(RESEND_DELAY);
+    setSubmitting(false);
+    nav("/connexion", {
+      replace: true,
+      state: { registered: true, registeredEmail: email, waitingForCompany: !form.createEnterprise },
+    });
+
+    /* OTP — À RÉACTIVER — décommenter ce bloc et commenter celui ci-dessus
+    if (!data?.session) {
+      setForm((f) => ({ ...f, email }));
+      setCode("");
+      setStep("otp");
+      startCountdown(RESEND_DELAY);
+    }
+    */
   };
 
 
@@ -101,7 +111,7 @@ export default function Register() {
 
   
 
-  // Étape 2 : vérification du code.
+  /* OTP — À RÉACTIVER — Étape 2 : vérification du code.
   const verifyCode = async (value = code) => {
     if (submitting) return;
     setError("");
@@ -142,7 +152,9 @@ export default function Register() {
     setInfo("Un nouveau code vient d'être envoyé.");
     startCountdown(RESEND_DELAY);
   };
+  */
 
+  /* OTP — À RÉACTIVER — Étape OTP UI
   if (step === "otp") {
     return (
       <AuthLayout
@@ -210,6 +222,7 @@ export default function Register() {
       </AuthLayout>
     );
   }
+  */
 
   return (
     <AuthLayout
@@ -284,7 +297,7 @@ export default function Register() {
           disabled={submitting}
           className="w-full auth-submit"
         >
-          {submitting ? "Envoi du code…" : "Créer mon compte"}
+          {submitting ? "Création du compte…" : "Créer mon compte"}
         </Button>
       </form>
       <div className="auth-divider" />

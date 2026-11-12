@@ -198,8 +198,9 @@ export function AuthProvider({ children }) {
     return { error };
   }
 
-  // --- Inscription avec vérification de l'e-mail par code (OTP) ---
-  // Prérequis Supabase : "Confirm email" activé + template "Confirm signup" avec {{ .Token }}.
+  // --- Inscription directe sans confirmation email (OTP désactivé temporairement) ---
+  // Pour réactiver l'OTP : désactiver le bloc "signInWithPassword" ci-dessous
+  // et réactiver "Confirm email" dans le Supabase Dashboard.
   async function signUp({ email, password, nom, prenom, telephone, entreprise }) {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -208,11 +209,30 @@ export function AuthProvider({ children }) {
         data: { nom, prenom, telephone, entreprise_nom: entreprise },
       },
     });
+
     // Supabase ne renvoie pas d'erreur si l'e-mail existe déjà et est confirmé :
     // il renvoie un utilisateur sans identité. On le détecte pour informer l'utilisateur.
     if (!error && data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
       return { data, error: { message: "Un compte existe déjà avec cet e-mail. Connectez-vous ou réinitialisez votre mot de passe." } };
     }
+
+    // --- OTP désactivé : si Supabase ne peut pas envoyer l'email de confirmation
+    // (SMTP non configuré), on tente une connexion directe pour confirmer que le
+    // compte a bien été créé, puis on retourne un succès sans session ouverte. ---
+    if (error?.message?.toLowerCase().includes("sending confirmation email") ||
+        error?.message?.toLowerCase().includes("confirmation email")) {
+      // L'utilisateur existe dans la DB même si l'email a échoué.
+      // On se connecte brièvement pour confirmer la création et récupérer l'user.
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        // Le compte est créé mais non confirmé (Email confirmation activé dans Supabase Dashboard).
+        // Solution : désactiver "Enable email confirmations" dans Authentication > Settings de Supabase.
+        return { data: null, error: { message: "Votre compte a été créé mais nécessite une confirmation. Contactez l'administrateur ou désactivez la confirmation email dans Supabase." } };
+      }
+      // On retourne data avec session pour que Register.jsx puisse provisionner l'entreprise
+      return { data: signInData, error: null };
+    }
+
     return { data, error };
   }
 
