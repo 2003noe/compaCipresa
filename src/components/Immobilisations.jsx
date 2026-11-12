@@ -78,6 +78,7 @@ export default function Immobilisations() {
     else { setRefreshTick((tick) => tick + 1); toast.success('Inventaire mis à jour', asset.designation); }
   };
 
+  /* ── Vue inventaire physique (accès limité) ── */
   if (physicalOnly) return (
     <div className="page-content">
       <div className="page-header"><div><h1 className="page-title">Inventaire physique des biens</h1><p className="page-subtitle">État, emplacement et observations · Exercice {selectedExercice?.code || ''}</p></div></div>
@@ -89,6 +90,7 @@ export default function Immobilisations() {
     </div>
   );
 
+  /* ── Vue complète registre des immobilisations ── */
   return (
     <div className="page-content">
       <div className="page-header">
@@ -101,10 +103,6 @@ export default function Immobilisations() {
 
       {notice && <div className="message error" role="alert">{notice}</div>}
 
-      <div className="message warning" role="status">
-        Les amortissements affichés sont des estimations de registre. Cette page ne génère pas encore les écritures comptables d’amortissement ; vérifiez le calcul et comptabilisez les dotations selon les règles de votre entreprise.
-      </div>
-
       <div className="cr-kpis">
         <Card><span className="ledger-summary-label">Valeur brute totale</span><strong>{money(totalBrut)} FCFA</strong></Card>
         <Card><span className="ledger-summary-label">Amortissements cumulés</span><strong>{money(totalAmort)} FCFA</strong></Card>
@@ -113,7 +111,7 @@ export default function Immobilisations() {
 
       <Card>
         <div className="asset-toolbar">
-          <div className="toolbar-search"><Search size={14} /><input placeholder="Rechercher immo..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+          <div className="toolbar-search"><Search size={14} /><input placeholder="Rechercher une immobilisation..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           <select className="input select asset-filter" value={categorie} onChange={(e) => setCategorie(e.target.value)}>
             {categories.map((c) => <option key={c} value={c}>Catégorie : {c}</option>)}
           </select>
@@ -121,7 +119,7 @@ export default function Immobilisations() {
             <option value="Tout">Statut : Tout</option>
             {Object.entries(STATUT_LABEL).map(([k, v]) => <option key={k} value={k}>Statut : {v}</option>)}
           </select>
-          <Button variant="secondary" size="sm" icon={RefreshCw} onClick={() => setRefreshTick((t) => t + 1)}>Calculer amortissements</Button>
+          <Button variant="secondary" size="sm" icon={RefreshCw} onClick={() => setRefreshTick((t) => t + 1)}>Calculer les amortissements</Button>
         </div>
 
         <div className="table-wrap">
@@ -147,14 +145,18 @@ export default function Immobilisations() {
                   <td>{a.categorie}</td>
                   <td>{new Date(a.date_acquisition).toLocaleDateString('fr-FR')}</td>
                   <td className="text-right font-mono">{money(a.valeur_brute)}</td>
-                  <td>{a.duree_annees ? `${a.duree_annees} ans` : '-'}</td>
+                  <td>{a.duree_annees ? `${a.duree_annees} ans` : '—'}</td>
                   <td>{METHODE_LABEL[a.methode]}</td>
                   <td className="text-right font-mono">{money(a.amortCumule)}</td>
                   <td className="text-right font-mono"><strong>{money(a.vnc)}</strong></td>
                   <td><Badge tone={a.statut === 'EN_SERVICE' ? 'success' : 'danger'}>{STATUT_LABEL[a.statut]}</Badge></td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={10}>Aucune immobilisation ne correspond à ces filtres.</td></tr>}
+              {filtered.length === 0 && (
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '24px' }}>
+                  {loading ? 'Chargement…' : 'Aucune immobilisation ne correspond à ces filtres.'}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -169,9 +171,7 @@ export default function Immobilisations() {
           icon={Building2}
           size="lg"
           footer={
-            <Button variant="secondary" onClick={() => setSelectedAsset(null)}>
-              Fermer
-            </Button>
+            <Button variant="secondary" onClick={() => setSelectedAsset(null)}>Fermer</Button>
           }
         >
           <div className="detail-grid">
