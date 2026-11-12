@@ -29,6 +29,7 @@ export {
   TresoreriePDFDocument,
   LivreInventairePDFDocument,
   CompteResultatPDFDocument,
+  DashboardPDFDocument,
   exportJournalPDF,
   exportBalancePDF,
   exportGrandLivrePDF,
@@ -36,6 +37,7 @@ export {
   exportTresoreriePDF,
   exportLivreInventairePDF,
   exportCompteResultatPDF,
+  exportDashboardPDF,
 } from './exportPDF.jsx';
 
 export { default as PDFPreviewModal } from './PDFPreviewModal.jsx';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { pdf, Document, Page, Text, View, Image, StyleSheet, Svg, Path } from '@react-pdf/renderer';
+import { pdf, Document, Page, Text, View, Image, StyleSheet, Svg, Path, Circle, Rect, Line, G } from '@react-pdf/renderer';
 import { CIPRESA_LOGO_MORE_BASE64 } from './banner.js';
 
 export const DEFAULT_FOOTER_TEXT = "généré part l'application de comptabilité de CIpressa consulting";
@@ -1135,5 +1135,373 @@ export async function exportCompteResultatPDF(options) {
   await downloadPDF({
     filename,
     document: <CompteResultatPDFDocument {...options} />,
+  });
+}
+
+/* ─── Document PDF : Tableau de bord de gestion avec diagrammes ────── */
+export function DashboardPDFDocument({
+  exercice = null,
+  entrepriseName = 'CIPRESA Consulting SARL',
+  kpis = {},
+  monthlyFlows = [],
+  donutData = { items: [], total: 0 },
+  recentRows = [],
+  alerts = [],
+  orientation = 'portrait',
+  footerText = DEFAULT_FOOTER_TEXT,
+}) {
+  const exCode = exercice?.code || exercice?.annee || 'En cours';
+  const fmt = (v) => Number(v || 0).toLocaleString('fr-FR');
+  const nowStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const maxFlow = Math.max(1, ...monthlyFlows.flatMap((b) => [Number(b.entrees || 0), Number(b.sorties || 0)]));
+  const totalEntrees = monthlyFlows.reduce((a, b) => a + Number(b.entrees || 0), 0);
+  const totalSorties = monthlyFlows.reduce((a, b) => a + Number(b.sorties || 0), 0);
+  const fluxNet = totalEntrees - totalSorties;
+
+  const DONUT_COLORS = ['#275a43', '#3b825e', '#68aa82', '#a7d6ba', '#94a3b8'];
+  const totalDonut = Number(donutData?.total || 0);
+  const donutItems = donutData?.items || [];
+
+  // Calcul des arcs pour le Donut SVG (circonférence = 2 * PI * 34 ≈ 213.63)
+  const circumference = 213.63;
+  let runningDash = 0;
+  const donutSlices = donutItems.map((item, idx) => {
+    const fraction = totalDonut > 0 ? Number(item.value || 0) / totalDonut : 0;
+    const dashLength = fraction * circumference;
+    const offset = -runningDash;
+    runningDash += dashLength;
+    return {
+      label: item.label,
+      value: item.value,
+      pct: Math.round(fraction * 100),
+      color: DONUT_COLORS[idx % DONUT_COLORS.length],
+      dashArray: `${dashLength.toFixed(2)} ${(circumference - dashLength).toFixed(2)}`,
+      dashOffset: offset,
+    };
+  });
+
+  return (
+    <Document>
+      {/* ── PAGE 1 : SYNTHÈSE FINANCIÈRE & ANALYSES GRAPHIQUES ── */}
+      <Page size="A4" orientation={orientation} style={baseStyles.page}>
+        <CipresaBannerHeader
+          title="TABLEAU DE BORD DE GESTION"
+          subtitle={`Exercice : ${exCode} — ${entrepriseName} — Synthèse et indicateurs de performance`}
+          date={nowStr}
+        />
+
+        {/* 1. INDICATEURS CLÉS (5 CARTES) */}
+        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6 }}>
+          {/* Trésorerie */}
+          <View style={{ flex: 1, backgroundColor: '#f8fafc', padding: '6 7', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+            <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#64748b', textTransform: 'uppercase' }}>Trésorerie</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginTop: 2 }}>{fmt(kpis.tresorerie)} FCFA</Text>
+            <Text style={{ fontSize: 6, color: Number(kpis.deltaTresorerieMois || 0) >= 0 ? '#15803d' : '#b91c1c', marginTop: 2 }}>
+              {Number(kpis.deltaTresorerieMois || 0) >= 0 ? '+' : ''}{fmt(kpis.deltaTresorerieMois)} FCFA ce mois
+            </Text>
+          </View>
+
+          {/* Chiffre d'affaires */}
+          <View style={{ flex: 1, backgroundColor: '#f8fafc', padding: '6 7', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+            <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#64748b', textTransform: 'uppercase' }}>Chiffre d'affaires</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginTop: 2 }}>{fmt(kpis.ca)} FCFA</Text>
+            <Text style={{ fontSize: 6, color: '#64748b', marginTop: 2 }}>
+              {kpis.caPct !== null && kpis.caPct !== undefined ? `${kpis.caPct >= 0 ? '+' : ''}${kpis.caPct.toFixed(1)}% vs N-1` : 'Exercice en cours'}
+            </Text>
+          </View>
+
+          {/* Résultat net */}
+          <View style={{
+            flex: 1,
+            backgroundColor: Number(kpis.resultatNet || 0) >= 0 ? '#ecfdf5' : '#fef2f2',
+            padding: '6 7',
+            borderRadius: 4,
+            borderWidth: 0.5,
+            borderColor: Number(kpis.resultatNet || 0) >= 0 ? '#86efac' : '#fca5a5'
+          }}>
+            <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: Number(kpis.resultatNet || 0) >= 0 ? '#065f46' : '#991b1b', textTransform: 'uppercase' }}>Résultat net</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: Number(kpis.resultatNet || 0) >= 0 ? '#047857' : '#b91c1c', marginTop: 2 }}>{fmt(kpis.resultatNet)} FCFA</Text>
+            <Text style={{ fontSize: 6, color: Number(kpis.resultatNet || 0) >= 0 ? '#15803d' : '#b91c1c', marginTop: 2 }}>
+              {Number(kpis.resultatNet || 0) >= 0 ? 'Bénéfice net' : 'Perte nette'}
+            </Text>
+          </View>
+
+          {/* Bilan Actif */}
+          <View style={{ flex: 1, backgroundColor: '#f8fafc', padding: '6 7', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+            <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#64748b', textTransform: 'uppercase' }}>Total Bilan (Actif)</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginTop: 2 }}>{fmt(kpis.totalActif)} FCFA</Text>
+            <Text style={{ fontSize: 6, color: kpis.bilanEquilibre ? '#15803d' : '#b45309', marginTop: 2 }}>
+              {kpis.bilanEquilibre ? '✓ Bilan équilibré' : `Écart : ${fmt(kpis.bilanEcart)} FCFA`}
+            </Text>
+          </View>
+
+          {/* Écritures */}
+          <View style={{ flex: 1, backgroundColor: '#f8fafc', padding: '6 7', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+            <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#64748b', textTransform: 'uppercase' }}>Écritures</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginTop: 2 }}>{kpis.totalEcritures || 0}</Text>
+            <Text style={{ fontSize: 6, color: '#64748b', marginTop: 2 }}>{kpis.ecrituresCeMois || 0} ce mois-ci</Text>
+          </View>
+        </View>
+
+        {/* 2. DIAGRAMME 1 : ÉVOLUTION DE LA TRÉSORERIE (FLUX MENSUELS) */}
+        <View style={{ marginTop: 6, marginBottom: 8, padding: 8, backgroundColor: '#ffffff', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <View>
+              <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#166534', textTransform: 'uppercase' }}>
+                ÉVOLUTION DE LA TRÉSORERIE (ENCAISSEMENTS & DÉCAISSEMENTS)
+              </Text>
+              <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 1 }}>
+                Mouvements réels de trésorerie par mois sur l'exercice {exCode}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <View style={{ width: 7, height: 7, backgroundColor: '#16a34a', borderRadius: 1.5 }} />
+                <Text style={{ fontSize: 6.5, color: '#334155' }}>Entrées ({fmt(totalEntrees)} FCFA)</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <View style={{ width: 7, height: 7, backgroundColor: '#ef4444', borderRadius: 1.5 }} />
+                <Text style={{ fontSize: 6.5, color: '#334155' }}>Sorties ({fmt(totalSorties)} FCFA)</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: fluxNet >= 0 ? '#15803d' : '#b91c1c' }}>
+                  Net : {fluxNet >= 0 ? '+' : ''}{fmt(fluxNet)} FCFA
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Graphique à barres groupées */}
+          <View style={{
+            height: 75,
+            backgroundColor: '#f8fafc',
+            borderRadius: 3,
+            borderWidth: 0.5,
+            borderColor: '#e2e8f0',
+            paddingTop: 6,
+            paddingHorizontal: 8,
+            paddingBottom: 4,
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            justifyContent: 'space-around',
+          }}>
+            {monthlyFlows.length > 0 ? (
+              monthlyFlows.map((b) => {
+                const hEntrees = Math.max((Number(b.entrees || 0) / maxFlow) * 52, Number(b.entrees || 0) > 0 ? 3 : 0);
+                const hSorties = Math.max((Number(b.sorties || 0) / maxFlow) * 52, Number(b.sorties || 0) > 0 ? 3 : 0);
+                return (
+                  <View key={b.key} style={{ alignItems: 'center', width: 34 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 55 }}>
+                      <View style={{ width: 8, height: hEntrees, backgroundColor: '#16a34a', borderTopLeftRadius: 1.5, borderTopRightRadius: 1.5 }} />
+                      <View style={{ width: 8, height: hSorties, backgroundColor: '#ef4444', borderTopLeftRadius: 1.5, borderTopRightRadius: 1.5 }} />
+                    </View>
+                    <Text style={{ fontSize: 6, color: '#64748b', textAlign: 'center', marginTop: 2 }}>{b.label}</Text>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{ fontSize: 7, color: '#94a3b8' }}>Aucun flux de trésorerie sur la période</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 3. DIAGRAMME 2 : RÉPARTITION DES CHARGES D'EXPLOITATION */}
+        <View style={{ marginBottom: 8, padding: 8, backgroundColor: '#ffffff', borderRadius: 4, borderWidth: 0.5, borderColor: '#cbd5e1' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <View>
+              <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#166534', textTransform: 'uppercase' }}>
+                RÉPARTITION DES CHARGES D'EXPLOITATION (SYSCOHADA)
+              </Text>
+              <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 1 }}>
+                Structure des coûts d'exploitation par nature de compte
+              </Text>
+            </View>
+            <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#0f172a' }}>
+              Total Charges : {fmt(totalDonut)} FCFA
+            </Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+            {/* Donut SVG vectoriel */}
+            <View style={{ width: 80, height: 80, position: 'relative', justifyContent: 'center', alignItems: 'center' }}>
+              <Svg viewBox="0 0 100 100" width={80} height={80}>
+                <Circle cx={50} cy={50} r={34} stroke="#f1f5f9" strokeWidth={13} fill="none" />
+                {totalDonut > 0 && donutSlices.map((slice, idx) => (
+                  <Circle
+                    key={idx}
+                    cx={50}
+                    cy={50}
+                    r={34}
+                    stroke={slice.color}
+                    strokeWidth={13}
+                    strokeDasharray={slice.dashArray}
+                    strokeDashoffset={slice.dashOffset}
+                    fill="none"
+                    transform="rotate(-90 50 50)"
+                  />
+                ))}
+              </Svg>
+              <View style={{ position: 'absolute', justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#0f172a' }}>
+                  {(totalDonut / 1000000).toFixed(1)}M
+                </Text>
+                <Text style={{ fontSize: 5.5, color: '#64748b' }}>FCFA</Text>
+              </View>
+            </View>
+
+            {/* Tableau détaillé des catégories avec barres horizontales */}
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1', paddingBottom: 2, marginBottom: 3 }}>
+                <Text style={{ width: '42%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#475569' }}>Catégorie</Text>
+                <Text style={{ width: '28%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#475569', textAlign: 'right' }}>Montant</Text>
+                <Text style={{ width: '12%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#475569', textAlign: 'right' }}>Part</Text>
+                <Text style={{ width: '18%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#475569', textAlign: 'center' }}>Répartition</Text>
+              </View>
+              {donutSlices.length > 0 ? (
+                donutSlices.map((s, idx) => (
+                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2, borderBottomWidth: 0.5, borderBottomColor: '#f1f5f9' }}>
+                    <View style={{ width: '42%', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={{ width: 5, height: 5, backgroundColor: s.color, borderRadius: 1 }} />
+                      <Text style={{ fontSize: 6.5, color: '#1e293b' }}>{s.label}</Text>
+                    </View>
+                    <Text style={{ width: '28%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#0f172a', textAlign: 'right' }}>
+                      {fmt(s.value)} FCFA
+                    </Text>
+                    <Text style={{ width: '12%', fontSize: 6.5, color: '#475569', textAlign: 'right' }}>
+                      {s.pct}%
+                    </Text>
+                    <View style={{ width: '18%', paddingLeft: 6 }}>
+                      <View style={{ height: 4, backgroundColor: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                        <View style={{ width: `${s.pct}%`, height: '100%', backgroundColor: s.color, borderRadius: 2 }} />
+                      </View>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={{ fontSize: 7, color: '#94a3b8', paddingVertical: 8 }}>Aucune charge d'exploitation enregistrée</Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <CipresaFooter footerText={footerText} />
+      </Page>
+
+      {/* ── PAGE 2 : ÉCRITURES RÉCENTES & CONTRÔLES DE GESTION ── */}
+      <Page size="A4" orientation={orientation} style={baseStyles.page}>
+        <CipresaBannerHeader
+          title="TABLEAU DE BORD — DÉTAIL DES OPÉRATIONS & CONTRÔLES"
+          subtitle={`Exercice : ${exCode} — Journal récent et alertes de gestion`}
+          date={nowStr}
+        />
+
+        {/* 4. DERNIÈRES ÉCRITURES COMPTABLES */}
+        <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#166534', marginTop: 4, marginBottom: 4, textTransform: 'uppercase' }}>
+          DERNIÈRES ÉCRITURES ENREGISTRÉES
+        </Text>
+        <View style={baseStyles.table}>
+          <View style={baseStyles.thead}>
+            <Text style={[baseStyles.th, { width: '14%' }]}>Date</Text>
+            <Text style={[baseStyles.th, { width: '18%' }]}>Réf. Pièce</Text>
+            <Text style={[baseStyles.th, { width: '36%' }]}>Libellé de l'opération</Text>
+            <Text style={[baseStyles.thRight, { width: '16%' }]}>Débit (FCFA)</Text>
+            <Text style={[baseStyles.thRight, { width: '16%' }]}>Crédit (FCFA)</Text>
+          </View>
+          {recentRows.slice(0, 10).map((r, i) => (
+            <View key={r.id || i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
+              <Text style={[baseStyles.td, { width: '14%' }]}>{r.date}</Text>
+              <Text style={[baseStyles.td, { width: '18%', fontFamily: 'Helvetica-Bold' }]}>{r.ref || '—'}</Text>
+              <Text style={[baseStyles.td, { width: '36%' }]}>{r.description}</Text>
+              <Text style={[baseStyles.tdRight, { width: '16%', color: '#047857' }]}>{r.debit}</Text>
+              <Text style={[baseStyles.tdRight, { width: '16%', color: '#b91c1c' }]}>{r.credit}</Text>
+            </View>
+          ))}
+          {recentRows.length === 0 && (
+            <View style={baseStyles.row}>
+              <Text style={[baseStyles.td, { width: '100%', textAlign: 'center', color: '#94a3b8' }]}>
+                Aucune écriture enregistrée pour cet exercice.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* 5. ALERTES & POINTS DE VIGILANCE */}
+        <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#166534', marginTop: 14, marginBottom: 4, textTransform: 'uppercase' }}>
+          ALERTES & CONTRÔLES DE CLÔTURE
+        </Text>
+        <View style={{ gap: 4 }}>
+          {alerts.length > 0 ? (
+            alerts.map((alt, idx) => (
+              <View
+                key={alt.key || idx}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5 8',
+                  backgroundColor: alt.tone === 'warning' ? '#fffbeb' : '#f0fdf4',
+                  borderWidth: 0.5,
+                  borderColor: alt.tone === 'warning' ? '#fde68a' : '#bbf7d0',
+                  borderRadius: 3,
+                }}
+              >
+                <View
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: 2.5,
+                    backgroundColor: alt.tone === 'warning' ? '#f59e0b' : '#16a34a',
+                  }}
+                />
+                <Text style={{ fontSize: 7, color: alt.tone === 'warning' ? '#92400e' : '#166534', flex: 1 }}>
+                  {alt.text}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={{ fontSize: 7, color: '#94a3b8' }}>Aucune alerte active sur cet exercice.</Text>
+          )}
+        </View>
+
+        {/* Cadre de signature & visa de conformité */}
+        <View style={{
+          marginTop: 20,
+          borderWidth: 0.5,
+          borderColor: '#cbd5e1',
+          borderRadius: 4,
+          padding: 8,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+        }}>
+          <View style={{ width: '45%' }}>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#475569', textTransform: 'uppercase' }}>
+              Visa du Responsable Comptable
+            </Text>
+            <Text style={{ fontSize: 6, color: '#94a3b8', marginTop: 2 }}>Date et signature :</Text>
+            <View style={{ height: 28, borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1' }} />
+          </View>
+          <View style={{ width: '45%' }}>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#475569', textTransform: 'uppercase' }}>
+              Visa de la Direction Générale
+            </Text>
+            <Text style={{ fontSize: 6, color: '#94a3b8', marginTop: 2 }}>Date et signature :</Text>
+            <View style={{ height: 28, borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1' }} />
+          </View>
+        </View>
+
+        <CipresaFooter footerText={footerText} />
+      </Page>
+    </Document>
+  );
+}
+
+export async function exportDashboardPDF(options) {
+  const filename = options.filename || `Tableau_de_bord_${options.exercice?.code || 'exercice'}`;
+  await downloadPDF({
+    filename,
+    document: <DashboardPDFDocument {...options} />,
   });
 }

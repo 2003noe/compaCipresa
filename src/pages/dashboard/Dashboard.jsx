@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useExercice } from "../../context/ExerciceContext";
 import { useAuth } from "../../context/AuthContext";
 import { buildBilan } from "../../lib/bilan";
-import { exportToExcel, GenericTablePDF, PDFPreviewModal } from "../../lib/generateFile";
+import { exportToExcel, DashboardPDFDocument, PDFPreviewModal } from "../../lib/generateFile";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Badge from "../../components/ui/Badge";
@@ -34,7 +34,7 @@ function AccountingDashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const { selectedExercice } = useExercice();
-  const { selectedEntrepriseId, hasRole, can } = useAuth();
+  const { selectedEntrepriseId, selectedEntreprise, hasRole, can } = useAuth();
   const isAdmin = hasRole('ADMIN');
   const canExport = can('COMPTA_EXPORT');
   const [soldesBilan, setSoldesBilan] = useState(null);
@@ -725,16 +725,31 @@ function AccountingDashboard() {
         <PDFPreviewModal
           isOpen={showPDFPreview}
           onClose={() => setShowPDFPreview(false)}
-          title="Tableau de bord"
-          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
+          title="Tableau de bord de gestion"
+          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''} — ${selectedEntreprise?.nom || 'CIPRESA Consulting SARL'}`}
           filename={`Tableau_de_bord_${selectedExercice?.code || 'exercice'}`}
           defaultOrientation="portrait"
           renderDocument={(orientation) => (
-            <GenericTablePDF
-              title="Tableau de bord — Indicateurs clés"
-              columns={dashboardColumns}
-              rows={dashboardKpiRows}
-              footerText={`Dernière mise à jour : ${todayFr()}`}
+            <DashboardPDFDocument
+              exercice={selectedExercice}
+              entrepriseName={selectedEntreprise?.nom || 'CIPRESA Consulting SARL'}
+              kpis={{
+                tresorerie: soldeTresorerie,
+                deltaTresorerieMois,
+                ca: caN,
+                caPct,
+                resultatNet: resultatNetN,
+                resultatPct,
+                totalActif: bilan ? Math.round(bilan.totals.actif) : 0,
+                bilanEquilibre,
+                bilanEcart: Math.round(bilanEcart),
+                totalEcritures: ecrituresLight.length,
+                ecrituresCeMois,
+              }}
+              monthlyFlows={monthlyFlows}
+              donutData={donutData}
+              recentRows={recentRows}
+              alerts={alerts}
               orientation={orientation}
             />
           )}
