@@ -41,3 +41,4 @@ export {
 } from './exportPDF.jsx';
 
 export { default as PDFPreviewModal } from './PDFPreviewModal.jsx';
+export { buildPdfFilename } from './filename.js';

@@ -25,7 +25,7 @@ import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { editPhysicalInventory, toast } from '../../lib/notifications';
 import { computeDepreciation } from '../../lib/depreciation';
-import { exportLivreInventaireExcel, exportLivreInventairePDF, LivreInventairePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportLivreInventaireExcel, exportLivreInventairePDF, LivreInventairePDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 import { calculateInventoryStatement, calculatePhysicalInventoryTotals, classifyInventoryAccount, hasAtypicalInventoryBalance, isContraAssetAccount, isPatrimonialAccount } from '../../lib/accounting/inventoryStatement';
 import './LivreInventaire.css';
 
@@ -718,7 +718,7 @@ function AccountingLivreInventaire() {
           onClose={() => setShowPDFPreview(false)}
           title="Livre d'inventaire du patrimoine"
           subtitle={`Exercice : ${selectedExercice?.code || ''} — Date de situation : ${cutoffDate || '—'} — ${inventoryValidation ? 'Inventaire arrêté' : 'Inventaire non arrêté'}`}
-          filename={`Livre_Inventaire_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Livre-Inventaire', selectedExercice)}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <LivreInventairePDFDocument

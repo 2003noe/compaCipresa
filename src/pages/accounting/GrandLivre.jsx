@@ -10,7 +10,7 @@ import Modal from '../../components/ui/Modal';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
-import { exportGrandLivreExcel, exportGrandLivrePDF, GrandLivrePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportGrandLivreExcel, exportGrandLivrePDF, GrandLivrePDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 
 const formatMoney = (val) => {
   if (val === null || val === undefined || val === '') return '';
@@ -835,7 +835,12 @@ export default function GrandLivre() {
           onClose={() => setShowPDFPreview(false)}
           title="Grand-livre des comptes"
           subtitle={`Exercice : ${selectedExercice?.code || ''} — Période : ${periodStart || '—'} au ${periodEnd || '—'}`}
-          filename={`Grand_Livre_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename(
+            selectedAccountId !== 'ALL'
+              ? `Compte-${accounts.find((a) => a.id === selectedAccountId)?.numero || ''}-${accounts.find((a) => a.id === selectedAccountId)?.libelle || ''}`
+              : 'Grand-Livre',
+            selectedExercice
+          )}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <GrandLivrePDFDocument

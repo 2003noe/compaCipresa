@@ -16,7 +16,7 @@ import Button from '../../components/ui/Button';
 import FinancialTabs from '../../components/accounting/FinancialTabs';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { ACTIF_SECTIONS, buildBilan, mergeGroup } from '../../lib/bilan';
-import { exportBilanExcel, exportBilanPDF, BilanPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportBilanExcel, exportBilanPDF, BilanPDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 
 // Montant : 0 => « - », négatif => (montant) selon l'usage comptable
 const fmt = (v) => {
@@ -671,7 +671,7 @@ export default function Bilan() {
           onClose={() => setShowPDFPreview(false)}
           title="Bilan comptable (SYSCOHADA)"
           subtitle={`Exercice : ${selected?.code || ''}`}
-          filename={`Bilan_Comptable_${selected?.code || 'exercice'}`}
+          filename={buildPdfFilename('Bilan-Comptable', selected)}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <BilanPDFDocument

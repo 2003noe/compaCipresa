@@ -1,6 +1,7 @@
 import React from 'react';
 import { pdf, Document, Page, Text, View, Image, StyleSheet, Svg, Path, Circle, Rect, Line, G } from '@react-pdf/renderer';
 import { CIPRESA_LOGO_MORE_BASE64 } from './banner.js';
+import { buildPdfFilename } from './filename.js';
 
 export const DEFAULT_FOOTER_TEXT = "généré part l'application de comptabilité de CIpressa consulting";
 
@@ -973,7 +974,7 @@ export async function downloadPDF({ filename = 'document', document: doc }) {
 }
 
 export async function exportJournalPDF(options) {
-  const filename = options.filename || `Journal_comptable_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Journal', options.exercice);
   await downloadPDF({
     filename,
     document: <JournalPDFDocument {...options} />,
@@ -981,7 +982,7 @@ export async function exportJournalPDF(options) {
 }
 
 export async function exportBalancePDF(options) {
-  const filename = options.filename || `Balance_Generale_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Balance-Generale', options.exercice);
   await downloadPDF({
     filename,
     document: <BalancePDFDocument {...options} />,
@@ -989,7 +990,7 @@ export async function exportBalancePDF(options) {
 }
 
 export async function exportGrandLivrePDF(options) {
-  const filename = options.filename || `Grand_Livre_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename(options.accountName || 'Grand-Livre', options.exercice);
   await downloadPDF({
     filename,
     document: <GrandLivrePDFDocument {...options} />,
@@ -997,7 +998,7 @@ export async function exportGrandLivrePDF(options) {
 }
 
 export async function exportBilanPDF(options) {
-  const filename = options.filename || `Bilan_Comptable_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Bilan-Comptable', options.exercice);
   await downloadPDF({
     filename,
     document: <BilanPDFDocument {...options} />,
@@ -1005,7 +1006,7 @@ export async function exportBilanPDF(options) {
 }
 
 export async function exportTresoreriePDF(options) {
-  const filename = options.filename || `Suivi_Tresorerie_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Suivi-Tresorerie', options.exercice);
   await downloadPDF({
     filename,
     document: <TresoreriePDFDocument {...options} />,
@@ -1013,7 +1014,7 @@ export async function exportTresoreriePDF(options) {
 }
 
 export async function exportLivreInventairePDF(options) {
-  const filename = options.filename || `Livre_Inventaire_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Livre-Inventaire', options.exercice);
   await downloadPDF({
     filename,
     document: <LivreInventairePDFDocument {...options} />,
@@ -1131,7 +1132,7 @@ export function CompteResultatPDFDocument({
 }
 
 export async function exportCompteResultatPDF(options) {
-  const filename = options.filename || `Compte_Resultat_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Compte-de-Resultat', options.exercice);
   await downloadPDF({
     filename,
     document: <CompteResultatPDFDocument {...options} />,
@@ -1499,7 +1500,7 @@ export function DashboardPDFDocument({
 }
 
 export async function exportDashboardPDF(options) {
-  const filename = options.filename || `Tableau_de_bord_${options.exercice?.code || 'exercice'}`;
+  const filename = options.filename || buildPdfFilename('Tableau-de-Bord', options.exercice);
   await downloadPDF({
     filename,
     document: <DashboardPDFDocument {...options} />,

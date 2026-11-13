@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { Printer, Download, X, FileText, Loader2, RefreshCw } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import { buildPdfFilename } from './filename.js';
 
 /**
  * Modal de prévisualisation PDF avec sélection de l'orientation (Paysage / Portrait),
@@ -115,7 +116,11 @@ export default function PDFPreviewModal({
     if (!blobUrl) return;
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = `${filename}_${orientation}.pdf`;
+    const targetFilename = filename && filename !== 'document'
+      ? filename
+      : buildPdfFilename(title || 'Document');
+    const cleanFilename = String(targetFilename).replace(/\.pdf$/i, '');
+    a.download = `${cleanFilename}.pdf`;
     a.click();
   };
 

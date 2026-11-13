@@ -7,7 +7,7 @@ import Badge from '../../components/ui/Badge';
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
-import { exportTresorerieExcel, exportTresoreriePDF, TresoreriePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportTresorerieExcel, exportTresoreriePDF, TresoreriePDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const isCaisse = (numero) => (numero || '').startsWith('57');
@@ -393,7 +393,7 @@ export default function Tresorerie() {
           onClose={() => setShowPDFPreview(false)}
           title="Suivi de Trésorerie"
           subtitle={`Exercice : ${selectedExercice?.code || ''}`}
-          filename={`Suivi_Tresorerie_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Suivi-Tresorerie', selectedExercice)}
           defaultOrientation="portrait"
           renderDocument={(orientation) => (
             <TresoreriePDFDocument

@@ -4,7 +4,7 @@ import { ArrowDownRight, ArrowUpRight, BookOpen, CircleAlert, Download, Edit3, E
 import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
-import { exportChartOfAccountsExcel, ChartOfAccountsPDF, PDFPreviewModal } from '../../lib/generateFile';
+import { exportChartOfAccountsExcel, ChartOfAccountsPDF, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 import { accountController } from '../../services/accounting/accountController';
 import { toast } from '../../lib/notifications';
 import './chartOfAccounts.css';
@@ -854,7 +854,7 @@ export default function ChartOfAccounts() {
         onClose={() => setShowPdfPreview(false)}
         title="Plan comptable général & sectoriel"
         subtitle={`${exportSubtitle} · ${filteredAccounts.length} compte(s)`}
-        filename={`Plan_Comptable_${selectedExercice?.code || 'exercice'}`}
+        filename={buildPdfFilename('Plan-Comptable', selectedExercice)}
         defaultOrientation="landscape"
         renderDocument={(orientation) => <ChartOfAccountsPDF title={exportTitle} subtitle={exportSubtitle} groups={exportGroups} footerText="CIPRESA · Plan comptable OHADA sectoriel agricole" orientation={orientation} />}
       />}

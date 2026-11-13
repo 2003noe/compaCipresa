@@ -13,7 +13,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { confirmAction, toast } from '../../lib/notifications';
-import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportJournalExcel, exportJournalPDF, JournalPDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 
 const ATTACHMENT_BUCKET = 'pieces-justificatives';
 const PAGE_SIZE = 25;       // lignes affichées par page (écritures validées)
@@ -332,7 +332,7 @@ export default function JournalPage() {
         rows: filteredValidees,
         totals: totalsValidees,
         exercice: selectedExercice,
-        filename: `Journal_comptable_${suffix}`,
+        filename: buildPdfFilename('Journal', selectedExercice),
       });
     } catch (err) {
       console.error('Erreur export PDF journal:', err);
@@ -645,7 +645,7 @@ export default function JournalPage() {
           onClose={() => setShowPDFPreview(false)}
           title="Journal comptable"
           subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
-          filename={`Journal_comptable_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Journal', selectedExercice)}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <JournalPDFDocument

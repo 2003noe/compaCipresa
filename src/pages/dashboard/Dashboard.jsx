@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { useExercice } from "../../context/ExerciceContext";
 import { useAuth } from "../../context/AuthContext";
 import { buildBilan } from "../../lib/bilan";
-import { exportToExcel, DashboardPDFDocument, PDFPreviewModal } from "../../lib/generateFile";
+import { exportToExcel, DashboardPDFDocument, PDFPreviewModal, buildPdfFilename } from "../../lib/generateFile";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Badge from "../../components/ui/Badge";
@@ -727,7 +727,7 @@ function AccountingDashboard() {
           onClose={() => setShowPDFPreview(false)}
           title="Tableau de bord de gestion"
           subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''} — ${selectedEntreprise?.nom || 'CIPRESA Consulting SARL'}`}
-          filename={`Tableau_de_bord_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Tableau-de-Bord', selectedExercice)}
           defaultOrientation="portrait"
           renderDocument={(orientation) => (
             <DashboardPDFDocument

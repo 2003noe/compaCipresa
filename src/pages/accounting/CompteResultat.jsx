@@ -21,6 +21,7 @@ import {
   exportCompteResultatExcel,
   CompteResultatPDFDocument,
   PDFPreviewModal,
+  buildPdfFilename,
 } from '../../lib/generateFile';
 
 const money = (v) => Math.round(Number(v || 0)).toLocaleString('fr-FR');
@@ -772,7 +773,7 @@ export default function CompteResultat() {
           onClose={() => setShowPDFPreview(false)}
           title="Compte de résultat (SYSCOHADA)"
           subtitle={`Exercice : ${selectedExercice?.code || ''}`}
-          filename={`Compte_Resultat_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Compte-de-Resultat', selectedExercice)}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <CompteResultatPDFDocument

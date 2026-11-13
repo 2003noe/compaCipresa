@@ -9,7 +9,7 @@ import { supabase, supabaseConfigured } from '../../lib/supabaseClient';
 import { useExercice } from '../../context/ExerciceContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { exportBalanceExcel, exportBalancePDF, BalancePDFDocument, PDFPreviewModal } from '../../lib/generateFile';
+import { exportBalanceExcel, exportBalancePDF, BalancePDFDocument, PDFPreviewModal, buildPdfFilename } from '../../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const dash = (v) => (Number(v || 0) === 0 ? '-' : money(v));
@@ -405,7 +405,7 @@ export default function Balance() {
           onClose={() => setShowPDFPreview(false)}
           title="Balance générale des comptes"
           subtitle={`Exercice : ${selectedExercice?.code || ''}`}
-          filename={`Balance_Generale_${selectedExercice?.code || 'exercice'}`}
+          filename={buildPdfFilename('Balance-Generale', selectedExercice)}
           defaultOrientation="landscape"
           renderDocument={(orientation) => (
             <BalancePDFDocument
