@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Search, Building2 } from 'lucide-react';
+import { Plus, RefreshCw, Search, Building2, Printer, FileText, Download } from 'lucide-react';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
@@ -10,6 +10,12 @@ import { computeDepreciation } from '../lib/depreciation';
 import { useExercice } from '../context/ExerciceContext';
 import { useAuth } from '../context/AuthContext';
 import { editPhysicalInventory, toast } from '../lib/notifications';
+import {
+  exportImmobilisationsExcel,
+  ImmobilisationsPDFDocument,
+  PDFPreviewModal,
+  buildPdfFilename,
+} from '../lib/generateFile';
 
 const money = (v) => Number(v || 0).toLocaleString('fr-FR');
 const STATUT_LABEL = { EN_SERVICE: 'En service', CEDE: 'Cédé', REFORME: 'Réformé' };
@@ -17,9 +23,10 @@ const METHODE_LABEL = { LINEAIRE: 'Linéaire', DEGRESSIF: 'Dégressif', AUCUNE: 
 
 export default function Immobilisations() {
   const nav = useNavigate();
-  const { can } = useAuth();
+  const { can, hasRole } = useAuth();
   const physicalOnly = can('STOCK_INVENTORY') && !can('COMPTA_READ');
-  const canManageFinancialAssets = can('COMPTA_ASSET_EDIT');
+  const canManageFinancialAssets = can('COMPTA_ASSET_EDIT') || hasRole('ADMIN') || hasRole('GERANT') || hasRole('COMPTABLE');
+  const canExport = can('COMPTA_EXPORT') || can('COMPTA_READ') || hasRole('ADMIN') || hasRole('GERANT') || hasRole('COMPTABLE');
   const { selectedExercice, selectedExerciceId, loading: exercicesLoading } = useExercice();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +36,7 @@ export default function Immobilisations() {
   const [statut, setStatut] = useState('Tout');
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) { setNotice("Supabase n'est pas configuré."); setLoading(false); return; }
@@ -62,6 +70,19 @@ export default function Immobilisations() {
   const totalAmort = withDepreciation.reduce((acc, a) => acc + a.amortCumule, 0);
   const totalVnc = totalBrut - totalAmort;
 
+  const handleDirectPrint = () => {
+    window.print();
+  };
+
+  const handleExportExcel = () => {
+    exportImmobilisationsExcel({
+      assets: filtered,
+      totals: { brut: totalBrut, amort: totalAmort, vnc: totalVnc },
+      exercice: selectedExercice,
+      filename: buildPdfFilename('Immobilisations', selectedExercice),
+    });
+  };
+
   const updatePhysicalRecord = async (asset) => {
     const values = await editPhysicalInventory({
       title: `Inventaire physique · ${asset.code}`,
@@ -93,24 +114,59 @@ export default function Immobilisations() {
   /* ── Vue complète registre des immobilisations ── */
   return (
     <div className="page-content">
-      <div className="page-header">
+      <div className="page-header no-print">
         <div>
           <h1 className="page-title">Registre des immobilisations</h1>
           <p className="page-subtitle">Situation des immobilisations au {selectedExercice?.date_fin || '—'} — exercice {selectedExercice?.code || ''}{loading ? ' · Chargement…' : ''}</p>
         </div>
-        {canManageFinancialAssets && <Button icon={Plus} onClick={() => nav('/nouvelle-immobilisation')}>Nouvelle immobilisation</Button>}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {canExport && (
+            <Button
+              variant="secondary"
+              icon={Printer}
+              onClick={handleDirectPrint}
+              disabled={loading || filtered.length === 0}
+              title="Imprimer directement le registre via le navigateur"
+            >
+              Imprimer
+            </Button>
+          )}
+          {canExport && (
+            <Button
+              variant="secondary"
+              icon={FileText}
+              onClick={() => setShowPDFPreview(true)}
+              disabled={loading || filtered.length === 0}
+              title="Prévisualiser et exporter en PDF"
+            >
+              PDF
+            </Button>
+          )}
+          {canExport && (
+            <Button
+              variant="primary"
+              icon={Download}
+              onClick={handleExportExcel}
+              disabled={loading || filtered.length === 0}
+              title="Exporter vers Excel (.xlsx)"
+            >
+              Excel
+            </Button>
+          )}
+          {canManageFinancialAssets && <Button icon={Plus} onClick={() => nav('/nouvelle-immobilisation')}>Nouvelle immobilisation</Button>}
+        </div>
       </div>
 
       {notice && <div className="message error" role="alert">{notice}</div>}
 
-      <div className="cr-kpis">
+      <div className="cr-kpis no-print">
         <Card><span className="ledger-summary-label">Valeur brute totale</span><strong>{money(totalBrut)} FCFA</strong></Card>
         <Card><span className="ledger-summary-label">Amortissements cumulés</span><strong>{money(totalAmort)} FCFA</strong></Card>
         <Card className="kpi-highlight"><span className="ledger-summary-label">Valeur nette comptable</span><strong className="positive">{money(totalVnc)} FCFA</strong></Card>
       </div>
 
-      <Card>
-        <div className="asset-toolbar">
+      <Card className="immo-screen-card">
+        <div className="asset-toolbar no-print">
           <div className="toolbar-search"><Search size={14} /><input placeholder="Rechercher une immobilisation..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           <select className="input select asset-filter" value={categorie} onChange={(e) => setCategorie(e.target.value)}>
             {categories.map((c) => <option key={c} value={c}>Catégorie : {c}</option>)}
@@ -224,6 +280,187 @@ export default function Immobilisations() {
           </div>
         </Modal>
       )}
+      {/* Document complet pour impression directe A4 Paysage (window.print) */}
+      <div className="immo-print-document" style={{ display: 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #166534', paddingBottom: '10px', marginBottom: '14px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
+              CIPRESA CONSULTING SARL
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#4b5563' }}>
+              Cabinet International de Prestation de Services Agricoles
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+              REGISTRE DES IMMOBILISATIONS ET DES AMORTISSEMENTS
+            </p>
+            <p style={{ margin: 0, fontSize: '9px', color: '#64748b' }}>
+              Système Comptable SYSCOHADA Révisé — Tenue de compte : FCFA
+            </p>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: '10px', color: '#334155' }}>
+            <p style={{ margin: '0 0 3px' }}><strong>Exercice :</strong> {selectedExercice?.code || selectedExercice?.annee || '—'}</p>
+            <p style={{ margin: '0 0 3px' }}>
+              <strong>Situation au :</strong> {selectedExercice?.date_fin ? new Date(selectedExercice.date_fin).toLocaleDateString('fr-FR') : '—'}
+            </p>
+            <p style={{ margin: '0 0 3px' }}>
+              <strong>Catégorie :</strong> {categorie} · <strong>Statut :</strong> {statut === 'Tout' ? 'Tous les statuts' : (STATUT_LABEL[statut] || statut)}
+            </p>
+            <p style={{ margin: 0, color: '#64748b' }}>
+              Tiré le : {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+        </div>
+
+        {/* Synthèse des totaux */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 14px', borderRadius: '4px', marginBottom: '14px', fontSize: '11px' }}>
+          <div>
+            <strong>Biens enregistrés :</strong> {filtered.length} immobilisation(s)
+          </div>
+          <div>
+            <strong>Valeur Brute Totale :</strong> {money(totalBrut)} FCFA
+          </div>
+          <div>
+            <strong>Amortissements Cumulés :</strong> {money(totalAmort)} FCFA
+          </div>
+          <div>
+            <strong style={{ color: '#166534' }}>Valeur Nette (VNC) :</strong> {money(totalVnc)} FCFA
+          </div>
+        </div>
+
+        {/* Tableau complet des immobilisations */}
+        <table className="immo-print-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '16px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#275a43', color: '#ffffff', textAlign: 'left' }}>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', width: '10%' }}>Code</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', width: '25%' }}>Désignation du bien</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', width: '14%' }}>Catégorie</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', width: '9%' }}>Acquisition</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', textAlign: 'right', width: '12%' }}>Valeur brute</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', textAlign: 'center', width: '8%' }}>Méthode</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', textAlign: 'right', width: '11%' }}>Amort. cumulé</th>
+              <th style={{ padding: '6px 8px', border: '1px solid #1e4735', textAlign: 'right', width: '11%' }}>VNC (FCFA)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((a, i) => (
+              <tr key={a.id || i} style={{ borderBottom: '1px solid #cbd5e1', backgroundColor: i % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700, color: '#166534' }}>{a.code}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', fontWeight: 500 }}>{a.designation}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1' }}>{a.categorie || '—'}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1' }}>{a.date_acquisition ? new Date(a.date_acquisition).toLocaleDateString('fr-FR') : '—'}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', textAlign: 'right', fontFamily: 'monospace' }}>{money(a.valeur_brute)}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', textAlign: 'center', fontSize: '8px' }}>{METHODE_LABEL[a.methode] || a.methode || '—'} {a.duree_annees ? `(${a.duree_annees}a)` : ''}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', textAlign: 'right', fontFamily: 'monospace', color: '#b91c1c' }}>{money(a.amortCumule)}</td>
+                <td style={{ padding: '4px 8px', border: '1px solid #cbd5e1', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#15803d' }}>{money(a.vnc)}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
+                  Aucune immobilisation enregistrée pour ces filtres.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr style={{ backgroundColor: '#e2e8f0', fontWeight: 700, borderTop: '2px solid #000' }}>
+              <td colSpan={4} style={{ padding: '6px 8px', border: '1px solid #94a3b8' }}>
+                TOTAL GÉNÉRAL ({filtered.length} immobilisation{filtered.length > 1 ? 's' : ''})
+              </td>
+              <td style={{ padding: '6px 8px', border: '1px solid #94a3b8', textAlign: 'right', fontFamily: 'monospace' }}>{money(totalBrut)}</td>
+              <td style={{ padding: '6px 8px', border: '1px solid #94a3b8' }}></td>
+              <td style={{ padding: '6px 8px', border: '1px solid #94a3b8', textAlign: 'right', fontFamily: 'monospace', color: '#b91c1c' }}>{money(totalAmort)}</td>
+              <td style={{ padding: '6px 8px', border: '1px solid #94a3b8', textAlign: 'right', fontFamily: 'monospace', color: '#15803d' }}>{money(totalVnc)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* Zone visas & signatures */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px', pageBreakInside: 'avoid' }}>
+          <div style={{ width: '45%', border: '1px solid #94a3b8', padding: '10px', borderRadius: '4px', textAlign: 'center', minHeight: '70px' }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '10px', color: '#166534' }}>Le Responsable du Patrimoine / Comptable</p>
+            <p style={{ margin: '3px 0 0', fontSize: '8px', color: '#64748b' }}>Visa & Date</p>
+          </div>
+          <div style={{ width: '45%', border: '1px solid #94a3b8', padding: '10px', borderRadius: '4px', textAlign: 'center', minHeight: '70px' }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '10px', color: '#166534' }}>La Direction Générale</p>
+            <p style={{ margin: '3px 0 0', fontSize: '8px', color: '#64748b' }}>Signature & Cachet</p>
+          </div>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: '8px', color: '#94a3b8', marginTop: '12px' }}>
+          Généré par l'application de comptabilité de CIPRESA CONSULTING — Système SYSCOHADA
+        </p>
+      </div>
+
+      {showPDFPreview && canExport && (
+        <PDFPreviewModal
+          isOpen={showPDFPreview}
+          onClose={() => setShowPDFPreview(false)}
+          title="Registre des immobilisations"
+          subtitle={`Exercice : ${selectedExercice?.code || selectedExercice?.annee || ''}`}
+          filename={buildPdfFilename('Immobilisations', selectedExercice)}
+          defaultOrientation="landscape"
+          renderDocument={(orientation) => (
+            <ImmobilisationsPDFDocument
+              assets={filtered}
+              totals={{ brut: totalBrut, amort: totalAmort, vnc: totalVnc }}
+              exercice={selectedExercice}
+              orientation={orientation}
+            />
+          )}
+        />
+      )}
+
+      {/* Styles d'impression dédiés A4 Paysage */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+          html, body, #root, .app-layout, .main-content, .page-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+          }
+          .no-print, .sidebar, header, .app-header, nav, .asset-toolbar {
+            display: none !important;
+          }
+          .card {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+          }
+          .immo-screen-card, .cr-kpis {
+            display: none !important;
+          }
+          .immo-print-document {
+            display: block !important;
+          }
+          .immo-print-table {
+            width: 100% !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .immo-print-table th {
+            background-color: #275a43 !important;
+            color: #ffffff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          tr {
+            page-break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
