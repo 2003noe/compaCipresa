@@ -86,10 +86,10 @@ function PiecesCell({ pieces, urls }) {
 // ---------------------------------------------------------------------------
 export default function JournalPage() {
   const nav = useNavigate();
-  const { can, profile } = useAuth();
-  const canCreate = can('COMPTA_CREATE');
-  const canValidate = can('COMPTA_VALIDATE');
-  const canExport = can('COMPTA_JOURNAL_EXPORT');
+  const { can, hasRole, profile } = useAuth();
+  const canCreate = can('COMPTA_CREATE') || hasRole('ADMIN') || hasRole('GERANT') || hasRole('COMPTABLE');
+  const canValidate = can('COMPTA_VALIDATE') || hasRole('ADMIN') || hasRole('GERANT');
+  const canExport = can('COMPTA_EXPORT') || can('COMPTA_READ') || can('COMPTA_JOURNAL_EXPORT') || hasRole('ADMIN') || hasRole('GERANT') || hasRole('COMPTABLE');
 
   // Données
   const [rowsValidees, setRowsValidees] = useState([]);

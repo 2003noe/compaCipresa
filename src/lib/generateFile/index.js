@@ -13,6 +13,7 @@ export {
   exportTresorerieExcel,
   exportLivreInventaireExcel,
   exportCompteResultatExcel,
+  exportImmobilisationsExcel,
 } from './exportExcel.js';
 
 export {
@@ -30,6 +31,7 @@ export {
   LivreInventairePDFDocument,
   CompteResultatPDFDocument,
   DashboardPDFDocument,
+  ImmobilisationsPDFDocument,
   exportJournalPDF,
   exportBalancePDF,
   exportGrandLivrePDF,
@@ -38,6 +40,7 @@ export {
   exportLivreInventairePDF,
   exportCompteResultatPDF,
   exportDashboardPDF,
+  exportImmobilisationsPDF,
 } from './exportPDF.jsx';
 
 export { default as PDFPreviewModal } from './PDFPreviewModal.jsx';
