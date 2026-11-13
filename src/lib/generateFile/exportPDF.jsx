@@ -404,9 +404,13 @@ export function JournalPDFDocument({
   footerText = DEFAULT_FOOTER_TEXT,
 }) {
   const exLabel = exercice?.code || exercice?.annee || '';
-  const subtitle = exLabel ? `Exercice : ${exLabel} — Système SYSCOHADA` : 'Système Comptable SYSCOHADA';
+  const subtitle = exLabel
+    ? `Exercice : ${exLabel} — Système Comptable SYSCOHADA — Tenue de compte : FCFA`
+    : 'Système Comptable SYSCOHADA — Tenue de compte : FCFA';
   const fmtNum = (v) => Number(v || 0).toLocaleString('fr-FR');
+  const isBalanced = Math.abs(Number(totals?.debit || 0) - Number(totals?.credit || 0)) < 0.01;
   const isPortrait = orientation === 'portrait';
+  const hasDetailedLines = rows.some((r) => r.lignes && r.lignes.length > 0);
 
   const wDate = isPortrait ? '13%' : '10%';
   const wJournal = isPortrait ? '9%' : '8%';
@@ -418,38 +422,177 @@ export function JournalPDFDocument({
   return (
     <Document>
       <Page size="A4" orientation={orientation} style={baseStyles.page}>
-        <CipresaBannerHeader title="JOURNAL COMPTABLE" subtitle={subtitle} />
+        <CipresaBannerHeader title="JOURNAL COMPTABLE GÉNÉRAL" subtitle={subtitle} />
 
         <View style={baseStyles.table}>
-          <View style={baseStyles.thead}>
-            <Text style={[baseStyles.th, { width: wDate }]}>Date</Text>
-            <Text style={[baseStyles.th, { width: wJournal }]}>Journal</Text>
-            <Text style={[baseStyles.th, { width: wRef }]}>Référence</Text>
-            <Text style={[baseStyles.th, { width: wLib }]}>Libellé / Description</Text>
-            <Text style={[baseStyles.thRight, { width: wDebit }]}>Débit (FCFA)</Text>
-            <Text style={[baseStyles.thRight, { width: wCredit }]}>Crédit (FCFA)</Text>
+          {hasDetailedLines ? (
+            <>
+              <View style={baseStyles.thead}>
+                <Text style={[baseStyles.th, { width: isPortrait ? '16%' : '14%' }]}>N° Compte</Text>
+                <Text style={[baseStyles.th, { width: isPortrait ? '26%' : '28%' }]}>Intitulé du compte</Text>
+                <Text style={[baseStyles.th, { width: isPortrait ? '34%' : '38%' }]}>Libellé de l'opération / ligne</Text>
+                <Text style={[baseStyles.thRight, { width: isPortrait ? '12%' : '10%' }]}>Débit (FCFA)</Text>
+                <Text style={[baseStyles.thRight, { width: isPortrait ? '12%' : '10%' }]}>Crédit (FCFA)</Text>
+              </View>
+
+              {rows.map((r, i) => (
+                <View
+                  key={r.id ?? i}
+                  wrap={false}
+                  style={{
+                    marginTop: 3,
+                    marginBottom: 2,
+                    borderWidth: 0.5,
+                    borderColor: '#cbd5e1',
+                    borderRadius: 2,
+                  }}
+                >
+                  {/* Bandeau d'en-tête de la pièce */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      backgroundColor: '#e9f4ec',
+                      padding: '3 5',
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: '#cbd5e1',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: '#166534', width: '18%' }}>
+                      {r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—'} · Jnl: {r.journal || '—'}
+                    </Text>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: '#0f172a', width: '22%' }}>
+                      N° Pièce : {r.ref || '—'}
+                    </Text>
+                    <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: '#334155', width: '42%' }}>
+                      {r.description || ''}
+                    </Text>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: '#166534', width: '18%', textAlign: 'right' }}>
+                      Mvt : {fmtNum(r.debitValue)} FCFA
+                    </Text>
+                  </View>
+
+                  {/* Lignes d'imputation comptable */}
+                  {(r.lignes && r.lignes.length > 0 ? r.lignes : [
+                    { accountNumber: '—', accountLabel: '—', description: r.description, debit: r.debitValue, credit: r.creditValue },
+                  ]).map((l, li) => (
+                    <View
+                      key={l.id || li}
+                      style={[
+                        li % 2 === 0 ? baseStyles.row : baseStyles.rowAlt,
+                        { padding: '2 5' },
+                      ]}
+                    >
+                      <Text style={[baseStyles.td, { width: isPortrait ? '16%' : '14%', fontFamily: 'Helvetica-Bold', fontSize: 7, color: '#1e293b' }]}>
+                        {l.accountNumber || '—'}
+                      </Text>
+                      <Text style={[baseStyles.td, { width: isPortrait ? '26%' : '28%', fontSize: 7 }]}>
+                        {l.accountLabel || '—'}
+                      </Text>
+                      <Text style={[baseStyles.td, { width: isPortrait ? '34%' : '38%', fontSize: 7, color: '#475569' }]}>
+                        {l.description || r.description || ''}
+                      </Text>
+                      <Text style={[baseStyles.tdRight, { width: isPortrait ? '12%' : '10%', fontSize: 7 }]}>
+                        {l.debit > 0 ? fmtNum(l.debit) : '-'}
+                      </Text>
+                      <Text style={[baseStyles.tdRight, { width: isPortrait ? '12%' : '10%', fontSize: 7 }]}>
+                        {l.credit > 0 ? fmtNum(l.credit) : '-'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+
+              <View style={[baseStyles.totalRow, { backgroundColor: '#cbd5e1', marginTop: 4 }]}>
+                <Text style={[baseStyles.totalCell, { width: isPortrait ? '76%' : '80%' }]}>
+                  TOTAL GÉNÉRAL ({rows.length} écriture{rows.length > 1 ? 's' : ''})
+                  {isBalanced ? '  —  ✓ Conforme SYSCOHADA (Équilibré)' : '  —  ⚠ Écart détecté'}
+                </Text>
+                <Text style={[baseStyles.totalCellRight, { width: isPortrait ? '12%' : '10%' }]}>
+                  {fmtNum(totals?.debit)}
+                </Text>
+                <Text style={[baseStyles.totalCellRight, { width: isPortrait ? '12%' : '10%' }]}>
+                  {fmtNum(totals?.credit)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={baseStyles.thead}>
+                <Text style={[baseStyles.th, { width: wDate }]}>Date</Text>
+                <Text style={[baseStyles.th, { width: wJournal }]}>Journal</Text>
+                <Text style={[baseStyles.th, { width: wRef }]}>Référence</Text>
+                <Text style={[baseStyles.th, { width: wLib }]}>Libellé / Description</Text>
+                <Text style={[baseStyles.thRight, { width: wDebit }]}>Débit (FCFA)</Text>
+                <Text style={[baseStyles.thRight, { width: wCredit }]}>Crédit (FCFA)</Text>
+              </View>
+
+              {rows.map((r, i) => (
+                <View key={r.id ?? i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
+                  <Text style={[baseStyles.td, { width: wDate }]}>
+                    {r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—'}
+                  </Text>
+                  <Text style={[baseStyles.td, { width: wJournal }]}>{r.journal || ''}</Text>
+                  <Text style={[baseStyles.td, { width: wRef, fontFamily: 'Helvetica-Bold' }]}>{r.ref || ''}</Text>
+                  <Text style={[baseStyles.td, { width: wLib }]}>{r.description || ''}</Text>
+                  <Text style={[baseStyles.tdRight, { width: wDebit }]}>{fmtNum(r.debitValue)}</Text>
+                  <Text style={[baseStyles.tdRight, { width: wCredit }]}>{fmtNum(r.creditValue)}</Text>
+                </View>
+              ))}
+
+              <View style={baseStyles.totalRow}>
+                <Text style={[baseStyles.totalCell, { width: isPortrait ? '70%' : '70%' }]}>
+                  TOTAL ({rows.length} écriture{rows.length > 1 ? 's' : ''})
+                  {isBalanced ? '  —  Équilibré ✓' : '  —  Écart détecté'}
+                </Text>
+                <Text style={[baseStyles.totalCellRight, { width: wDebit }]}>{fmtNum(totals?.debit)}</Text>
+                <Text style={[baseStyles.totalCellRight, { width: wCredit }]}>{fmtNum(totals?.credit)}</Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Contrôle de conformité SYSCOHADA */}
+        <View
+          style={{
+            marginTop: 6,
+            padding: '4 8',
+            backgroundColor: isBalanced ? '#ecfdf5' : '#fef2f2',
+            borderWidth: 0.5,
+            borderColor: isBalanced ? '#10b981' : '#ef4444',
+            borderRadius: 2,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 7,
+              fontFamily: 'Helvetica-Bold',
+              color: isBalanced ? '#15803d' : '#b91c1c',
+            }}
+          >
+            Contrôle SYSCOHADA : {isBalanced
+              ? `Total Débit (${fmtNum(totals?.debit)}) = Total Crédit (${fmtNum(totals?.credit)}) · Journal Rigoureusement Équilibré ✓`
+              : `Attention : Écart détecté de ${fmtNum(Math.abs(Number(totals?.debit || 0) - Number(totals?.credit || 0)))} FCFA`}
+          </Text>
+        </View>
+
+        {/* Signatures & Visas */}
+        <View
+          wrap={false}
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            marginTop: 12,
+            paddingHorizontal: 10,
+          }}
+        >
+          <View style={{ width: '45%', borderTopWidth: 1, borderTopColor: '#94a3b8', paddingTop: 4, alignItems: 'center' }}>
+            <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#166534' }}>Le Responsable Comptable</Text>
+            <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 2 }}>Visa & Mention « Bon pour enregistrement »</Text>
           </View>
-
-          {rows.map((r, i) => (
-            <View key={r.id ?? i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
-              <Text style={[baseStyles.td, { width: wDate }]}>
-                {r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—'}
-              </Text>
-              <Text style={[baseStyles.td, { width: wJournal }]}>{r.journal || ''}</Text>
-              <Text style={[baseStyles.td, { width: wRef, fontFamily: 'Helvetica-Bold' }]}>{r.ref || ''}</Text>
-              <Text style={[baseStyles.td, { width: wLib }]}>{r.description || ''}</Text>
-              <Text style={[baseStyles.tdRight, { width: wDebit }]}>{fmtNum(r.debitValue)}</Text>
-              <Text style={[baseStyles.tdRight, { width: wCredit }]}>{fmtNum(r.creditValue)}</Text>
-            </View>
-          ))}
-
-          <View style={baseStyles.totalRow}>
-            <Text style={[baseStyles.totalCell, { width: isPortrait ? '70%' : '70%' }]}>
-              TOTAL ({rows.length} écriture{rows.length > 1 ? 's' : ''})
-              {totals?.debit === totals?.credit ? '  —  Équilibré ✓' : '  —  Écart détecté'}
-            </Text>
-            <Text style={[baseStyles.totalCellRight, { width: wDebit }]}>{fmtNum(totals?.debit)}</Text>
-            <Text style={[baseStyles.totalCellRight, { width: wCredit }]}>{fmtNum(totals?.credit)}</Text>
+          <View style={{ width: '45%', borderTopWidth: 1, borderTopColor: '#94a3b8', paddingTop: 4, alignItems: 'center' }}>
+            <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#166534' }}>La Direction Générale</Text>
+            <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 2 }}>Signature & Cachet de l'entreprise</Text>
           </View>
         </View>
 

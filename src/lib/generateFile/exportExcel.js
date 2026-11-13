@@ -1,5 +1,6 @@
 // src/lib/generateFile/exportExcel.js
 import * as XLSX from 'xlsx-js-style';
+import { buildPdfFilename } from './filename';
 
 export const DEFAULT_FOOTER_TEXT = "généré part l'application de comptabilité de CIpressa consulting";
 const COMPANY_NAME = 'CIPRESA CONSULTING SARL';
@@ -163,52 +164,274 @@ export function exportChartOfAccountsExcel({ groups = [], filename = 'Plan_Compt
 }
 
 /**
- * Export Excel dédié au Journal Comptable
+ * Export Excel dédié au Journal Comptable - Format réglementaire SYSCOHADA
  */
-export function exportJournalExcel({ rows = [], totals = {}, exercice = null, filename = 'Journal_comptable' }) {
+export function exportJournalExcel({
+  rows = [],
+  totals = {},
+  exercice = null,
+  filename = '',
+}) {
+  const targetFilename = filename || buildPdfFilename('Journal', exercice);
   const exerciceLabel = exercice?.code || exercice?.annee || '';
   const dateStr = new Date().toLocaleDateString('fr-FR');
+  const isBalanced = Math.abs(Number(totals?.debit || 0) - Number(totals?.credit || 0)) < 0.01;
 
   const aoa = [
     [COMPANY_NAME],
     [COMPANY_SUBTITLE],
-    ['JOURNAL COMPTABLE'],
-    [exerciceLabel ? `Exercice : ${exerciceLabel} — Date d'exportation : ${dateStr}` : `Date d'exportation : ${dateStr}`],
+    ['JOURNAL COMPTABLE GÉNÉRAL - SYSCOHADA'],
+    [
+      exerciceLabel
+        ? `Exercice : ${exerciceLabel} — Date d'exportation : ${dateStr} — Tenue de compte : FCFA`
+        : `Date d'exportation : ${dateStr} — Tenue de compte : FCFA`,
+    ],
     [],
-    ['Date', 'Journal', 'Référence', 'Description', 'Débit (FCFA)', 'Crédit (FCFA)', 'Statut'],
+    [
+      'Date',
+      'Journal',
+      'N° Pièce / Réf',
+      'N° Compte',
+      'Intitulé du compte',
+      'Libellé de l\'écriture / ligne',
+      'Débit (FCFA)',
+      'Crédit (FCFA)',
+      'Statut',
+    ],
   ];
 
+  const headerRowIdx = 5;
+  const dataStartRowIdx = 6;
+
   rows.forEach((r) => {
-    aoa.push([
-      r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—',
-      r.journal || '',
-      r.ref || '',
-      r.description || '',
-      Number(r.debitValue || 0),
-      Number(r.creditValue || 0),
-      r.status || '',
-    ]);
+    const formattedDate = r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—';
+    const journalCode = r.journal || '';
+    const pieceRef = r.ref || r.numero || '';
+    const statusText = r.status || 'Validée';
+
+    if (r.lignes && r.lignes.length > 0) {
+      r.lignes.forEach((l, lIdx) => {
+        aoa.push([
+          lIdx === 0 ? formattedDate : '',
+          lIdx === 0 ? journalCode : '',
+          lIdx === 0 ? pieceRef : '',
+          l.accountNumber || '—',
+          l.accountLabel || '—',
+          l.description || r.description || '',
+          Number(l.debit || 0),
+          Number(l.credit || 0),
+          lIdx === 0 ? statusText : '',
+        ]);
+      });
+    } else {
+      aoa.push([
+        formattedDate,
+        journalCode,
+        pieceRef,
+        '—',
+        '—',
+        r.description || '',
+        Number(r.debitValue || 0),
+        Number(r.creditValue || 0),
+        statusText,
+      ]);
+    }
   });
 
+  const totalRowIdx = aoa.length;
   aoa.push([
     '',
     '',
     '',
-    `TOTAL (${rows.length} écriture${rows.length > 1 ? 's' : ''})`,
+    '',
+    'TOTAL GÉNÉRAL',
+    `${rows.length} écriture${rows.length > 1 ? 's' : ''}`,
     Number(totals?.debit || 0),
     Number(totals?.credit || 0),
-    totals?.debit === totals?.credit ? 'Équilibré ✓' : 'Écart détecté',
+    isBalanced ? 'Équilibré ✓' : 'Écart détecté',
+  ]);
+
+  aoa.push([]);
+  aoa.push(['CONTRÔLE DE COHÉRENCE SYSCOHADA', '', '', '', '', '', '', '', '']);
+  aoa.push(['Total Débit', Number(totals?.debit || 0), 'FCFA', '', '', '', '', '', '']);
+  aoa.push(['Total Crédit', Number(totals?.credit || 0), 'FCFA', '', '', '', '', '', '']);
+  aoa.push([
+    'Écart Débit - Crédit',
+    Math.abs(Number(totals?.debit || 0) - Number(totals?.credit || 0)),
+    isBalanced ? '✓ Journal équilibré' : '⚠ Déséquilibré',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
   ]);
 
   aoa.push([]);
   aoa.push([DEFAULT_FOOTER_TEXT]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = autoFitColumns(aoa);
+
+  // Largeurs de colonnes optimales
+  ws['!cols'] = [
+    { wch: 13 }, // Date
+    { wch: 10 }, // Journal
+    { wch: 18 }, // N° Pièce
+    { wch: 14 }, // N° Compte
+    { wch: 30 }, // Intitulé
+    { wch: 38 }, // Libellé
+    { wch: 16 }, // Débit
+    { wch: 16 }, // Crédit
+    { wch: 14 }, // Statut
+  ];
+
+  // Styles enrichis xlsx-js-style
+  const styles = {
+    banner: {
+      font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 13 },
+      fill: { fgColor: { rgb: 'FF174B38' } },
+      alignment: { vertical: 'center' },
+    },
+    subtitle: {
+      font: { italic: true, color: { rgb: 'FF557064' }, sz: 10 },
+    },
+    title: {
+      font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 11 },
+      fill: { fgColor: { rgb: 'FF275A43' } },
+      alignment: { vertical: 'center' },
+    },
+    meta: {
+      font: { italic: true, color: { rgb: 'FF26372E' }, sz: 9 },
+    },
+    header: {
+      font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FF275A43' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: 'FF174B38' } },
+        bottom: { style: 'medium', color: { rgb: 'FF174B38' } },
+      },
+    },
+    body: {
+      font: { color: { rgb: 'FF1E293B' }, sz: 9 },
+      border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } },
+      alignment: { vertical: 'center' },
+    },
+    bodyAlt: {
+      font: { color: { rgb: 'FF1E293B' }, sz: 9 },
+      fill: { fgColor: { rgb: 'FFF8FAFC' } },
+      border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } },
+      alignment: { vertical: 'center' },
+    },
+    accountCell: {
+      font: { bold: true, color: { rgb: 'FF166534' }, sz: 9 },
+      border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+    },
+    numberCell: {
+      font: { color: { rgb: 'FF0F172A' }, sz: 9 },
+      border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } },
+      alignment: { vertical: 'center', horizontal: 'right' },
+    },
+    totalRow: {
+      font: { bold: true, color: { rgb: 'FF0F172A' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FFE9F4EC' } },
+      border: {
+        top: { style: 'thin', color: { rgb: 'FF275A43' } },
+        bottom: { style: 'double', color: { rgb: 'FF275A43' } },
+      },
+      alignment: { vertical: 'center' },
+    },
+    totalNumberCell: {
+      font: { bold: true, color: { rgb: 'FF166534' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FFE9F4EC' } },
+      border: {
+        top: { style: 'thin', color: { rgb: 'FF275A43' } },
+        bottom: { style: 'double', color: { rgb: 'FF275A43' } },
+      },
+      alignment: { vertical: 'center', horizontal: 'right' },
+    },
+    controlHeader: {
+      font: { bold: true, color: { rgb: 'FF174B38' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FFF0FDF4' } },
+    },
+    balanced: {
+      font: { bold: true, color: { rgb: 'FF168653' }, sz: 9 },
+    },
+    unbalanced: {
+      font: { bold: true, color: { rgb: 'FFDC2626' }, sz: 9 },
+    },
+  };
+
+  const cellAt = (row, col) => ws[XLSX.utils.encode_cell({ r: row, c: col })];
+
+  // En-têtes du haut
+  for (let c = 0; c <= 8; c++) {
+    const c0 = cellAt(0, c); if (c0) c0.s = styles.banner;
+    const c1 = cellAt(1, c); if (c1) c1.s = styles.subtitle;
+    const c2 = cellAt(2, c); if (c2) c2.s = styles.title;
+    const c3 = cellAt(3, c); if (c3) c3.s = styles.meta;
+    const c5 = cellAt(headerRowIdx, c); if (c5) c5.s = styles.header;
+  }
+
+  // Merges pour les titres
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 8 } },
+  ];
+
+  // Données
+  for (let r = dataStartRowIdx; r < totalRowIdx; r++) {
+    const isAlt = r % 2 === 1;
+    const baseStyle = isAlt ? styles.bodyAlt : styles.body;
+
+    for (let c = 0; c <= 8; c++) {
+      const cell = cellAt(r, c);
+      if (!cell) continue;
+
+      if (c === 3) {
+        cell.s = styles.accountCell;
+      } else if (c === 6 || c === 7) {
+        cell.z = '#,##0;[Red]-#,##0;"-"';
+        cell.s = { ...styles.numberCell, fill: baseStyle.fill };
+      } else if (c === 0 || c === 1 || c === 2 || c === 8) {
+        cell.s = { ...baseStyle, alignment: { vertical: 'center', horizontal: 'center' } };
+      } else {
+        cell.s = baseStyle;
+      }
+    }
+  }
+
+  // Ligne de total
+  for (let c = 0; c <= 8; c++) {
+    const cell = cellAt(totalRowIdx, c);
+    if (!cell) continue;
+    if (c === 6 || c === 7) {
+      cell.z = '#,##0;[Red]-#,##0;"-"';
+      cell.s = styles.totalNumberCell;
+    } else {
+      cell.s = styles.totalRow;
+    }
+  }
+
+  // Contrôles
+  const controlStart = totalRowIdx + 2;
+  const cHead = cellAt(controlStart, 0);
+  if (cHead) cHead.s = styles.controlHeader;
+  const cDeb = cellAt(controlStart + 1, 1);
+  if (cDeb) { cDeb.z = '#,##0'; cDeb.s = { alignment: { horizontal: 'right' } }; }
+  const cCred = cellAt(controlStart + 2, 1);
+  if (cCred) { cCred.z = '#,##0'; cCred.s = { alignment: { horizontal: 'right' } }; }
+  const cDiff = cellAt(controlStart + 3, 1);
+  if (cDiff) { cDiff.z = '#,##0'; cDiff.s = { alignment: { horizontal: 'right' } }; }
+  const cStat = cellAt(controlStart + 3, 2);
+  if (cStat) cStat.s = isBalanced ? styles.balanced : styles.unbalanced;
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Journal');
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, 'Journal comptable');
+  XLSX.writeFile(wb, `${targetFilename}.xlsx`);
 }
 
 /**

@@ -155,7 +155,7 @@ export default function JournalPage() {
         for (let from = 0; from < MAX_ROWS; from += FETCH_BATCH) {
           let q = supabase
             .from('ecritures_comptables')
-            .select('id,created_by,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code),lignes_ecritures!ligne_ecriture_company_fk(debit,credit),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
+            .select('id,created_by,numero,date_ecriture,libelle,reference_piece,statut,journaux!ecriture_journal_company_fk(code,libelle),lignes_ecritures!ligne_ecriture_company_fk(id,libelle,debit,credit,comptes_comptables!ligne_compte_company_fk(numero,libelle)),pieces_comptables!piece_ecriture_company_fk(id,type,reference,fichier_url)')
             .order('date_ecriture', { ascending: order === 'asc' })
             .order('numero', { ascending: order === 'asc' })
             .range(from, from + FETCH_BATCH - 1);
@@ -180,9 +180,17 @@ export default function JournalPage() {
         const brouillons = [];
 
         all.forEach((entry) => {
-          const lignes = entry.lignes_ecritures || [];
-          const debit = lignes.reduce((acc, l) => acc + Number(l.debit || 0), 0);
-          const credit = lignes.reduce((acc, l) => acc + Number(l.credit || 0), 0);
+          const rawLines = entry.lignes_ecritures || [];
+          const lignes = rawLines.map((l) => ({
+            id: l.id,
+            accountNumber: l.comptes_comptables?.numero || '—',
+            accountLabel: l.comptes_comptables?.libelle || '—',
+            description: l.libelle || entry.libelle || '',
+            debit: Number(l.debit || 0),
+            credit: Number(l.credit || 0),
+          }));
+          const debit = lignes.reduce((acc, l) => acc + l.debit, 0);
+          const credit = lignes.reduce((acc, l) => acc + l.credit, 0);
           const validee = entry.statut === 'VALIDEE';
 
           const row = {
@@ -190,13 +198,16 @@ export default function JournalPage() {
             created_by: entry.created_by,
             date: entry.date_ecriture,
             journal: entry.journaux?.code || '—',
+            journalLibelle: entry.journaux?.libelle || '',
             ref: entry.reference_piece || entry.numero,
+            numero: entry.numero,
             description: entry.libelle,
             debitValue: debit,
             creditValue: credit,
             status: validee ? 'Validée' : 'Brouillon',
             statusTone: validee ? 'success' : 'warning',
             pieces: entry.pieces_comptables || [],
+            lignes,
           };
 
           (validee ? validees : brouillons).push(row);
@@ -312,13 +323,11 @@ export default function JournalPage() {
 
   // Export Excel
   const handleExportXLSX = () => {
-    const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
-    const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
     exportJournalExcel({
       rows: filteredValidees,
       totals: totalsValidees,
       exercice: selectedExercice,
-      filename: `Journal_comptable_${suffix}`,
+      filename: buildPdfFilename('Journal', selectedExercice),
     });
   };
 
@@ -326,8 +335,6 @@ export default function JournalPage() {
   const handleExportPDF = async () => {
     setExportingPDF(true);
     try {
-      const exerciceLabel = selectedExercice?.code || selectedExercice?.annee || 'Exercice';
-      const suffix = [dateFrom, dateTo].filter(Boolean).join('_au_') || exerciceLabel;
       await exportJournalPDF({
         rows: filteredValidees,
         totals: totalsValidees,
@@ -339,6 +346,11 @@ export default function JournalPage() {
     } finally {
       setExportingPDF(false);
     }
+  };
+
+  // Impression directe navigateur
+  const handleDirectPrint = () => {
+    window.print();
   };
 
   // Rendu des tableaux
@@ -397,46 +409,165 @@ export default function JournalPage() {
           <p className="page-subtitle">Consultez et gérez les écritures comptables</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {canExport && <Button
-            variant="secondary"
-            icon={Printer}
-            onClick={() => setShowPDFPreview(true)}
-            disabled={filteredValidees.length === 0}
-            title="Prévisualiser et imprimer en PDF"
-          >
-            Imprimer (PDF)
-          </Button>}
-          {canExport && <Button
-            variant="primary"
-            icon={Download}
-            onClick={handleExportXLSX}
-            disabled={filteredValidees.length === 0}
-            title="Exporter les écritures validées en Excel"
-          >
-            Exporter Excel
-          </Button>}
+          {canExport && (
+            <Button
+              variant="secondary"
+              icon={Printer}
+              onClick={handleDirectPrint}
+              disabled={filteredValidees.length === 0}
+              title="Imprimer directement le journal comptable via le navigateur"
+            >
+              Imprimer
+            </Button>
+          )}
+          {canExport && (
+            <Button
+              variant="secondary"
+              icon={FileText}
+              onClick={() => setShowPDFPreview(true)}
+              disabled={filteredValidees.length === 0}
+              title="Prévisualiser et exporter en PDF"
+            >
+              PDF
+            </Button>
+          )}
+          {canExport && (
+            <Button
+              variant="primary"
+              icon={Download}
+              onClick={handleExportXLSX}
+              disabled={filteredValidees.length === 0}
+              title="Exporter les écritures validées en Excel"
+            >
+              Excel
+            </Button>
+          )}
           {canCreate && <Button onClick={() => nav('/nouvelle-ecriture')}>+ Nouvelle écriture</Button>}
         </div>
       </div>
 
-      {/* En-tête visible uniquement à l'impression */}
-      <div className="print-only" style={{ display: 'none', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '12px' }}>
+      {/* Document complet visible uniquement à l'impression directe (window.print) */}
+      <div className="journal-print-document" style={{ display: 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #166534', paddingBottom: '10px', marginBottom: '14px' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>JOURNAL COMPTABLE</h2>
-            <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>Système Comptable SYSCOHADA</p>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
+              CIPRESA CONSULTING SARL
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#4b5563' }}>
+              Cabinet International de Prestation de Services Agricoles
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+              JOURNAL COMPTABLE GÉNÉRAL
+            </p>
+            <p style={{ margin: 0, fontSize: '9px', color: '#64748b' }}>
+              Système Comptable SYSCOHADA Révisé — Tenue de compte : FCFA
+            </p>
           </div>
-          <div style={{ textAlign: 'right', fontSize: '12px' }}>
-            {selectedExercice && <p style={{ margin: 0 }}>Exercice : {selectedExercice.code || selectedExercice.annee}</p>}
-            {(dateFrom || dateTo) && (
-              <p style={{ margin: 0 }}>Période : {dateFrom || '…'} → {dateTo || '…'}</p>
-            )}
-            <p style={{ margin: 0 }}>Imprimé le : {new Date().toLocaleDateString('fr-FR')}</p>
+          <div style={{ textAlign: 'right', fontSize: '10px', color: '#334155' }}>
+            <p style={{ margin: '0 0 3px' }}><strong>Exercice :</strong> {selectedExercice?.code || selectedExercice?.annee || '—'}</p>
+            <p style={{ margin: '0 0 3px' }}>
+              <strong>Période :</strong> {(dateFrom || selectedExercice?.date_debut || '—')} au {(dateTo || selectedExercice?.date_fin || '—')}
+            </p>
+            <p style={{ margin: '0 0 3px' }}>
+              <strong>Journal :</strong> {journalId ? (journaux.find((j) => j.id === journalId)?.code || 'Sélectionné') : 'Tous les journaux'}
+            </p>
+            <p style={{ margin: 0, color: '#64748b' }}>
+              Tiré le : {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
         </div>
-        <p style={{ fontSize: '12px', margin: '0 0 8px' }}>
-          {filteredValidees.length} écriture(s) validée(s) · Débit total : {money(totalsValidees.debit)} FCFA · Crédit total : {money(totalsValidees.credit)} FCFA
-          {equilibre ? ' · ✓ Équilibré' : ` · ⚠ Écart : ${money(Math.abs(totalsValidees.debit - totalsValidees.credit))} FCFA`}
+
+        {/* Synthèse globale */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '6px 12px', borderRadius: '4px', marginBottom: '14px', fontSize: '10px' }}>
+          <div>
+            <strong>Volume :</strong> {filteredValidees.length} écriture(s) validée(s)
+          </div>
+          <div>
+            <strong>Total Débit :</strong> {money(totalsValidees.debit)} FCFA
+          </div>
+          <div>
+            <strong>Total Crédit :</strong> {money(totalsValidees.credit)} FCFA
+          </div>
+          <div>
+            {equilibre ? (
+              <span style={{ color: '#166534', fontWeight: 'bold' }}>✓ Journal équilibré</span>
+            ) : (
+              <span style={{ color: '#b91c1c', fontWeight: 'bold' }}>⚠ Écart : {money(Math.abs(totalsValidees.debit - totalsValidees.credit))} FCFA</span>
+            )}
+          </div>
+        </div>
+
+        {/* Tableau complet pour impression */}
+        <table className="journal-print-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '16px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#275a43', color: '#ffffff', textAlign: 'left' }}>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '10%' }}>Date</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '6%' }}>Journal</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '12%' }}>N° Pièce</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '12%' }}>Compte</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '24%' }}>Intitulé du compte</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', width: '22%' }}>Libellé de l'écriture</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', textAlign: 'right', width: '7%' }}>Débit</th>
+              <th style={{ padding: '5px 6px', border: '1px solid #1e4735', textAlign: 'right', width: '7%' }}>Crédit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredValidees.map((row) => {
+              const hasLignes = row.lignes && row.lignes.length > 0;
+              if (!hasLignes) {
+                return (
+                  <tr key={row.id} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>{row.date ? new Date(row.date).toLocaleDateString('fr-FR') : '—'}</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{row.journal}</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 600 }}>{row.ref}</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>—</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>—</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>{row.description}</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', textAlign: 'right' }}>{money(row.debitValue)}</td>
+                    <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', textAlign: 'right' }}>{money(row.creditValue)}</td>
+                  </tr>
+                );
+              }
+              return row.lignes.map((l, li) => (
+                <tr key={`${row.id}-${l.id || li}`} style={{ borderBottom: li === row.lignes.length - 1 ? '1.5px solid #64748b' : '1px solid #e2e8f0', backgroundColor: li === 0 ? '#fafafa' : '#ffffff' }}>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', verticalAlign: 'top' }}>{li === 0 ? (row.date ? new Date(row.date).toLocaleDateString('fr-FR') : '—') : ''}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', verticalAlign: 'top', fontWeight: 600 }}>{li === 0 ? row.journal : ''}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', verticalAlign: 'top', fontFamily: 'monospace', fontWeight: 600 }}>{li === 0 ? row.ref : ''}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700, color: '#166534' }}>{l.accountNumber}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>{l.accountLabel}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1' }}>{l.description || row.description}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', textAlign: 'right', fontFamily: 'monospace' }}>{l.debit > 0 ? money(l.debit) : '—'}</td>
+                  <td style={{ padding: '3px 6px', border: '1px solid #cbd5e1', textAlign: 'right', fontFamily: 'monospace' }}>{l.credit > 0 ? money(l.credit) : '—'}</td>
+                </tr>
+              ));
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{ backgroundColor: '#e2e8f0', fontWeight: 700, borderTop: '2px solid #000' }}>
+              <td colSpan={6} style={{ padding: '5px 6px', border: '1px solid #94a3b8' }}>
+                TOTAL GÉNÉRAL ({filteredValidees.length} écriture{filteredValidees.length > 1 ? 's' : ''})
+                {equilibre ? '  —  ✓ Conforme SYSCOHADA (Équilibré)' : `  —  ⚠ Écart de ${money(Math.abs(totalsValidees.debit - totalsValidees.credit))} FCFA`}
+              </td>
+              <td style={{ padding: '5px 6px', border: '1px solid #94a3b8', textAlign: 'right', fontFamily: 'monospace' }}>{money(totalsValidees.debit)}</td>
+              <td style={{ padding: '5px 6px', border: '1px solid #94a3b8', textAlign: 'right', fontFamily: 'monospace' }}>{money(totalsValidees.credit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* Zone visas & signatures */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', pageBreakInside: 'avoid' }}>
+          <div style={{ width: '45%', border: '1px solid #94a3b8', padding: '10px', borderRadius: '4px', textAlign: 'center', minHeight: '70px' }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '10px', color: '#166534' }}>Le Responsable Comptable</p>
+            <p style={{ margin: '3px 0 0', fontSize: '8px', color: '#64748b' }}>Visa & Date</p>
+          </div>
+          <div style={{ width: '45%', border: '1px solid #94a3b8', padding: '10px', borderRadius: '4px', textAlign: 'center', minHeight: '70px' }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '10px', color: '#166534' }}>La Direction Générale</p>
+            <p style={{ margin: '3px 0 0', fontSize: '8px', color: '#64748b' }}>Signature & Cachet</p>
+          </div>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: '8px', color: '#94a3b8', marginTop: '12px' }}>
+          Généré par l'application de comptabilité de CIPRESA CONSULTING — Système SYSCOHADA
         </p>
       </div>
 
@@ -513,31 +644,49 @@ export default function JournalPage() {
       </div>
 
       {/* SECTION 1 : ÉCRITURES VALIDÉES (en haut) */}
-      <Card style={{ marginBottom: '32px' }}>
+      <Card className="journal-screen-card" style={{ marginBottom: '32px' }}>
         <div className="card-heading" style={{ marginBottom: '16px' }}>
           <div>
             <h2 className="section-title">Écritures validées</h2>
             <p className="page-subtitle">{filteredValidees.length} écriture(s) comptabilisée(s)</p>
           </div>
           <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-            {canExport && <Button
-              icon={Download}
-              variant="outline"
-              size="sm"
-              onClick={handleExportXLSX}
-              disabled={filteredValidees.length === 0}
-            >
-              Excel
-            </Button>}
-            {canExport && <Button
-              icon={Printer}
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPDFPreview(true)}
-              disabled={filteredValidees.length === 0}
-            >
-              PDF
-            </Button>}
+            {canExport && (
+              <Button
+                icon={Printer}
+                variant="outline"
+                size="sm"
+                onClick={handleDirectPrint}
+                disabled={filteredValidees.length === 0}
+                title="Imprimer directement"
+              >
+                Imprimer
+              </Button>
+            )}
+            {canExport && (
+              <Button
+                icon={FileText}
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPDFPreview(true)}
+                disabled={filteredValidees.length === 0}
+                title="Aperçu PDF"
+              >
+                PDF
+              </Button>
+            )}
+            {canExport && (
+              <Button
+                icon={Download}
+                variant="outline"
+                size="sm"
+                onClick={handleExportXLSX}
+                disabled={filteredValidees.length === 0}
+                title="Exporter Excel"
+              >
+                Excel
+              </Button>
+            )}
           </div>
         </div>
 
@@ -583,7 +732,7 @@ export default function JournalPage() {
 
       {/* SECTION 2 : BROUILLONS (en bas) */}
       {rowsBrouillons.length > 0 && (
-        <Card>
+        <Card className="no-print">
           <div className="card-heading" style={{ marginBottom: '16px' }}>
             <div>
               <h2 className="section-title">Écritures en brouillon</h2>
@@ -715,6 +864,39 @@ export default function JournalPage() {
               <span className="detail-label">Montant Crédit</span>
               <span className="detail-value font-mono" style={{ fontSize: '15px' }}>{money(selectedEntry.creditValue)} FCFA</span>
             </div>
+            {selectedEntry.lignes && selectedEntry.lignes.length > 0 && (
+              <div className="detail-item full-width" style={{ marginTop: '12px' }}>
+                <span className="detail-label" style={{ marginBottom: '8px', display: 'block' }}>
+                  Lignes d'imputation comptable ({selectedEntry.lignes.length})
+                </span>
+                <div className="table-wrap">
+                  <table className="balance-table" style={{ fontSize: '12px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '16%' }}>Compte</th>
+                        <th style={{ width: '28%' }}>Intitulé</th>
+                        <th style={{ width: '28%' }}>Libellé ligne</th>
+                        <th className="text-right" style={{ width: '14%' }}>Débit</th>
+                        <th className="text-right" style={{ width: '14%' }}>Crédit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedEntry.lignes.map((l, idx) => (
+                        <tr key={l.id || idx}>
+                          <td className="account-cell font-mono" style={{ fontWeight: 700, color: '#166534' }}>
+                            {l.accountNumber}
+                          </td>
+                          <td>{l.accountLabel}</td>
+                          <td style={{ color: '#64748b' }}>{l.description || selectedEntry.description}</td>
+                          <td className="text-right font-mono">{l.debit > 0 ? `${money(l.debit)} FCFA` : '—'}</td>
+                          <td className="text-right font-mono">{l.credit > 0 ? `${money(l.credit)} FCFA` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             {selectedEntry.pieces && selectedEntry.pieces.length > 0 && (
               <div className="detail-item full-width">
                 <span className="detail-label">Pièces justificatives ({selectedEntry.pieces.length})</span>
@@ -726,6 +908,57 @@ export default function JournalPage() {
           </div>
         </Modal>
       )}
+
+      {/* Styles d'impression dédiés A4 Paysage pour window.print() */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+          html, body, #root, .app-layout, .main-content, .page-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+          }
+          .no-print, .sidebar, header, .app-header, nav, .card-heading, .compact-filter-bar {
+            display: none !important;
+          }
+          .card {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+          }
+          .journal-screen-card {
+            display: none !important;
+          }
+          .journal-print-document {
+            display: block !important;
+          }
+          .journal-print-table {
+            width: 100% !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .journal-print-table th {
+            background-color: #275a43 !important;
+            color: #ffffff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          tr {
+            page-break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
