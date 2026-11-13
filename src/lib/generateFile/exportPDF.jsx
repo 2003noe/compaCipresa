@@ -1649,3 +1649,139 @@ export async function exportDashboardPDF(options) {
     document: <DashboardPDFDocument {...options} />,
   });
 }
+
+/* ─── Document PDF : Registre des Immobilisations ─────────────────── */
+export function ImmobilisationsPDFDocument({
+  assets = [],
+  totals = {},
+  exercice = null,
+  orientation = 'landscape',
+  footerText = DEFAULT_FOOTER_TEXT,
+}) {
+  const exLabel = exercice?.code || exercice?.annee || '';
+  const dateFin = exercice?.date_fin ? new Date(exercice.date_fin).toLocaleDateString('fr-FR') : '';
+  const subtitle = exLabel
+    ? `Exercice : ${exLabel} ${dateFin ? `— Situation au ${dateFin}` : ''} — Système SYSCOHADA — Devise : FCFA`
+    : 'Système SYSCOHADA — Devise : FCFA';
+  const fmt = (v) => Number(v || 0).toLocaleString('fr-FR');
+  const isPortrait = orientation === 'portrait';
+
+  const STATUT_LABEL = { EN_SERVICE: 'En service', CEDE: 'Cédé', REFORME: 'Réformé' };
+  const METHODE_LABEL = { LINEAIRE: 'Lin.', DEGRESSIF: 'Dég.', AUCUNE: 'Aucune' };
+
+  const totalBrut = totals?.brut ?? assets.reduce((acc, a) => acc + Number(a.valeur_brute || 0), 0);
+  const totalAmort = totals?.amort ?? assets.reduce((acc, a) => acc + Number(a.amortCumule || 0), 0);
+  const totalVnc = totals?.vnc ?? (totalBrut - totalAmort);
+
+  const wCode = isPortrait ? '12%' : '10%';
+  const wDesig = isPortrait ? '24%' : '26%';
+  const wCat = isPortrait ? '14%' : '14%';
+  const wDate = isPortrait ? '10%' : '9%';
+  const wBrut = isPortrait ? '12%' : '12%';
+  const wMeth = isPortrait ? '7%' : '7%';
+  const wAmort = isPortrait ? '11%' : '11%';
+  const wVnc = isPortrait ? '10%' : '11%';
+
+  return (
+    <Document>
+      <Page size="A4" orientation={orientation} style={baseStyles.page}>
+        <CipresaBannerHeader
+          title="REGISTRE DES IMMOBILISATIONS ET DES AMORTISSEMENTS"
+          subtitle={subtitle}
+        />
+
+        {/* Synthèse des KPIs */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+          <View style={{ flex: 1, backgroundColor: '#f8fafc', borderWidth: 0.5, borderColor: '#cbd5e1', borderRadius: 4, padding: '6 8' }}>
+            <Text style={{ fontSize: 6.5, color: '#64748b', textTransform: 'uppercase' }}>Valeur Brute Totale</Text>
+            <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginTop: 2 }}>{fmt(totalBrut)} FCFA</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: '#fef2f2', borderWidth: 0.5, borderColor: '#fecaca', borderRadius: 4, padding: '6 8' }}>
+            <Text style={{ fontSize: 6.5, color: '#991b1b', textTransform: 'uppercase' }}>Amortissements Cumulés</Text>
+            <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#b91c1c', marginTop: 2 }}>{fmt(totalAmort)} FCFA</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: '#ecfdf5', borderWidth: 0.5, borderColor: '#a7f3d0', borderRadius: 4, padding: '6 8' }}>
+            <Text style={{ fontSize: 6.5, color: '#166534', textTransform: 'uppercase' }}>Valeur Nette Comptable (VNC)</Text>
+            <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#15803d', marginTop: 2 }}>{fmt(totalVnc)} FCFA</Text>
+          </View>
+        </View>
+
+        {/* Tableau des immobilisations */}
+        <View style={baseStyles.table}>
+          <View style={baseStyles.thead}>
+            <Text style={[baseStyles.th, { width: wCode }]}>Code Actif</Text>
+            <Text style={[baseStyles.th, { width: wDesig }]}>Désignation du bien</Text>
+            <Text style={[baseStyles.th, { width: wCat }]}>Catégorie</Text>
+            <Text style={[baseStyles.th, { width: wDate }]}>Acquisition</Text>
+            <Text style={[baseStyles.thRight, { width: wBrut }]}>Valeur Brute</Text>
+            <Text style={[baseStyles.th, { width: wMeth, textAlign: 'center' }]}>Méthode</Text>
+            <Text style={[baseStyles.thRight, { width: wAmort }]}>Amort. Cumulé</Text>
+            <Text style={[baseStyles.thRight, { width: wVnc }]}>VNC (FCFA)</Text>
+          </View>
+
+          {assets.map((a, i) => (
+            <View key={a.id || i} style={i % 2 === 0 ? baseStyles.row : baseStyles.rowAlt}>
+              <Text style={[baseStyles.td, { width: wCode, fontFamily: 'Helvetica-Bold', color: '#166534' }]}>
+                {a.code}
+              </Text>
+              <Text style={[baseStyles.td, { width: wDesig }]}>{a.designation}</Text>
+              <Text style={[baseStyles.td, { width: wCat }]}>{a.categorie || '—'}</Text>
+              <Text style={[baseStyles.td, { width: wDate }]}>
+                {a.date_acquisition ? new Date(a.date_acquisition).toLocaleDateString('fr-FR') : '—'}
+              </Text>
+              <Text style={[baseStyles.tdRight, { width: wBrut }]}>{fmt(a.valeur_brute)}</Text>
+              <Text style={[baseStyles.td, { width: wMeth, textAlign: 'center', fontSize: 6.5 }]}>
+                {METHODE_LABEL[a.methode] || a.methode || '—'} {a.duree_annees ? `(${a.duree_annees}a)` : ''}
+              </Text>
+              <Text style={[baseStyles.tdRight, { width: wAmort, color: '#b91c1c' }]}>{fmt(a.amortCumule)}</Text>
+              <Text style={[baseStyles.tdRight, { width: wVnc, fontFamily: 'Helvetica-Bold', color: '#15803d' }]}>
+                {fmt(a.vnc)}
+              </Text>
+            </View>
+          ))}
+
+          {assets.length === 0 && (
+            <View style={baseStyles.row}>
+              <Text style={[baseStyles.td, { width: '100%', textAlign: 'center', color: '#94a3b8' }]}>
+                Aucune immobilisation enregistrée pour cet exercice.
+              </Text>
+            </View>
+          )}
+
+          {/* Ligne de total général */}
+          <View style={[baseStyles.totalRow, { backgroundColor: '#cbd5e1', marginTop: 4 }]}>
+            <Text style={[baseStyles.totalCell, { width: isPortrait ? '60%' : '59%' }]}>
+              TOTAL GÉNÉRAL ({assets.length} immobilisation{assets.length > 1 ? 's' : ''})
+            </Text>
+            <Text style={[baseStyles.totalCellRight, { width: wBrut }]}>{fmt(totalBrut)}</Text>
+            <Text style={[baseStyles.totalCell, { width: wMeth }]}> </Text>
+            <Text style={[baseStyles.totalCellRight, { width: wAmort }]}>{fmt(totalAmort)}</Text>
+            <Text style={[baseStyles.totalCellRight, { width: wVnc }]}>{fmt(totalVnc)}</Text>
+          </View>
+        </View>
+
+        {/* Visas et signatures */}
+        <View wrap={false} style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingHorizontal: 10 }}>
+          <View style={{ width: '45%', borderTopWidth: 1, borderTopColor: '#94a3b8', paddingTop: 4, alignItems: 'center' }}>
+            <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#166534' }}>Le Responsable du Patrimoine / Comptable</Text>
+            <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 2 }}>Visa & Date</Text>
+          </View>
+          <View style={{ width: '45%', borderTopWidth: 1, borderTopColor: '#94a3b8', paddingTop: 4, alignItems: 'center' }}>
+            <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#166534' }}>La Direction Générale</Text>
+            <Text style={{ fontSize: 6.5, color: '#64748b', marginTop: 2 }}>Signature & Cachet de l'entreprise</Text>
+          </View>
+        </View>
+
+        <CipresaFooter footerText={footerText} />
+      </Page>
+    </Document>
+  );
+}
+
+export async function exportImmobilisationsPDF(options) {
+  const filename = options.filename || buildPdfFilename('Immobilisations', options.exercice);
+  await downloadPDF({
+    filename,
+    document: <ImmobilisationsPDFDocument {...options} />,
+  });
+}

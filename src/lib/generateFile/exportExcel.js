@@ -896,3 +896,214 @@ export function exportCompteResultatExcel({
   XLSX.utils.book_append_sheet(wb, ws, 'Compte de Résultat');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+
+/**
+ * Export Excel dédié au Registre des Immobilisations et Amortissements
+ */
+export function exportImmobilisationsExcel({
+  assets = [],
+  totals = {},
+  exercice = null,
+  filename = '',
+}) {
+  const targetFilename = filename || buildPdfFilename('Immobilisations', exercice);
+  const exCode = exercice?.code || exercice?.annee || '';
+  const dateStr = new Date().toLocaleDateString('fr-FR');
+
+  const totalBrut = totals?.brut ?? assets.reduce((acc, a) => acc + Number(a.valeur_brute || 0), 0);
+  const totalAmort = totals?.amort ?? assets.reduce((acc, a) => acc + Number(a.amortCumule || 0), 0);
+  const totalVnc = totals?.vnc ?? (totalBrut - totalAmort);
+
+  const aoa = [
+    [COMPANY_NAME],
+    [COMPANY_SUBTITLE],
+    ['REGISTRE DES IMMOBILISATIONS ET AMORTISSEMENTS - SYSCOHADA'],
+    [
+      exCode
+        ? `Exercice : ${exCode} — Date d'exportation : ${dateStr} — Tenue de compte : FCFA`
+        : `Date d'exportation : ${dateStr} — Tenue de compte : FCFA`,
+    ],
+    [],
+    [
+      'Code Actif',
+      'Désignation du bien',
+      'Catégorie',
+      'Date Acquisition',
+      'Valeur Brute (FCFA)',
+      'Durée (ans)',
+      'Méthode',
+      'Amort. Cumulé (FCFA)',
+      'VNC (FCFA)',
+      'Statut',
+      'État physique',
+      'Emplacement',
+    ],
+  ];
+
+  const headerRowIdx = 5;
+  const dataStartRowIdx = 6;
+
+  assets.forEach((a) => {
+    aoa.push([
+      a.code || '',
+      a.designation || '',
+      a.categorie || '',
+      a.date_acquisition ? new Date(a.date_acquisition).toLocaleDateString('fr-FR') : '—',
+      Number(a.valeur_brute || 0),
+      Number(a.duree_annees || 0) || '—',
+      a.methode || 'LINEAIRE',
+      Number(a.amortCumule || 0),
+      Number(a.vnc ?? (Number(a.valeur_brute || 0) - Number(a.amortCumule || 0))),
+      a.statut === 'EN_SERVICE' ? 'En service' : a.statut === 'CEDE' ? 'Cédé' : 'Réformé',
+      a.etat_physique || '—',
+      a.emplacement_physique || '—',
+    ]);
+  });
+
+  const totalRowIdx = aoa.length;
+  aoa.push([
+    'TOTAL GÉNÉRAL',
+    `${assets.length} immobilisation${assets.length > 1 ? 's' : ''}`,
+    '',
+    '',
+    Number(totalBrut),
+    '',
+    '',
+    Number(totalAmort),
+    Number(totalVnc),
+    '',
+    '',
+    '',
+  ]);
+
+  aoa.push([]);
+  aoa.push(['SYNTHÈSE DU PATRIMOINE IMMOBILISÉ', '', '', '', '', '', '', '', '', '', '', '']);
+  aoa.push(['Valeur Brute Totale', Number(totalBrut), 'FCFA', '', '', '', '', '', '', '', '', '']);
+  aoa.push(['Amortissements Cumulés', Number(totalAmort), 'FCFA', '', '', '', '', '', '', '', '', '']);
+  aoa.push(['Valeur Nette Comptable (VNC)', Number(totalVnc), 'FCFA', '', '', '', '', '', '', '', '', '']);
+  aoa.push([]);
+  aoa.push([DEFAULT_FOOTER_TEXT]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Largeurs de colonnes optimales
+  ws['!cols'] = [
+    { wch: 14 }, // Code
+    { wch: 32 }, // Désignation
+    { wch: 18 }, // Catégorie
+    { wch: 14 }, // Date
+    { wch: 18 }, // Valeur Brute
+    { wch: 12 }, // Durée
+    { wch: 12 }, // Méthode
+    { wch: 18 }, // Amort. Cumulé
+    { wch: 18 }, // VNC
+    { wch: 14 }, // Statut
+    { wch: 16 }, // État physique
+    { wch: 18 }, // Emplacement
+  ];
+
+  // Styles enrichis xlsx-js-style
+  const styles = {
+    banner: { font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 13 }, fill: { fgColor: { rgb: 'FF174B38' } }, alignment: { vertical: 'center' } },
+    subtitle: { font: { italic: true, color: { rgb: 'FF557064' }, sz: 10 } },
+    title: { font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: 'FF275A43' } }, alignment: { vertical: 'center' } },
+    meta: { font: { italic: true, color: { rgb: 'FF26372E' }, sz: 9 } },
+    header: {
+      font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FF275A43' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: { top: { style: 'thin', color: { rgb: 'FF174B38' } }, bottom: { style: 'medium', color: { rgb: 'FF174B38' } } },
+    },
+    body: { font: { color: { rgb: 'FF1E293B' }, sz: 9 }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center' } },
+    bodyAlt: { font: { color: { rgb: 'FF1E293B' }, sz: 9 }, fill: { fgColor: { rgb: 'FFF8FAFC' } }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center' } },
+    codeCell: { font: { bold: true, color: { rgb: 'FF166534' }, sz: 9 }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center', horizontal: 'center' } },
+    numberCell: { font: { color: { rgb: 'FF0F172A' }, sz: 9 }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center', horizontal: 'right' } },
+    vncCell: { font: { bold: true, color: { rgb: 'FF15803D' }, sz: 9 }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center', horizontal: 'right' } },
+    amortCell: { font: { color: { rgb: 'FFB91C1C' }, sz: 9 }, border: { bottom: { style: 'thin', color: { rgb: 'FFE2E8F0' } } }, alignment: { vertical: 'center', horizontal: 'right' } },
+    totalRow: {
+      font: { bold: true, color: { rgb: 'FF0F172A' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FFE9F4EC' } },
+      border: { top: { style: 'thin', color: { rgb: 'FF275A43' } }, bottom: { style: 'double', color: { rgb: 'FF275A43' } } },
+      alignment: { vertical: 'center' },
+    },
+    totalNumberCell: {
+      font: { bold: true, color: { rgb: 'FF166534' }, sz: 10 },
+      fill: { fgColor: { rgb: 'FFE9F4EC' } },
+      border: { top: { style: 'thin', color: { rgb: 'FF275A43' } }, bottom: { style: 'double', color: { rgb: 'FF275A43' } } },
+      alignment: { vertical: 'center', horizontal: 'right' },
+    },
+    summaryHeader: { font: { bold: true, color: { rgb: 'FF174B38' }, sz: 10 }, fill: { fgColor: { rgb: 'FFF0FDF4' } } },
+  };
+
+  const cellAt = (row, col) => ws[XLSX.utils.encode_cell({ r: row, c: col })];
+
+  // En-têtes du haut
+  for (let c = 0; c <= 11; c++) {
+    const c0 = cellAt(0, c); if (c0) c0.s = styles.banner;
+    const c1 = cellAt(1, c); if (c1) c1.s = styles.subtitle;
+    const c2 = cellAt(2, c); if (c2) c2.s = styles.title;
+    const c3 = cellAt(3, c); if (c3) c3.s = styles.meta;
+    const c5 = cellAt(headerRowIdx, c); if (c5) c5.s = styles.header;
+  }
+
+  // Merges pour les titres
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 11 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 11 } },
+  ];
+
+  // Données
+  for (let r = dataStartRowIdx; r < totalRowIdx; r++) {
+    const isAlt = r % 2 === 1;
+    const baseStyle = isAlt ? styles.bodyAlt : styles.body;
+
+    for (let c = 0; c <= 11; c++) {
+      const cell = cellAt(r, c);
+      if (!cell) continue;
+
+      if (c === 0) {
+        cell.s = styles.codeCell;
+      } else if (c === 4) {
+        cell.z = '#,##0;[Red]-#,##0;"-"';
+        cell.s = { ...styles.numberCell, fill: baseStyle.fill };
+      } else if (c === 7) {
+        cell.z = '#,##0;[Red]-#,##0;"-"';
+        cell.s = { ...styles.amortCell, fill: baseStyle.fill };
+      } else if (c === 8) {
+        cell.z = '#,##0;[Red]-#,##0;"-"';
+        cell.s = { ...styles.vncCell, fill: baseStyle.fill };
+      } else if (c === 3 || c === 5 || c === 6 || c === 9) {
+        cell.s = { ...baseStyle, alignment: { vertical: 'center', horizontal: 'center' } };
+      } else {
+        cell.s = baseStyle;
+      }
+    }
+  }
+
+  // Ligne de total
+  for (let c = 0; c <= 11; c++) {
+    const cell = cellAt(totalRowIdx, c);
+    if (!cell) continue;
+    if (c === 4 || c === 7 || c === 8) {
+      cell.z = '#,##0;[Red]-#,##0;"-"';
+      cell.s = styles.totalNumberCell;
+    } else {
+      cell.s = styles.totalRow;
+    }
+  }
+
+  // Bloc de synthèse
+  const summaryStart = totalRowIdx + 2;
+  const sHead = cellAt(summaryStart, 0);
+  if (sHead) sHead.s = styles.summaryHeader;
+  [1, 2, 3].forEach((offset) => {
+    const num = cellAt(summaryStart + offset, 1);
+    if (num) { num.z = '#,##0'; num.s = { alignment: { horizontal: 'right' } }; }
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Immobilisations');
+  XLSX.writeFile(wb, `${targetFilename}.xlsx`);
+}
